@@ -1,0 +1,48 @@
+/* Design tokens */
+:root {
+  --paper: #f4f1ea;
+  --ink: #1a1d21;
+  --accent: #2456a4;
+  --danger: #c0392b;
+  --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+}
+
+.scaffold {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-align: center;
+  padding: 2rem;
+}
+
+.scaffold h1 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.scaffold p {
+  margin: 0;
+  max-width: 40ch;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
