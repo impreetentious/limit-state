@@ -8,6 +8,7 @@ import { assembleF, assembleK, elementLocalStiffness, kLocal, kgLocal, mLocal, t
 import { sectionProps } from '../materials';
 import { buildMesh } from '../mesh';
 import { expandFreeVector, factorLDLT, freeMatrix, freeVector, mechanismEditorNode, solveFactored } from '../solve';
+import { analyzeStaticModel } from '../statics';
 import type { AnalysisMesh, EditorModel, MemberSpec, SectionSpec, SupportSpec } from '../types';
 
 const E = 1,
@@ -218,6 +219,29 @@ describe('M4 gates — eigenanalysis', () => {
   it.todo('G3: pinned column λ_cr = 9.9438 (2 elem) vs π² = 9.8696, within +0.8% (measured +0.75%)');
   it.todo('G3b: 4 elem λ_cr within +0.1% of π² (measured +0.051%)');
   it.todo('G4: SS beam ω₁ = 9.9086 (2 elem) vs π² rad/s, within +0.5% (measured +0.39%)');
+});
+
+describe('M3 static result recovery', () => {
+  it('recovers displacements, reactions, and utilization from the editor load case', () => {
+    const model = modelFor(
+      [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 4, y: 0 },
+      ],
+      [{ node: 1, kind: 'fixed' }],
+    );
+    model.loads.gravity = false;
+    model.loads.points = [{ node: 2, fx: 0, fy: -1_000 }];
+    const analysis = analyzeStaticModel(model);
+    if (analysis.kind !== 'stable') throw new Error(`Expected a stable model, received ${analysis.kind}.`);
+
+    const E = analysis.mesh.elements[0]!.E;
+    const I = analysis.mesh.elements[0]!.I;
+    const expectedTip = (-1_000 * 4 ** 3) / (3 * E * I);
+    expect(relativeError(analysis.result.u[3 * 1 + 1]!, expectedTip)).toBeLessThan(1e-10);
+    expect(relativeError(analysis.result.reactions.get(1)!.fy, 1_000)).toBeLessThan(1e-10);
+    expect(analysis.result.utilization.get(1)).toBeGreaterThan(0);
+  });
 });
 
 describe('M5 gates — dynamics', () => {

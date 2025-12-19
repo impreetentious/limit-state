@@ -4,6 +4,7 @@ import type { EditorModel, MemberSpec, PointLoad, SectionSpec, SupportKind } fro
 
 export type EditorTool = 'select' | 'node' | 'member' | 'support' | 'load' | 'deck' | 'delete';
 export type AppMode = 'build' | 'test';
+export type ResultDiagram = 'none' | 'axial' | 'shear' | 'moment';
 
 export type Selection =
   | { kind: 'none' }
@@ -27,6 +28,8 @@ export interface EditorStore {
   future: EditorModel[];
   stability: Stability;
   notice: string | null;
+  resultDiagram: ResultDiagram;
+  showDeformed: boolean;
   setMode: (mode: AppMode) => void;
   setTool: (tool: EditorTool) => void;
   select: (selection: Selection) => void;
@@ -44,6 +47,8 @@ export interface EditorStore {
   deleteMember: (id: number) => void;
   setStability: (stability: Stability) => void;
   setNotice: (notice: string | null) => void;
+  setResultDiagram: (diagram: ResultDiagram) => void;
+  setShowDeformed: (show: boolean) => void;
   undo: () => void;
   redo: () => void;
   reset: () => void;
@@ -89,6 +94,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
   future: [],
   stability: { kind: 'idle', message: 'Draw a member to begin.' },
   notice: null,
+  resultDiagram: 'none',
+  showDeformed: true,
   setMode: (mode) => set({ mode }),
   setTool: (tool) => set({ tool, notice: null }),
   select: (selection) => set({ selection }),
@@ -196,6 +203,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
   }), () => ({ kind: 'none' })),
   setStability: (stability) => set({ stability }),
   setNotice: (notice) => set({ notice }),
+  setResultDiagram: (resultDiagram) => set({ resultDiagram }),
+  setShowDeformed: (showDeformed) => set({ showDeformed }),
   undo: () => set((state) => {
     const previous = state.past.at(-1);
     if (!previous) return state;

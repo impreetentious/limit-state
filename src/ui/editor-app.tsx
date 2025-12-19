@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { StructureCanvas } from '../canvas/structure-canvas';
+import { analyzeStaticModel, deformationDisplay } from '../fem/statics';
 import { inspectStability } from '../state/stability';
 import { type EditorTool, useEditorStore } from '../state/editor-store';
 import { Inspector } from './inspector';
@@ -23,6 +24,8 @@ export function EditorApp(): React.JSX.Element {
   const gridSnap = useEditorStore((state) => state.gridSnap);
   const stability = useEditorStore((state) => state.stability);
   const notice = useEditorStore((state) => state.notice);
+  const resultDiagram = useEditorStore((state) => state.resultDiagram);
+  const showDeformed = useEditorStore((state) => state.showDeformed);
   const setMode = useEditorStore((state) => state.setMode);
   const setTool = useEditorStore((state) => state.setTool);
   const setGridSnap = useEditorStore((state) => state.setGridSnap);
@@ -31,6 +34,10 @@ export function EditorApp(): React.JSX.Element {
   const redo = useEditorStore((state) => state.redo);
   const reset = useEditorStore((state) => state.reset);
   const setStability = useEditorStore((state) => state.setStability);
+  const setResultDiagram = useEditorStore((state) => state.setResultDiagram);
+  const setShowDeformed = useEditorStore((state) => state.setShowDeformed);
+  const analysis = useMemo(() => analyzeStaticModel(model), [model]);
+  const deformation = analysis.kind === 'stable' ? deformationDisplay(analysis.mesh, analysis.result.u, 44) : null;
 
   useEffect(() => {
     setStability({ kind: 'checking', message: 'Checking stability…' });
@@ -80,13 +87,26 @@ export function EditorApp(): React.JSX.Element {
           </div>
         </nav>
         <section className="canvas-panel" aria-label="Structure workspace">
-          <StructureCanvas />
+          <StructureCanvas analysis={analysis} diagram={resultDiagram} showDeformed={showDeformed} />
           <div className={`lint-badge lint-${stability.kind}`}>{stability.message}</div>
           {notice && <div className="canvas-notice" role="status">{notice}</div>}
+          {analysis.kind === 'stable' && <div className="result-controls" aria-label="Static result display">
+            {(['none', 'axial', 'shear', 'moment'] as const).map((diagram) => <button key={diagram} type="button" className={resultDiagram === diagram ? 'active' : ''} onClick={() => setResultDiagram(diagram)}>{diagram === 'none' ? 'Results' : diagram[0]!.toUpperCase() + diagram.slice(1)}</button>)}
+            <label><input type="checkbox" checked={showDeformed} onChange={(event) => setShowDeformed(event.target.checked)} /> Deformed</label>
+          </div>}
+          {deformation && showDeformed && deformation.maxMeters > 0 && <div className="deformation-badge">deformation ×{formatScale(deformation.scale)} — true max {formatLength(deformation.maxMeters)}</div>}
           {mode === 'test' && <div className="test-placeholder"><span>Test mode is wired for the next analysis stories.</span><button type="button" onClick={() => setMode('build')}>Return to Build</button></div>}
         </section>
         <Inspector />
       </section>
     </main>
   );
+}
+
+function formatScale(value: number): string {
+  return value >= 100 ? value.toFixed(0) : value.toFixed(1).replace(/\.0$/, '');
+}
+
+function formatLength(value: number): string {
+  return value < 0.01 ? `${(value * 1000).toFixed(2)} mm` : `${value.toFixed(3)} m`;
 }

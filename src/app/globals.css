@@ -241,6 +241,50 @@ kbd {
   color: #a46012;
 }
 
+.result-controls,
+.deformation-badge {
+  position: absolute;
+  top: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.28rem;
+  border: 1px solid rgba(26, 29, 33, 0.15);
+  background: rgba(244, 241, 234, 0.94);
+  font-size: 0.7rem;
+}
+
+.result-controls { left: 0.85rem; }
+
+.result-controls button {
+  border: 0;
+  padding: 0.28rem 0.38rem;
+  background: transparent;
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.result-controls button.active {
+  color: var(--paper);
+  background: var(--accent);
+}
+
+.result-controls label {
+  margin-left: 0.25rem;
+  padding-left: 0.45rem;
+  border-left: 1px solid rgba(26, 29, 33, 0.16);
+  white-space: nowrap;
+}
+
+.result-controls input { accent-color: var(--accent); }
+
+.deformation-badge {
+  right: 0.85rem;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+}
+
 
 .test-placeholder {
   position: absolute;

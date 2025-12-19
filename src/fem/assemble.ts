@@ -7,6 +7,13 @@
  */
 import type { AnalysisMesh, Element } from './types';
 
+export interface LoadAssembly {
+  /** Full global load vector. */
+  F: Float64Array;
+  /** Condensed local fixed-end forces, six entries per analysis element. */
+  elementFixedEnd: Float64Array;
+}
+
 /** Euler–Bernoulli frame element stiffness, local axes. */
 export function kLocal(E: number, A: number, I: number, L: number): Float64Array {
   const k = new Float64Array(36);
@@ -136,7 +143,26 @@ export function assembleF(
     elementUdls?: { element: number; w: number }[];
   },
 ): Float64Array {
+  return assembleLoadCase(mesh, opts).F;
+}
+
+/**
+ * Assemble the global load vector and retained fixed-end forces for static
+ * recovery.
+ */
+export function assembleLoadCase(
+  mesh: AnalysisMesh,
+  opts: {
+    gravity: boolean;
+    points: { meshNode: number; fx: number; fy: number }[];
+    /** traffic axles: element index + position ξ∈[0,1] + force (global -y) */
+    inElement?: { element: number; xi: number; p: number }[];
+    /** local downward UDLs (N/m), mainly used by static stories and verification gates */
+    elementUdls?: { element: number; w: number }[];
+  },
+): LoadAssembly {
   const F = new Float64Array(mesh.ndof);
+  const elementFixedEnd = new Float64Array(mesh.elements.length * 6);
   for (const point of opts.points) {
     if (!Number.isInteger(point.meshNode) || point.meshNode < 0 || point.meshNode * 3 >= mesh.ndof) {
       throw new Error(`Point load references missing mesh node ${point.meshNode}.`);
@@ -152,14 +178,14 @@ export function assembleF(
       const element = mesh.elements[index]!;
       const weight = element.rho * element.A * STANDARD_GRAVITY;
       // Global gravity (0, -rho*A*g) resolved into local x/y components.
-      addEquivalentLocalLoad(F, mesh, index, uniformFixedEnd(-weight * element.sin, -weight * element.cos, element.L));
+      addEquivalentLocalLoad(F, mesh, index, uniformFixedEnd(-weight * element.sin, -weight * element.cos, element.L), elementFixedEnd);
     }
   }
 
   for (const udl of opts.elementUdls ?? []) {
     const element = mesh.elements[udl.element];
     if (!element) throw new Error(`UDL references missing element ${udl.element}.`);
-    addEquivalentLocalLoad(F, mesh, udl.element, uniformFixedEnd(0, -udl.w, element.L));
+    addEquivalentLocalLoad(F, mesh, udl.element, uniformFixedEnd(0, -udl.w, element.L), elementFixedEnd);
   }
 
   for (const axle of opts.inElement ?? []) {
@@ -169,10 +195,10 @@ export function assembleF(
     // The force is global downward, resolved to the element's local axes.
     const localX = -axle.p * element.sin;
     const localY = -axle.p * element.cos;
-    addEquivalentLocalLoad(F, mesh, axle.element, pointFixedEnd(localX, localY, axle.xi, element.L));
+    addEquivalentLocalLoad(F, mesh, axle.element, pointFixedEnd(localX, localY, axle.xi, element.L), elementFixedEnd);
   }
 
-  return F;
+  return { F, elementFixedEnd };
 }
 
 /** Standard gravity in m/s² for self-weight assembly. */
@@ -277,9 +303,16 @@ function addEquivalentLocalLoad(
   mesh: AnalysisMesh,
   elementIndex: number,
   fixedEnd: Float64Array,
+  fixedEndByElement?: Float64Array,
 ): void {
   const element = mesh.elements[elementIndex]!;
   const condensed = condenseFixedEnd(fixedEnd, element);
+  if (fixedEndByElement) {
+    for (let i = 0; i < 6; i++) {
+      const offset = elementIndex * 6 + i;
+      fixedEndByElement[offset] = fixedEndByElement[offset]! + condensed[i]!;
+    }
+  }
   const localExternal = new Float64Array(6);
   for (let i = 0; i < 6; i++) localExternal[i] = -condensed[i]!;
   const globalExternal = localToGlobalVector(localExternal, element.cos, element.sin);

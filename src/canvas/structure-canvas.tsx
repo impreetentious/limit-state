@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { deformationDisplay, type StaticAnalysis } from '../fem/statics';
 import type { MemberSpec, NodeSpec, SupportKind } from '../fem/types';
-import type { EditorTool, Selection } from '../state/editor-store';
+import type { EditorTool, ResultDiagram, Selection } from '../state/editor-store';
 import { useEditorStore } from '../state/editor-store';
 
 interface Point { x: number; y: number }
@@ -13,7 +14,15 @@ const NODE_RADIUS = 5;
 const HIT_RADIUS = 11;
 
 /** Canvas2D structure editor and hit-testing surface. */
-export function StructureCanvas(): React.JSX.Element {
+export function StructureCanvas({
+  analysis,
+  diagram,
+  showDeformed,
+}: {
+  analysis: StaticAnalysis;
+  diagram: ResultDiagram;
+  showDeformed: boolean;
+}): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [resizeVersion, setResizeVersion] = useState(0);
   const [pointer, setPointer] = useState<Point | null>(null);
@@ -61,8 +70,8 @@ export function StructureCanvas(): React.JSX.Element {
     const context = canvas.getContext('2d');
     if (!context) return;
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawScene(context, size, model.nodes, model.members, model.supports, model.loads.points, model.deck, selection, pointer, draftStart.current, stability);
-  }, [model, pointer, resizeVersion, selection, stability]);
+    drawScene(context, size, model.nodes, model.members, model.supports, model.loads.points, model.deck, selection, pointer, draftStart.current, stability, analysis, diagram, showDeformed);
+  }, [analysis, diagram, model, pointer, resizeVersion, selection, showDeformed, stability]);
 
   const worldPoint = (event: React.PointerEvent<HTMLCanvasElement>): Point => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -168,12 +177,16 @@ function drawScene(
   pointer: Point | null,
   draftStartId: number | null,
   stability: { kind: string; nodeId?: number },
+  analysis: StaticAnalysis,
+  diagram: ResultDiagram,
+  showDeformed: boolean,
 ): void {
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(context, size);
   const toScreen = (point: Point): Point => ({ x: size.width / 2 + point.x * SCALE, y: size.height - 68 - point.y * SCALE });
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const deckSet = new Set(deck);
+  const utilization = analysis.kind === 'stable' ? analysis.result.utilization : undefined;
 
   for (const member of members) {
     const a = nodeById.get(member.a);
@@ -184,7 +197,7 @@ function drawScene(
     context.beginPath();
     context.moveTo(aScreen.x, aScreen.y);
     context.lineTo(bScreen.x, bScreen.y);
-    context.strokeStyle = selection.kind === 'member' && selection.id === member.id ? '#2456a4' : deckSet.has(member.id) ? '#4d78bb' : '#1a1d21';
+    context.strokeStyle = selection.kind === 'member' && selection.id === member.id ? '#2456a4' : utilization ? stressColor(utilization.get(member.id) ?? 0) : deckSet.has(member.id) ? '#4d78bb' : '#1a1d21';
     context.lineWidth = selection.kind === 'member' && selection.id === member.id ? 4 : deckSet.has(member.id) ? 3 : 2;
     context.stroke();
     if (deckSet.has(member.id)) {
@@ -211,6 +224,9 @@ function drawScene(
       context.setLineDash([]);
     }
   }
+
+  if (analysis.kind === 'stable' && showDeformed) drawDeformedShape(context, size, analysis);
+  if (analysis.kind === 'stable' && diagram !== 'none') drawDiagram(context, nodes, members, toScreen, analysis, diagram);
 
   for (const load of loads) {
     const node = nodeById.get(load.node);
@@ -287,6 +303,84 @@ function drawEmptyState(context: CanvasRenderingContext2D, size: CanvasSize): vo
   const cx = size.width / 2; const cy = size.height / 2;
   context.beginPath(); context.moveTo(cx - 100, cy + 45); context.lineTo(cx, cy - 40); context.lineTo(cx + 100, cy + 45); context.moveTo(cx - 55, cy + 45); context.lineTo(cx, cy); context.lineTo(cx + 55, cy + 45); context.stroke();
   context.setLineDash([]); context.fillStyle = 'rgba(26, 29, 33, 0.48)'; context.font = '14px IBM Plex Sans, sans-serif'; context.textAlign = 'center'; context.fillText('Draw a member to begin.', cx, cy + 82); context.restore();
+}
+
+function drawDeformedShape(context: CanvasRenderingContext2D, size: CanvasSize, analysis: Extract<StaticAnalysis, { kind: 'stable' }>): void {
+  const { mesh, result } = analysis;
+  const display = deformationDisplay(mesh, result.u, SCALE);
+  if (display.maxMeters === 0) return;
+  const toScreen = (x: number, y: number): Point => ({ x: size.width / 2 + x * SCALE, y: size.height - 68 - y * SCALE });
+  context.save();
+  context.strokeStyle = 'rgba(36, 86, 164, 0.76)';
+  context.lineWidth = 1.3;
+  context.setLineDash([5, 4]);
+  for (const element of mesh.elements) {
+    const a = toScreen(
+      mesh.coords[2 * element.na]! + result.u[3 * element.na]! * display.scale,
+      mesh.coords[2 * element.na + 1]! + result.u[3 * element.na + 1]! * display.scale,
+    );
+    const b = toScreen(
+      mesh.coords[2 * element.nb]! + result.u[3 * element.nb]! * display.scale,
+      mesh.coords[2 * element.nb + 1]! + result.u[3 * element.nb + 1]! * display.scale,
+    );
+    context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke();
+  }
+  context.restore();
+}
+
+function drawDiagram(
+  context: CanvasRenderingContext2D,
+  nodes: NodeSpec[],
+  members: MemberSpec[],
+  toScreen: (point: Point) => Point,
+  analysis: Extract<StaticAnalysis, { kind: 'stable' }>,
+  diagram: Exclude<ResultDiagram, 'none'>,
+): void {
+  const values = new Map<number, number>();
+  for (const member of members) {
+    const relevant = analysis.mesh.elements.flatMap((element, index) => element.memberId === member.id ? [index] : []);
+    const samples = relevant.map((index) => {
+      const offset = index * 5;
+      if (diagram === 'axial') return analysis.result.elementForces[offset]!;
+      if (diagram === 'shear') return Math.max(Math.abs(analysis.result.elementForces[offset + 1]!), Math.abs(analysis.result.elementForces[offset + 3]!));
+      return Math.max(Math.abs(analysis.result.elementForces[offset + 2]!), Math.abs(analysis.result.elementForces[offset + 4]!));
+    });
+    values.set(member.id, samples.reduce((maximum, value) => Math.abs(value) > Math.abs(maximum) ? value : maximum, 0));
+  }
+  const maximum = Math.max(...[...values.values()].map((value) => Math.abs(value)), 1);
+  const label = diagram === 'axial' ? 'N' : diagram === 'shear' ? 'V' : 'M';
+  context.save();
+  context.strokeStyle = 'rgba(36, 86, 164, 0.82)'; context.fillStyle = 'rgba(36, 86, 164, 0.11)'; context.lineWidth = 1;
+  context.font = '10px IBM Plex Mono, monospace';
+  for (const member of members) {
+    const a = nodes.find((node) => node.id === member.a);
+    const b = nodes.find((node) => node.id === member.b);
+    if (!a || !b) continue;
+    const from = toScreen(a); const to = toScreen(b);
+    const dx = to.x - from.x; const dy = to.y - from.y; const length = Math.hypot(dx, dy);
+    if (length === 0) continue;
+    const normal = { x: -dy / length, y: dx / length };
+    const value = values.get(member.id) ?? 0;
+    const height = 8 + 26 * Math.abs(value) / maximum;
+    const direction = value >= 0 ? 1 : -1;
+    const offset = { x: normal.x * height * direction, y: normal.y * height * direction };
+    context.beginPath(); context.moveTo(from.x, from.y); context.lineTo(from.x + offset.x, from.y + offset.y); context.lineTo(to.x + offset.x, to.y + offset.y); context.lineTo(to.x, to.y); context.closePath(); context.fill(); context.stroke();
+    const mid = { x: (from.x + to.x) / 2 + offset.x, y: (from.y + to.y) / 2 + offset.y };
+    context.fillStyle = '#2456a4'; context.fillText(`${label} ${(value / 1000).toFixed(1)} k`, mid.x + 3, mid.y - 3); context.fillStyle = 'rgba(36, 86, 164, 0.11)';
+  }
+  context.restore();
+}
+
+function stressColor(utilization: number): string {
+  const t = Math.max(0, Math.min(1, utilization));
+  if (t <= 0.5) return blend('#2456a4', '#f4f1ea', t * 2);
+  return blend('#f4f1ea', '#c0392b', (t - 0.5) * 2);
+}
+
+function blend(from: string, to: string, amount: number): string {
+  const a = parseInt(from.slice(1), 16); const b = parseInt(to.slice(1), 16);
+  const channel = (shift: number) => Math.round(((a >> shift) & 0xff) * (1 - amount) + ((b >> shift) & 0xff) * amount);
+  return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
 }
 
 function distanceToSegment(point: Point, a: Point, b: Point): number {
