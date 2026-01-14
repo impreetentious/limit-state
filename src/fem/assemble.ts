@@ -121,14 +121,30 @@ export function elementLocalStiffness(element: Element): Float64Array {
   return condenseReleased(kLocal(element.E, element.A, element.I, element.L), element);
 }
 
-/** Assemble global M. M4. */
-export function assembleM(_mesh: AnalysisMesh): Float64Array {
-  throw new Error('TODO(M4): assemble consistent mass');
+/** Assemble global consistent M, including release-compatible mass condensation. */
+export function assembleM(mesh: AnalysisMesh): Float64Array {
+  const M = new Float64Array(mesh.ndof * mesh.ndof);
+  for (const element of mesh.elements) {
+    const local = condenseReleased(mLocal(element.rho, element.A, element.L), element);
+    addElementMatrix(M, mesh.ndof, transformToGlobal(local, element.cos, element.sin), element);
+  }
+  return M;
 }
 
-/** Assemble K_g from element axial forces. M4. */
-export function assembleKg(_mesh: AnalysisMesh, _elementN: Float64Array): Float64Array {
-  throw new Error('TODO(M4): assemble geometric stiffness');
+/** Assemble K_g from tension-positive local element axial forces. */
+export function assembleKg(mesh: AnalysisMesh, elementN: Float64Array): Float64Array {
+  if (elementN.length !== mesh.elements.length) {
+    throw new Error('Geometric stiffness requires exactly one axial force per analysis element.');
+  }
+  const Kg = new Float64Array(mesh.ndof * mesh.ndof);
+  for (let index = 0; index < mesh.elements.length; index++) {
+    const element = mesh.elements[index]!;
+    // A release constrains the compatible elastic shape, so use the same
+    // k-based coordinate transform for k_g as for the consistent mass.
+    const local = condenseReleased(kgLocal(elementN[index]!, element.L), element);
+    addElementMatrix(Kg, mesh.ndof, transformToGlobal(local, element.cos, element.sin), element);
+  }
+  return Kg;
 }
 
 /** Global load vector: nodal + self-weight UDL + in-element point loads (Hermite). M1. */
@@ -233,23 +249,45 @@ function elementDofs(element: Element): readonly number[] {
 function condenseReleased(local: Float64Array, element: Element): Float64Array {
   const released = releasedRotations(element);
   if (released.length === 0) return local;
-  const kept = [0, 1, 2, 3, 4, 5].filter((dof) => !released.includes(dof));
-  const inverse = invertReleasedBlock(local, released);
+  const transform = releaseTransform(element, released);
   const condensed = new Float64Array(36);
-  for (const i of kept) {
-    for (const j of kept) {
-      let value = local[i * 6 + j]!;
-      for (let r = 0; r < released.length; r++) {
-        for (let s = 0; s < released.length; s++) {
-          const releasedR = released[r]!;
-          const releasedS = released[s]!;
-          value -= local[i * 6 + releasedR]! * inverse[r * released.length + s]! * local[releasedS * 6 + j]!;
-        }
+  for (let row = 0; row < 6; row++) {
+    for (let column = 0; column < 6; column++) {
+      let value = 0;
+      for (let i = 0; i < 6; i++) {
+        const left = transform[i * 6 + row]!;
+        if (left === 0) continue;
+        for (let j = 0; j < 6; j++) value += left * local[i * 6 + j]! * transform[j * 6 + column]!;
       }
-      condensed[i * 6 + j] = value;
+      condensed[row * 6 + column] = value;
     }
   }
   return condensed;
+}
+
+/**
+ * Coordinate transform for a rotational end release:
+ * q_r = -k_rr⁻¹ k_rk q_k, so every compatible matrix is Cᵀ A C.
+ */
+function releaseTransform(element: Element, released = releasedRotations(element)): Float64Array {
+  const transform = new Float64Array(36);
+  const kept = [0, 1, 2, 3, 4, 5].filter((dof) => !released.includes(dof));
+  for (const dof of kept) transform[dof * 6 + dof] = 1;
+  if (released.length === 0) return transform;
+
+  const localK = kLocal(element.E, element.A, element.I, element.L);
+  const inverse = invertReleasedBlock(localK, released);
+  for (let r = 0; r < released.length; r++) {
+    const releasedDof = released[r]!;
+    for (const keptDof of kept) {
+      let value = 0;
+      for (let s = 0; s < released.length; s++) {
+        value -= inverse[r * released.length + s]! * localK[released[s]! * 6 + keptDof]!;
+      }
+      transform[releasedDof * 6 + keptDof] = value;
+    }
+  }
+  return transform;
 }
 
 /**

@@ -83,7 +83,9 @@ function recoverElementForces(mesh: AnalysisMesh, u: Float64Array, fixedEnd: Flo
       localForce[row] = value;
     }
     const offset = index * 5;
-    out[offset] = localForce[0]!;
+    // Element nodal force at end A is positive in local +x under compression;
+    // publish the kernel's documented tension-positive internal N instead.
+    out[offset] = -localForce[0]!;
     out[offset + 1] = localForce[1]!;
     out[offset + 2] = localForce[2]!;
     out[offset + 3] = localForce[4]!;
