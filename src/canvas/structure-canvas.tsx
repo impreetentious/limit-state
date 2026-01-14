@@ -2,12 +2,13 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { deformationDisplay, type StaticAnalysis } from '../fem/statics';
-import type { MemberSpec, NodeSpec, SupportKind } from '../fem/types';
+import type { AnalysisMesh, MemberSpec, NodeSpec, SupportKind } from '../fem/types';
 import type { EditorTool, ResultDiagram, Selection } from '../state/editor-store';
 import { useEditorStore } from '../state/editor-store';
 
 interface Point { x: number; y: number }
 interface CanvasSize { width: number; height: number }
+interface ModeGhost { vectors: Float64Array; mode: number; phase: number }
 
 const SCALE = 44;
 const NODE_RADIUS = 5;
@@ -18,10 +19,12 @@ export function StructureCanvas({
   analysis,
   diagram,
   showDeformed,
+  modeGhost,
 }: {
   analysis: StaticAnalysis;
   diagram: ResultDiagram;
   showDeformed: boolean;
+  modeGhost?: ModeGhost;
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [resizeVersion, setResizeVersion] = useState(0);
@@ -70,8 +73,8 @@ export function StructureCanvas({
     const context = canvas.getContext('2d');
     if (!context) return;
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawScene(context, size, model.nodes, model.members, model.supports, model.loads.points, model.deck, selection, pointer, draftStart.current, stability, analysis, diagram, showDeformed);
-  }, [analysis, diagram, model, pointer, resizeVersion, selection, showDeformed, stability]);
+    drawScene(context, size, model.nodes, model.members, model.supports, model.loads.points, model.deck, selection, pointer, draftStart.current, stability, analysis, diagram, showDeformed, modeGhost);
+  }, [analysis, diagram, modeGhost, model, pointer, resizeVersion, selection, showDeformed, stability]);
 
   const worldPoint = (event: React.PointerEvent<HTMLCanvasElement>): Point => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -180,6 +183,7 @@ function drawScene(
   analysis: StaticAnalysis,
   diagram: ResultDiagram,
   showDeformed: boolean,
+  modeGhost: ModeGhost | undefined,
 ): void {
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(context, size);
@@ -226,6 +230,7 @@ function drawScene(
   }
 
   if (analysis.kind === 'stable' && showDeformed) drawDeformedShape(context, size, analysis);
+  if (analysis.kind === 'stable' && modeGhost) drawModeShape(context, size, analysis.mesh, modeGhost);
   if (analysis.kind === 'stable' && diagram !== 'none') drawDiagram(context, nodes, members, toScreen, analysis, diagram);
 
   for (const load of loads) {
@@ -322,6 +327,38 @@ function drawDeformedShape(context: CanvasRenderingContext2D, size: CanvasSize, 
     const b = toScreen(
       mesh.coords[2 * element.nb]! + result.u[3 * element.nb]! * display.scale,
       mesh.coords[2 * element.nb + 1]! + result.u[3 * element.nb + 1]! * display.scale,
+    );
+    context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke();
+  }
+  context.restore();
+}
+
+/** Normalized modal/buckling ghost; it is never presented as a true displacement. */
+function drawModeShape(context: CanvasRenderingContext2D, size: CanvasSize, mesh: AnalysisMesh, ghost: ModeGhost): void {
+  const modeCount = ghost.vectors.length / mesh.ndof;
+  if (!Number.isInteger(modeCount) || ghost.mode < 0 || ghost.mode >= modeCount) return;
+  let maximum = 0;
+  for (let node = 0; node < mesh.coords.length / 2; node++) {
+    const offset = 3 * node * modeCount + ghost.mode;
+    maximum = Math.max(maximum, Math.hypot(ghost.vectors[offset]!, ghost.vectors[offset + modeCount]!));
+  }
+  if (maximum === 0) return;
+  const scale = (28 / SCALE) / maximum;
+  const toScreen = (x: number, y: number): Point => ({ x: size.width / 2 + x * SCALE, y: size.height - 68 - y * SCALE });
+  context.save();
+  context.strokeStyle = 'rgba(124, 63, 156, 0.78)';
+  context.lineWidth = 1.4;
+  context.setLineDash([2, 3]);
+  for (const element of mesh.elements) {
+    const aOffset = 3 * element.na * modeCount + ghost.mode;
+    const bOffset = 3 * element.nb * modeCount + ghost.mode;
+    const a = toScreen(
+      mesh.coords[2 * element.na]! + ghost.vectors[aOffset]! * scale * ghost.phase,
+      mesh.coords[2 * element.na + 1]! + ghost.vectors[aOffset + modeCount]! * scale * ghost.phase,
+    );
+    const b = toScreen(
+      mesh.coords[2 * element.nb]! + ghost.vectors[bOffset]! * scale * ghost.phase,
+      mesh.coords[2 * element.nb + 1]! + ghost.vectors[bOffset + modeCount]! * scale * ghost.phase,
     );
     context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke();
   }

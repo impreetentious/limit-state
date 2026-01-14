@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { DEFAULT_SECTION } from '../fem/materials';
-import type { EditorModel, MemberSpec, PointLoad, SectionSpec, SupportKind } from '../fem/types';
+import type { EditorModel, MemberSpec, PointLoad, SectionSpec, StorySpec, SupportKind } from '../fem/types';
 
 export type EditorTool = 'select' | 'node' | 'member' | 'support' | 'load' | 'deck' | 'delete';
 export type AppMode = 'build' | 'test';
@@ -35,6 +35,8 @@ export interface EditorStore {
   select: (selection: Selection) => void;
   setGridSnap: (enabled: boolean) => void;
   setModelName: (name: string) => void;
+  loadModel: (model: EditorModel) => void;
+  setStory: (story: StorySpec) => void;
   addNode: (x: number, y: number) => number;
   updateNode: (id: number, x: number, y: number) => void;
   addMember: (a: number, b: number) => number | undefined;
@@ -101,6 +103,14 @@ export const useEditorStore = create<EditorStore>((set) => ({
   select: (selection) => set({ selection }),
   setGridSnap: (gridSnap) => set({ gridSnap }),
   setModelName: (name) => mutate(set, (model) => ({ ...model, name })),
+  loadModel: (model) => set((state) => ({
+    model: cloneModel(model),
+    past: [...state.past, cloneModel(state.model)].slice(-HISTORY_LIMIT),
+    future: [],
+    selection: { kind: 'none' },
+    notice: null,
+  })),
+  setStory: (story) => mutate(set, (model) => ({ ...model, story })),
   addNode: (x, y) => {
     let id = 0;
     mutate(set, (model) => {

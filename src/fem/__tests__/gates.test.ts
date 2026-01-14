@@ -5,6 +5,10 @@
  */
 import { describe, expect, it } from 'vitest';
 import { assembleF, assembleK, elementLocalStiffness, kLocal, kgLocal, mLocal, transformToGlobal } from '../assemble';
+import { buckling, modal } from '../eigen';
+import { newmarkStep, rayleighDampingRatio, rayleighFit, type NewmarkState } from '../dynamics';
+import { decodeModel, encodeModel } from '../../share/serialize';
+import { collapseCascade, evaluateFailure } from '../failure';
 import { sectionProps } from '../materials';
 import { buildMesh } from '../mesh';
 import { expandFreeVector, factorLDLT, freeMatrix, freeVector, mechanismEditorNode, solveFactored } from '../solve';
@@ -216,9 +220,25 @@ describe('M1 gates — statics', () => {
 });
 
 describe('M4 gates — eigenanalysis', () => {
-  it.todo('G3: pinned column λ_cr = 9.9438 (2 elem) vs π² = 9.8696, within +0.8% (measured +0.75%)');
-  it.todo('G3b: 4 elem λ_cr within +0.1% of π² (measured +0.051%)');
-  it.todo('G4: SS beam ω₁ = 9.9086 (2 elem) vs π² rad/s, within +0.5% (measured +0.39%)');
+  it('G3: pinned column λ_cr = 9.9438 (2 elem) vs π² = 9.8696, within +0.8% (measured +0.75%)', () => {
+    const result = buckling(pinnedColumnMesh(2), Float64Array.of(-1, -1));
+    expect(result.kind).toBe('buckling');
+    expect(result.values.length).toBeGreaterThan(0);
+    expect(relativeError(result.values[0]!, Math.PI ** 2)).toBeLessThan(0.008);
+  });
+
+  it('G3b: 4 elem λ_cr within +0.1% of π² (measured +0.051%)', () => {
+    const result = buckling(pinnedColumnMesh(4), Float64Array.of(-1, -1, -1, -1));
+    expect(result.values.length).toBeGreaterThan(0);
+    expect(relativeError(result.values[0]!, Math.PI ** 2)).toBeLessThan(0.001);
+  });
+
+  it('G4: SS beam ω₁ = 9.9086 (2 elem) vs π² rad/s, within +0.5% (measured +0.39%)', () => {
+    const result = modal(simplySupportedBendingBeam(), 1);
+    expect(result.kind).toBe('modal');
+    expect(result.values.length).toBe(1);
+    expect(relativeError(result.values[0]!, Math.PI ** 2)).toBeLessThan(0.005);
+  });
 });
 
 describe('M3 static result recovery', () => {
@@ -245,13 +265,53 @@ describe('M3 static result recovery', () => {
 });
 
 describe('M5 gates — dynamics', () => {
-  it.todo('G8: Newmark SDOF at resonance, ζ=2%: steady amplitude = static × 25, within 2% after 50 cycles');
-  it.todo('G9: Rayleigh fit reproduces target ζ at ω₁ and ω₂ to 1e-6');
+  it('G8: Newmark SDOF at resonance, ζ=2%: steady amplitude = static × 25, within 2% after 50 cycles', () => {
+    const mesh = unitSdofMesh();
+    const damping = rayleighFit(0.02, 1, 1);
+    let state: NewmarkState = { u: new Float64Array(6), v: new Float64Array(6), a: new Float64Array(6), t: 0, damping };
+    const dt = 0.01;
+    const end = 50 * Math.PI * 2;
+    let amplitude = 0;
+    while (state.t < end) {
+      state = newmarkStep(mesh, state, (time) => {
+        const force = new Float64Array(6);
+        force[3] = Math.sin(time); // unit harmonic force at ω = ω_n = 1 rad/s
+        return force;
+      }, dt);
+      if (state.t > end - Math.PI * 2) amplitude = Math.max(amplitude, Math.abs(state.u[3]!));
+    }
+    expect(relativeError(amplitude, 25)).toBeLessThan(0.02);
+  });
+
+  it('G9: Rayleigh fit reproduces target ζ at ω₁ and ω₂ to 1e-6', () => {
+    const target = 0.037;
+    const [w1, w2] = [3.2, 17.8];
+    const params = rayleighFit(target, w1, w2);
+    expect(rayleighDampingRatio(params, w1)).toBeCloseTo(target, 6);
+    expect(rayleighDampingRatio(params, w2)).toBeCloseTo(target, 6);
+  });
 });
 
 describe('M6/M7 gates — failure & sharing', () => {
-  it.todo('G12: cascade on overloaded preset 4 reproduces frozen golden step sequence');
-  it.todo('G11: property — decodeModel(encodeModel(m)) deep-equals m for seeded random models (both #m and #mu paths)');
+  it('G12: cascade on overloaded preset 4 reproduces frozen golden step sequence', () => {
+    expect(evaluateFailure(overloadedRadioMast(), 1)).toMatchObject({ kind: 'buckling' });
+    const cascade = collapseCascade(overloadedRadioMast());
+    expect(cascade).toEqual({
+      steps: [{ action: 'remove', memberId: 1, detail: 'Member 1 buckled/was axial-governing and was removed.' }],
+      outcome: 'collapse',
+    });
+  });
+  it('G11: property — decodeModel(encodeModel(m)) deep-equals m for seeded random models (both #m and #mu paths)', async () => {
+    const random = mulberry32(0x0badc0de);
+    for (let index = 0; index < 12; index++) {
+      const model = shareModel(index + 1, random);
+      const compressed = await encodeModel(model);
+      expect(await decodeModel(compressed)).toEqual(model);
+      const raw = new TextEncoder().encode(JSON.stringify(model));
+      const uncompressed = `#mu=${base64url(raw)}`;
+      expect(await decodeModel(uncompressed)).toEqual(model);
+    }
+  });
 });
 
 const DEFAULT_SECTION: SectionSpec = { kind: 'rect', b: 0.2, h: 0.3 };
@@ -284,6 +344,140 @@ function modelFor(
     deck: [],
     story: { kind: 'ramp' },
   };
+}
+
+/** Unit EI pinned-pinned column with constrained endpoint translations. Gate G3/G3b. */
+function pinnedColumnMesh(subdivisions: number): AnalysisMesh {
+  const coords = new Float64Array((subdivisions + 1) * 2);
+  for (let node = 0; node <= subdivisions; node++) coords[2 * node + 1] = node / subdivisions;
+  const elements: AnalysisMesh['elements'] = [];
+  for (let index = 0; index < subdivisions; index++) {
+    elements.push({
+      memberId: 1,
+      na: index,
+      nb: index + 1,
+      L: 1 / subdivisions,
+      E: 1,
+      A: 1,
+      I: 1,
+      c: 1,
+      rho: 1,
+      fy: 1,
+      cos: 0,
+      sin: 1,
+      releaseA: false,
+      releaseB: false,
+    });
+  }
+  const free: number[] = [2];
+  for (let node = 1; node < subdivisions; node++) free.push(3 * node, 3 * node + 1, 3 * node + 2);
+  free.push(3 * subdivisions + 2);
+  return {
+    coords,
+    elements,
+    editorNode: Int32Array.from({ length: subdivisions + 1 }, (_, index) => index + 1),
+    freeDofs: Int32Array.from(free),
+    ndof: (subdivisions + 1) * 3,
+  };
+}
+
+/** Unit EI/ρA simply-supported beam with axial DOFs held out of the bending gate. Gate G4. */
+function simplySupportedBendingBeam(): AnalysisMesh {
+  return {
+    coords: Float64Array.of(0, 0, 0.5, 0, 1, 0),
+    elements: [0, 1].map((index) => ({
+      memberId: 1,
+      na: index,
+      nb: index + 1,
+      L: 0.5,
+      E: 1,
+      A: 1,
+      I: 1,
+      c: 1,
+      rho: 1,
+      fy: 1,
+      cos: 1,
+      sin: 0,
+      releaseA: false,
+      releaseB: false,
+    })),
+    editorNode: Int32Array.of(1, -1, 2),
+    // End translations are pinned; the midpoint axial DOF is constrained here
+    // so this gate measures the stated transverse Euler–Bernoulli mode.
+    freeDofs: Int32Array.of(2, 4, 5, 8),
+    ndof: 9,
+  };
+}
+
+/** One free axial DOF with K=M=1 for the Newmark analytic gate. Gate G8. */
+function unitSdofMesh(): AnalysisMesh {
+  return {
+    coords: Float64Array.of(0, 0, 1, 0),
+    elements: [{
+      memberId: 1,
+      na: 0,
+      nb: 1,
+      L: 1,
+      E: 1,
+      A: 1,
+      I: 1,
+      c: 1,
+      // Consistent axial mass at free node is ρAL / 3 = 1.
+      rho: 3,
+      fy: 1,
+      cos: 1,
+      sin: 0,
+      releaseA: false,
+      releaseB: false,
+    }],
+    editorNode: Int32Array.of(1, 2),
+    freeDofs: Int32Array.of(3),
+    ndof: 6,
+  };
+}
+
+function shareModel(id: number, random: () => number): EditorModel {
+  const span = 3 + random() * 8;
+  const height = 1 + random() * 4;
+  return {
+    v: 1,
+    name: `Shared ${id}`,
+    seed: id,
+    nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: span, y: 0 }, { id: 3, x: span / 2, y: height }],
+    members: [member(1, 1, 3), member(2, 3, 2), member(3, 1, 2)],
+    supports: [{ node: 1, kind: 'pin' }, { node: 2, kind: 'roller' }],
+    loads: { gravity: random() > 0.5, points: [{ node: 3, fx: (random() - 0.5) * 1_000, fy: -random() * 5_000 }] },
+    deck: [3],
+    story: { kind: 'traffic', weightkN: 100 + random() * 300, speed: 5 + random() * 20 },
+  };
+}
+
+function overloadedRadioMast(): EditorModel {
+  return {
+    v: 1,
+    name: 'Radio mast overload',
+    seed: 4,
+    nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 0, y: 10 }],
+    members: [{
+      id: 1,
+      a: 1,
+      b: 2,
+      material: 'spaghetti',
+      section: { kind: 'rect', b: 0.02, h: 0.02 },
+      releaseA: false,
+      releaseB: false,
+    }],
+    supports: [{ node: 1, kind: 'fixed' }],
+    loads: { gravity: false, points: [{ node: 2, fx: 0, fy: -100 }] },
+    deck: [],
+    story: { kind: 'ramp' },
+  };
+}
+
+function base64url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
 function solveMesh(mesh: AnalysisMesh, F: Float64Array): { u: Float64Array } {

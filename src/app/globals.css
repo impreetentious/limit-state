@@ -115,6 +115,15 @@ button {
   font-size: 0.78rem;
 }
 
+.preset-menu {
+  border: 1px solid rgba(26, 29, 33, 0.2);
+  border-radius: 3px;
+  padding: 0.28rem 0.4rem;
+  background: transparent;
+  color: rgba(26, 29, 33, 0.8);
+  font-size: 0.78rem;
+}
+
 .editor-workspace {
   min-height: 0;
   flex: 1;
@@ -285,25 +294,133 @@ kbd {
   font-size: 0.68rem;
 }
 
-
-.test-placeholder {
+.eigen-panel {
   position: absolute;
-  inset: 0;
-  display: grid;
-  place-content: center;
-  gap: 0.9rem;
-  padding: 2rem;
-  background: rgba(244, 241, 234, 0.82);
-  text-align: center;
+  top: 3.95rem;
+  left: 0.85rem;
+  max-width: min(21rem, calc(100% - 1.7rem));
+  padding: 0.48rem 0.58rem;
+  border: 1px solid rgba(26, 29, 33, 0.15);
+  background: rgba(244, 241, 234, 0.94);
+  color: rgba(26, 29, 33, 0.8);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
 }
 
-.test-placeholder button {
-  justify-self: center;
-  padding: 0.45rem 0.7rem;
-  border: 1px solid var(--accent);
+.eigen-panel > span {
+  color: #7c3f9c;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.eigen-panel p {
+  margin: 0.35rem 0 0;
+  line-height: 1.35;
+}
+
+.eigen-error { color: var(--danger); }
+
+.mode-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  margin-top: 0.4rem;
+}
+
+.mode-list button {
+  border: 1px solid rgba(124, 63, 156, 0.3);
+  padding: 0.18rem 0.28rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.mode-list button.active {
+  background: #7c3f9c;
+  color: var(--paper);
+}
+
+
+.test-console {
+  position: absolute;
+  right: 0.85rem;
+  bottom: 0.85rem;
+  width: min(26rem, calc(100% - 1.7rem));
+  padding: 0.58rem;
+  border: 1px solid rgba(26, 29, 33, 0.18);
+  background: rgba(244, 241, 234, 0.96);
+  font-size: 0.72rem;
+}
+
+.test-console-header,
+.story-tabs,
+.capacity-panel {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.test-console-header {
+  justify-content: space-between;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.test-console button {
+  border: 1px solid rgba(26, 29, 33, 0.18);
+  padding: 0.25rem 0.4rem;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.story-tabs { margin-top: 0.5rem; }
+
+.story-tabs button.active {
+  background: var(--accent);
+  color: var(--paper);
+}
+
+.story-fields {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.story-fields label {
+  display: grid;
+  grid-template-columns: 7.2rem 1fr;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.story-fields input { accent-color: var(--accent); }
+
+.story-fields p {
+  margin: 0.1rem 0 0;
+  color: rgba(26, 29, 33, 0.7);
+  line-height: 1.35;
+}
+
+.capacity-panel {
+  flex-wrap: wrap;
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(26, 29, 33, 0.14);
+  color: rgba(26, 29, 33, 0.8);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
+.capacity-panel span + span { border-left: 1px solid rgba(26, 29, 33, 0.16); padding-left: 0.35rem; }
+
+.test-console-header button {
+  border-color: var(--accent);
   background: transparent;
   color: var(--accent);
-  cursor: pointer;
 }
 
 .inspector {

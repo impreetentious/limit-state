@@ -1,11 +1,16 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StructureCanvas } from '../canvas/structure-canvas';
 import { analyzeStaticModel, deformationDisplay } from '../fem/statics';
+import type { EigenResult } from '../fem/types';
+import { PRESETS } from '../presets/scenes';
+import { decodeModel, encodeModel } from '../share/serialize';
 import { inspectStability } from '../state/stability';
 import { type EditorTool, useEditorStore } from '../state/editor-store';
+import type { EigenWorkerResponse } from '../workers/eigen.worker';
 import { Inspector } from './inspector';
+import { TestConsole } from './test-console';
 
 const TOOLS: Array<{ id: EditorTool; label: string; key: string; description: string }> = [
   { id: 'select', label: 'Select', key: 'V', description: 'Inspect a node or member' },
@@ -30,14 +35,86 @@ export function EditorApp(): React.JSX.Element {
   const setTool = useEditorStore((state) => state.setTool);
   const setGridSnap = useEditorStore((state) => state.setGridSnap);
   const setModelName = useEditorStore((state) => state.setModelName);
+  const loadModel = useEditorStore((state) => state.loadModel);
   const undo = useEditorStore((state) => state.undo);
   const redo = useEditorStore((state) => state.redo);
   const reset = useEditorStore((state) => state.reset);
   const setStability = useEditorStore((state) => state.setStability);
+  const setNotice = useEditorStore((state) => state.setNotice);
   const setResultDiagram = useEditorStore((state) => state.setResultDiagram);
   const setShowDeformed = useEditorStore((state) => state.setShowDeformed);
   const analysis = useMemo(() => analyzeStaticModel(model), [model]);
   const deformation = analysis.kind === 'stable' ? deformationDisplay(analysis.mesh, analysis.result.u, 44) : null;
+  const requestId = useRef(0);
+  const [eigen, setEigen] = useState<EigenUiState>({ kind: 'idle' });
+  const [selectedMode, setSelectedMode] = useState(0);
+  const [modePhase, setModePhase] = useState(1);
+
+  useEffect(() => {
+    if (analysis.kind !== 'stable') {
+      setEigen({ kind: 'idle' });
+      return;
+    }
+    const id = ++requestId.current;
+    const worker = new Worker(new URL('../workers/eigen.worker.ts', import.meta.url));
+    setEigen({ kind: 'loading' });
+    worker.onmessage = (event: MessageEvent<EigenWorkerResponse>) => {
+      const response = event.data;
+      if (response.id !== id) return;
+      if (response.ok) {
+        setEigen({ kind: 'ready', modal: response.modal, buckling: response.buckling });
+        setSelectedMode(0);
+      } else {
+        setEigen({ kind: 'error', message: response.message });
+      }
+    };
+    worker.onerror = () => setEigen({ kind: 'error', message: 'Eigen worker could not start.' });
+    const axialForces = new Float64Array(analysis.mesh.elements.length);
+    for (let index = 0; index < axialForces.length; index++) axialForces[index] = analysis.result.elementForces[index * 5]!;
+    worker.postMessage({ id, mesh: analysis.mesh, elementN: axialForces, nModes: 8 });
+    return () => worker.terminate();
+  }, [analysis]);
+
+  const activeFrequency = eigen.kind === 'ready' ? eigen.modal.values[selectedMode] : undefined;
+  useEffect(() => {
+    if (activeFrequency === undefined) {
+      setModePhase(1);
+      return;
+    }
+    let frame = 0;
+    const tick = (milliseconds: number) => {
+      setModePhase(Math.sin((milliseconds / 1000) * Math.PI * 2 * activeFrequency));
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeFrequency]);
+  const modeGhost = eigen.kind === 'ready' && activeFrequency !== undefined
+    ? { vectors: eigen.modal.vectors, mode: selectedMode, phase: modePhase }
+    : undefined;
+
+  useEffect(() => {
+    let cancelled = false;
+    const hash = window.location.hash;
+    if (!hash.startsWith('#m=') && !hash.startsWith('#mu=')) return;
+    void decodeModel(hash).then((shared) => {
+      if (!cancelled) loadModel(shared);
+    }).catch(() => {
+      if (!cancelled) setNotice('This share URL could not be decoded.');
+    });
+    return () => { cancelled = true; };
+  }, [loadModel, setNotice]);
+
+  const shareModel = async () => {
+    try {
+      const hash = await encodeModel(model);
+      window.history.replaceState(null, '', hash);
+      await navigator.clipboard?.writeText(window.location.href);
+      setNotice('Share link copied — the model stays entirely in the URL.');
+    } catch {
+      setNotice('Share link could not be encoded.');
+    }
+  };
 
   useEffect(() => {
     setStability({ kind: 'checking', message: 'Checking stability…' });
@@ -73,6 +150,15 @@ export function EditorApp(): React.JSX.Element {
             <button type="button" className={mode === 'build' ? 'active' : ''} onClick={() => setMode('build')}>Build</button>
             <button type="button" className={mode === 'test' ? 'active' : ''} onClick={() => setMode('test')}>Test</button>
           </div>
+          <select className="preset-menu" aria-label="Presets" defaultValue="" onChange={(event) => {
+            const preset = PRESETS.find((candidate) => candidate.id === event.target.value);
+            if (preset) loadModel(preset.model);
+            event.currentTarget.value = '';
+          }}>
+            <option value="" disabled>Presets</option>
+            {PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+          </select>
+          <button type="button" className="quiet-button" onClick={() => void shareModel()}>Share</button>
           <button type="button" className="quiet-button" onClick={reset}>Blank grid</button>
         </div>
       </header>
@@ -87,7 +173,7 @@ export function EditorApp(): React.JSX.Element {
           </div>
         </nav>
         <section className="canvas-panel" aria-label="Structure workspace">
-          <StructureCanvas analysis={analysis} diagram={resultDiagram} showDeformed={showDeformed} />
+          <StructureCanvas analysis={analysis} diagram={resultDiagram} showDeformed={showDeformed} modeGhost={modeGhost} />
           <div className={`lint-badge lint-${stability.kind}`}>{stability.message}</div>
           {notice && <div className="canvas-notice" role="status">{notice}</div>}
           {analysis.kind === 'stable' && <div className="result-controls" aria-label="Static result display">
@@ -95,13 +181,31 @@ export function EditorApp(): React.JSX.Element {
             <label><input type="checkbox" checked={showDeformed} onChange={(event) => setShowDeformed(event.target.checked)} /> Deformed</label>
           </div>}
           {deformation && showDeformed && deformation.maxMeters > 0 && <div className="deformation-badge">deformation ×{formatScale(deformation.scale)} — true max {formatLength(deformation.maxMeters)}</div>}
-          {mode === 'test' && <div className="test-placeholder"><span>Test mode is wired for the next analysis stories.</span><button type="button" onClick={() => setMode('build')}>Return to Build</button></div>}
+          {analysis.kind === 'stable' && <div className="eigen-panel" aria-live="polite">
+            <span>Modal + Buckling</span>
+            {eigen.kind === 'loading' && <p>Solving in worker…</p>}
+            {eigen.kind === 'error' && <p className="eigen-error">{eigen.message}</p>}
+            {eigen.kind === 'ready' && <>
+              <div className="mode-list" aria-label="Animated mode shapes">
+                {Array.from(eigen.modal.values, (omega, index) => <button key={index} type="button" className={selectedMode === index ? 'active' : ''} onClick={() => setSelectedMode(index)}>f{index + 1} {(omega / (Math.PI * 2)).toFixed(2)} Hz</button>)}
+              </div>
+              <p>mode shape normalized — animating at {activeFrequency ? (activeFrequency / (Math.PI * 2)).toFixed(2) : '0.00'} Hz</p>
+              <p>{eigen.buckling.values[0] ? `λcr ${eigen.buckling.values[0]!.toFixed(2)} × reference load` : 'No buckling under this load direction.'}</p>
+            </>}
+          </div>}
+          {mode === 'test' && <TestConsole model={model} modal={eigen.kind === 'ready' ? eigen.modal : undefined} buckling={eigen.kind === 'ready' ? eigen.buckling : undefined} onReturn={() => setMode('build')} />}
         </section>
         <Inspector />
       </section>
     </main>
   );
 }
+
+type EigenUiState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'ready'; modal: EigenResult; buckling: EigenResult };
 
 function formatScale(value: number): string {
   return value >= 100 ? value.toFixed(0) : value.toFixed(1).replace(/\.0$/, '');
