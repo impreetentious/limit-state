@@ -4,7 +4,7 @@
  */
 import { assembleK, assembleLoadCase, elementLocalStiffness, type LoadAssembly } from './assemble';
 import { buildMesh } from './mesh';
-import { expandFreeVector, factorLDLT, freeMatrix, freeVector, mechanismEditorNode, solveFactored } from './solve';
+import { expandFreeVector, factorLDLT, freeMatrix, freeVector, mechanismEditorNode, solveFactored, type Factor } from './solve';
 import type { AnalysisMesh, EditorModel, StaticResult } from './types';
 
 export type StaticAnalysis =
@@ -17,15 +17,29 @@ export interface DeformationDisplay {
   scale: number;
 }
 
-/** Solve one assembled static load case and recover all displayed result values. */
-export function solveStatic(mesh: AnalysisMesh, loads: LoadAssembly): StaticAnalysis {
+/** Factored static stiffness retained by moving-load stories. */
+export type StaticSystem =
+  | { ndof: number; K: Float64Array; factor: Factor }
+  | { ndof: number; K: Float64Array; mechanismFreeDof: number };
+
+/** Assemble and factor a model once; subsequent load cases take only back-substitution. */
+export function prepareStaticSystem(mesh: AnalysisMesh): StaticSystem {
   const K = assembleK(mesh);
-  const factor = factorLDLT(freeMatrix(K, mesh.ndof, mesh.freeDofs), mesh.freeDofs.length);
-  if (!factor.ok) {
-    const nodeId = mechanismEditorNode(mesh, factor.mechanism.freeDofIndex);
+  const result = factorLDLT(freeMatrix(K, mesh.ndof, mesh.freeDofs), mesh.freeDofs.length);
+  return result.ok
+    ? { ndof: mesh.ndof, K, factor: result.factor }
+    : { ndof: mesh.ndof, K, mechanismFreeDof: result.mechanism.freeDofIndex };
+}
+
+/** Solve one assembled static load case and recover all displayed result values. */
+export function solveStatic(mesh: AnalysisMesh, loads: LoadAssembly, cachedSystem?: StaticSystem): StaticAnalysis {
+  const system = cachedSystem ?? prepareStaticSystem(mesh);
+  if (system.ndof !== mesh.ndof) return { kind: 'invalid', message: 'Static system does not match this analysis mesh.' };
+  if ('mechanismFreeDof' in system) {
+    const nodeId = mechanismEditorNode(mesh, system.mechanismFreeDof);
     return { kind: 'mechanism', nodeId, message: `Node ${nodeId} can move freely — add a support or member.` };
   }
-  const u = expandFreeVector(mesh.ndof, mesh.freeDofs, solveFactored(factor.factor, freeVector(loads.F, mesh.freeDofs)));
+  const u = expandFreeVector(mesh.ndof, mesh.freeDofs, solveFactored(system.factor, freeVector(loads.F, mesh.freeDofs)));
   const elementForces = recoverElementForces(mesh, u, loads.elementFixedEnd);
   return {
     kind: 'stable',
@@ -35,7 +49,7 @@ export function solveStatic(mesh: AnalysisMesh, loads: LoadAssembly): StaticAnal
       u,
       elementForces,
       utilization: recoverUtilization(mesh, elementForces),
-      reactions: recoverReactions(mesh, K, u, loads.F),
+      reactions: recoverReactions(mesh, system.K, u, loads.F),
     },
   };
 }
@@ -67,6 +81,13 @@ export function deformationDisplay(mesh: AnalysisMesh, u: Float64Array, pixelsPe
   }
   if (maxMeters === 0) return { maxMeters, scale: 1 };
   return { maxMeters, scale: Math.max(1, Math.min(100_000, 28 / (maxMeters * pixelsPerMeter))) };
+}
+
+/** Recover combined-stress utilization from a prescribed displacement state. */
+export function utilizationAtDisplacement(mesh: AnalysisMesh, u: Float64Array, fixedEnd: Float64Array): Map<number, number> {
+  if (u.length !== mesh.ndof) throw new Error('Displacement vector does not match the mesh.');
+  if (fixedEnd.length !== mesh.elements.length * 6) throw new Error('Fixed-end vector does not match the mesh.');
+  return recoverUtilization(mesh, recoverElementForces(mesh, u, fixedEnd));
 }
 
 /** Element force recovery f_local = k_cond(Tu_e) − f_fixedEnd. */

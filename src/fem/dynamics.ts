@@ -3,7 +3,7 @@
  * explainer layer; DAF meter; resonance detection. M5.
  */
 import { assembleK, assembleM } from './assemble';
-import { expandFreeVector, factorLDLT, freeMatrix, freeVector, solveFactored } from './solve';
+import { expandFreeVector, factorLDLT, freeMatrix, freeVector, solveFactored, type Factor } from './solve';
 import type { AnalysisMesh } from './types';
 
 export interface NewmarkState {
@@ -13,11 +13,29 @@ export interface NewmarkState {
   t: number;
   /** Optional Rayleigh coefficients retained across story steps. */
   damping?: RayleighParams;
+  /** Cached M, C, and K̂ factor for a fixed mesh/time step. */
+  system?: NewmarkSystem;
 }
 
 export interface RayleighParams {
   a: number; // mass-proportional
   b: number; // stiffness-proportional
+}
+
+/** Preassembled and factored fixed-system terms for repeated Newmark steps. */
+export interface NewmarkSystem {
+  ndof: number;
+  dt: number;
+  damping: RayleighParams;
+  M: Float64Array;
+  C: Float64Array;
+  factor: Factor;
+  a0: number;
+  a1: number;
+  a2: number;
+  a3: number;
+  a4: number;
+  a5: number;
 }
 
 /** Fit a and b from a target damping ratio at two circular frequencies. Gate G9. */
@@ -38,6 +56,27 @@ export function rayleighDampingRatio(params: RayleighParams, omega: number): num
   return 0.5 * (params.a / omega + params.b * omega);
 }
 
+/** Assemble and factor K̂ once for a fixed Newmark run. */
+export function prepareNewmarkSystem(mesh: AnalysisMesh, dt: number, damping: RayleighParams): NewmarkSystem {
+  if (!(dt > 0) || !Number.isFinite(dt)) throw new Error('Newmark time step must be finite and positive.');
+  const K = assembleK(mesh);
+  const M = assembleM(mesh);
+  const C = linearCombination(M, K, damping.a, damping.b);
+  const beta = 1 / 4;
+  const gamma = 1 / 2;
+  const a0 = 1 / (beta * dt * dt);
+  const a1 = gamma / (beta * dt);
+  const a2 = 1 / (beta * dt);
+  const a3 = 1 / (2 * beta) - 1;
+  const a4 = gamma / beta - 1;
+  const a5 = dt * (gamma / (2 * beta) - 1);
+  const Khat = linearCombination(K, M, 1, a0);
+  addScaled(Khat, C, a1);
+  const result = factorLDLT(freeMatrix(Khat, mesh.ndof, mesh.freeDofs), mesh.freeDofs.length);
+  if (!result.ok) throw new Error(`Dynamic effective stiffness is singular at free DOF ${result.mechanism.freeDofIndex}.`);
+  return { ndof: mesh.ndof, dt, damping: { ...damping }, M, C, factor: result.factor, a0, a1, a2, a3, a4, a5 };
+}
+
 /**
  * One average-acceleration Newmark step on the mesh free-DOF partition.
  * K̂ = K + a0M + a1C, with the matching effective load.
@@ -51,38 +90,23 @@ export function newmarkStep(
 ): NewmarkState {
   if (!(dt > 0) || !Number.isFinite(dt)) throw new Error('Newmark time step must be finite and positive.');
   validateState(mesh, state);
-  const K = assembleK(mesh);
-  const M = assembleM(mesh);
-  const C = linearCombination(M, K, damping.a, damping.b);
-  const beta = 1 / 4;
-  const gamma = 1 / 2;
-  const a0 = 1 / (beta * dt * dt);
-  const a1 = gamma / (beta * dt);
-  const a2 = 1 / (beta * dt);
-  const a3 = 1 / (2 * beta) - 1;
-  const a4 = gamma / beta - 1;
-  const a5 = dt * (gamma / (2 * beta) - 1);
-
-  const Khat = linearCombination(K, M, 1, a0);
-  addScaled(Khat, C, a1);
-  const factor = factorLDLT(freeMatrix(Khat, mesh.ndof, mesh.freeDofs), mesh.freeDofs.length);
-  if (!factor.ok) throw new Error(`Dynamic effective stiffness is singular at free DOF ${factor.mechanism.freeDofIndex}.`);
+  const system = usableSystem(state.system, mesh, dt, damping) ? state.system : prepareNewmarkSystem(mesh, dt, damping);
 
   const nextTime = state.t + dt;
   const effectiveLoad = new Float64Array(loadAt(nextTime));
   if (effectiveLoad.length !== mesh.ndof) throw new Error('Dynamic load vector length does not match the mesh.');
-  const massState = combination3(state.u, state.v, state.a, a0, a2, a3);
-  const dampingState = combination3(state.u, state.v, state.a, a1, a4, a5);
-  addScaledVector(effectiveLoad, multiplyMatrixVector(M, mesh.ndof, massState), 1);
-  addScaledVector(effectiveLoad, multiplyMatrixVector(C, mesh.ndof, dampingState), 1);
-  const u = expandFreeVector(mesh.ndof, mesh.freeDofs, solveFactored(factor.factor, freeVector(effectiveLoad, mesh.freeDofs)));
+  const massState = combination3(state.u, state.v, state.a, system.a0, system.a2, system.a3);
+  const dampingState = combination3(state.u, state.v, state.a, system.a1, system.a4, system.a5);
+  addScaledVector(effectiveLoad, multiplyMatrixVector(system.M, mesh.ndof, massState), 1);
+  addScaledVector(effectiveLoad, multiplyMatrixVector(system.C, mesh.ndof, dampingState), 1);
+  const u = expandFreeVector(mesh.ndof, mesh.freeDofs, solveFactored(system.factor, freeVector(effectiveLoad, mesh.freeDofs)));
   const a = new Float64Array(mesh.ndof);
   const v = new Float64Array(mesh.ndof);
   for (let index = 0; index < mesh.ndof; index++) {
-    a[index] = a0 * (u[index]! - state.u[index]!) - a2 * state.v[index]! - a3 * state.a[index]!;
-    v[index] = state.v[index]! + dt * ((1 - gamma) * state.a[index]! + gamma * a[index]!);
+    a[index] = system.a0 * (u[index]! - state.u[index]!) - system.a2 * state.v[index]! - system.a3 * state.a[index]!;
+    v[index] = state.v[index]! + dt * (0.5 * state.a[index]! + 0.5 * a[index]!);
   }
-  return { u, v, a, t: nextTime, damping: { ...damping } };
+  return { u, v, a, t: nextTime, damping: { ...damping }, system };
 }
 
 /** Exact SDOF DAF for a harmonic force, used by the honest live meter. */
@@ -97,6 +121,14 @@ function validateState(mesh: AnalysisMesh, state: NewmarkState): void {
     throw new Error('Newmark state vectors must match the mesh DOF count.');
   }
   if (!Number.isFinite(state.t)) throw new Error('Newmark state time must be finite.');
+}
+
+function usableSystem(system: NewmarkSystem | undefined, mesh: AnalysisMesh, dt: number, damping: RayleighParams): system is NewmarkSystem {
+  return system !== undefined
+    && system.ndof === mesh.ndof
+    && system.dt === dt
+    && system.damping.a === damping.a
+    && system.damping.b === damping.b;
 }
 
 function linearCombination(first: Float64Array, second: Float64Array, firstScale: number, secondScale: number): Float64Array {

@@ -53,11 +53,12 @@ export function evaluateFailure(model: EditorModel, loadFactor: number): Failure
  * a hinge at the governing bending end, then re-solve at the same load.
  * Maximum twenty steps.
  */
-export function collapseCascade(model: EditorModel): CascadeResult {
+export function collapseCascade(model: EditorModel, loadFactor = 1): CascadeResult {
+  if (!(loadFactor > 0) || !Number.isFinite(loadFactor)) throw new Error('Collapse cascade needs a finite positive load factor.');
   let current = cloneModel(model);
   const steps: CascadeResult['steps'] = [];
   for (let index = 0; index < 20; index++) {
-    const report = evaluateFailure(current, 1);
+    const report = evaluateFailure(current, loadFactor);
     if (report.kind === 'mechanism') return { steps, outcome: 'collapse' };
     if (report.kind === 'stable') return { steps, outcome: 'stable' };
     // Dynamic resonance is reported by the wind story; this quasi-static path
@@ -66,7 +67,7 @@ export function collapseCascade(model: EditorModel): CascadeResult {
     const memberId = report.memberId;
     const member = current.members.find((candidate) => candidate.id === memberId);
     if (!member) return { steps, outcome: 'collapse' };
-    const analysis = analyzeAtFactor(current, 1);
+    const analysis = analyzeAtFactor(current, loadFactor);
     if (analysis.kind !== 'stable') return { steps, outcome: 'collapse' };
     const axialDominant = memberAxialDominant(analysis.mesh, analysis.result.elementForces, memberId);
     if (report.kind === 'buckling' || axialDominant) {
@@ -89,7 +90,10 @@ export function collapseCascade(model: EditorModel): CascadeResult {
   return { steps, outcome: 'stable' };
 }
 
-function analyzeAtFactor(model: EditorModel, factor: number): StaticAnalysis {
+/** Solve the base load case at a proportional ramp factor. */
+export function analyzeAtFactor(model: EditorModel, factor: number): StaticAnalysis {
+  if (!(factor > 0) || !Number.isFinite(factor)) return { kind: 'invalid', message: 'Ramp factor must be finite and positive.' };
+  try {
   const mesh = buildMesh(model);
   const nodeIndex = new Map<number, number>();
   for (let index = 0; index < mesh.editorNode.length; index++) {
@@ -102,6 +106,9 @@ function analyzeAtFactor(model: EditorModel, factor: number): StaticAnalysis {
   });
   const base = assembleLoadCase(mesh, { gravity: model.loads.gravity, points });
   return solveStatic(mesh, scaleLoadAssembly(base, factor));
+  } catch (error) {
+    return { kind: 'invalid', message: error instanceof Error ? error.message : 'Ramp analysis could not run.' };
+  }
 }
 
 /** Scale both external loads and retained fixed-end vectors so recovery remains exact. */
