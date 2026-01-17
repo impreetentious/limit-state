@@ -9,6 +9,7 @@ import { useEditorStore } from '../state/editor-store';
 interface Point { x: number; y: number }
 interface CanvasSize { width: number; height: number }
 interface ModeGhost { vectors: Float64Array; mode: number; phase: number }
+interface TrafficAxle { x: number; y: number }
 
 const SCALE = 44;
 const NODE_RADIUS = 5;
@@ -20,11 +21,17 @@ export function StructureCanvas({
   diagram,
   showDeformed,
   modeGhost,
+  trafficAxles,
+  momentEnvelope,
+  dynamicDisplacement,
 }: {
   analysis: StaticAnalysis;
   diagram: ResultDiagram;
   showDeformed: boolean;
   modeGhost?: ModeGhost;
+  trafficAxles?: readonly TrafficAxle[];
+  momentEnvelope?: ReadonlyMap<number, number>;
+  dynamicDisplacement?: Float64Array;
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [resizeVersion, setResizeVersion] = useState(0);
@@ -73,8 +80,8 @@ export function StructureCanvas({
     const context = canvas.getContext('2d');
     if (!context) return;
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawScene(context, size, model.nodes, model.members, model.supports, model.loads.points, model.deck, selection, pointer, draftStart.current, stability, analysis, diagram, showDeformed, modeGhost);
-  }, [analysis, diagram, modeGhost, model, pointer, resizeVersion, selection, showDeformed, stability]);
+    drawScene(context, size, model.nodes, model.members, model.supports, model.loads.points, model.deck, selection, pointer, draftStart.current, stability, analysis, diagram, showDeformed, modeGhost, trafficAxles, momentEnvelope, dynamicDisplacement);
+  }, [analysis, diagram, dynamicDisplacement, modeGhost, model, momentEnvelope, pointer, resizeVersion, selection, showDeformed, stability, trafficAxles]);
 
   const worldPoint = (event: React.PointerEvent<HTMLCanvasElement>): Point => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -184,6 +191,9 @@ function drawScene(
   diagram: ResultDiagram,
   showDeformed: boolean,
   modeGhost: ModeGhost | undefined,
+  trafficAxles: readonly TrafficAxle[] | undefined,
+  momentEnvelope: ReadonlyMap<number, number> | undefined,
+  dynamicDisplacement: Float64Array | undefined,
 ): void {
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(context, size);
@@ -191,6 +201,7 @@ function drawScene(
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const deckSet = new Set(deck);
   const utilization = analysis.kind === 'stable' ? analysis.result.utilization : undefined;
+  const envelopeMaximum = momentEnvelope ? Math.max(...momentEnvelope.values(), 1) : 1;
 
   for (const member of members) {
     const a = nodeById.get(member.a);
@@ -204,6 +215,15 @@ function drawScene(
     context.strokeStyle = selection.kind === 'member' && selection.id === member.id ? '#2456a4' : utilization ? stressColor(utilization.get(member.id) ?? 0) : deckSet.has(member.id) ? '#4d78bb' : '#1a1d21';
     context.lineWidth = selection.kind === 'member' && selection.id === member.id ? 4 : deckSet.has(member.id) ? 3 : 2;
     context.stroke();
+    const envelope = momentEnvelope?.get(member.id) ?? 0;
+    if (envelope > 0) {
+      context.beginPath();
+      context.moveTo(aScreen.x, aScreen.y);
+      context.lineTo(bScreen.x, bScreen.y);
+      context.strokeStyle = 'rgba(124, 63, 156, 0.32)';
+      context.lineWidth = 2 + 4 * envelope / envelopeMaximum;
+      context.stroke();
+    }
     if (deckSet.has(member.id)) {
       context.setLineDash([4, 4]);
       context.strokeStyle = '#f4f1ea';
@@ -230,6 +250,7 @@ function drawScene(
   }
 
   if (analysis.kind === 'stable' && showDeformed) drawDeformedShape(context, size, analysis);
+  if (analysis.kind === 'stable' && dynamicDisplacement) drawDynamicShape(context, size, analysis.mesh, dynamicDisplacement);
   if (analysis.kind === 'stable' && modeGhost) drawModeShape(context, size, analysis.mesh, modeGhost);
   if (analysis.kind === 'stable' && diagram !== 'none') drawDiagram(context, nodes, members, toScreen, analysis, diagram);
 
@@ -237,6 +258,7 @@ function drawScene(
     const node = nodeById.get(load.node);
     if (node) drawLoad(context, toScreen(node), load);
   }
+  for (const axle of trafficAxles ?? []) drawTrafficAxle(context, toScreen(axle));
   for (const support of supports) {
     const node = nodeById.get(support.node);
     if (node) drawSupport(context, toScreen(node), support.kind);
@@ -330,6 +352,40 @@ function drawDeformedShape(context: CanvasRenderingContext2D, size: CanvasSize, 
     );
     context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke();
   }
+  context.restore();
+}
+
+/** True Newmark displacement with only the presentation scale amplified. */
+function drawDynamicShape(context: CanvasRenderingContext2D, size: CanvasSize, mesh: AnalysisMesh, u: Float64Array): void {
+  if (u.length !== mesh.ndof) return;
+  const display = deformationDisplay(mesh, u, SCALE);
+  if (display.maxMeters === 0) return;
+  const toScreen = (x: number, y: number): Point => ({ x: size.width / 2 + x * SCALE, y: size.height - 68 - y * SCALE });
+  context.save();
+  context.strokeStyle = 'rgba(28, 132, 122, 0.82)';
+  context.lineWidth = 1.8;
+  context.setLineDash([7, 3]);
+  for (const element of mesh.elements) {
+    const a = toScreen(
+      mesh.coords[2 * element.na]! + u[3 * element.na]! * display.scale,
+      mesh.coords[2 * element.na + 1]! + u[3 * element.na + 1]! * display.scale,
+    );
+    const b = toScreen(
+      mesh.coords[2 * element.nb]! + u[3 * element.nb]! * display.scale,
+      mesh.coords[2 * element.nb + 1]! + u[3 * element.nb + 1]! * display.scale,
+    );
+    context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke();
+  }
+  context.restore();
+}
+
+function drawTrafficAxle(context: CanvasRenderingContext2D, point: Point): void {
+  context.save();
+  context.fillStyle = '#c0392b';
+  context.strokeStyle = '#7d251d';
+  context.lineWidth = 1;
+  context.fillRect(point.x - 8, point.y - 15, 16, 8);
+  context.beginPath(); context.arc(point.x - 5, point.y - 5, 2.5, 0, Math.PI * 2); context.arc(point.x + 5, point.y - 5, 2.5, 0, Math.PI * 2); context.fill();
   context.restore();
 }
 

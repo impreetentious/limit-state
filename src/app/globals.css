@@ -263,6 +263,18 @@ kbd {
   font-size: 0.7rem;
 }
 
+.dynamic-badge {
+  position: absolute;
+  top: 3.4rem;
+  right: 0.85rem;
+  padding: 0.28rem;
+  border: 1px solid rgba(28, 132, 122, 0.35);
+  background: rgba(244, 241, 234, 0.94);
+  color: #147267;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
 .result-controls { left: 0.85rem; }
 
 .result-controls button {
@@ -327,6 +339,25 @@ kbd {
   margin-top: 0.4rem;
 }
 
+.mode-family,
+.story-transport {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+}
+
+.mode-family button {
+  border: 1px solid rgba(124, 63, 156, 0.3);
+  padding: 0.16rem 0.3rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.mode-family button.active { background: rgba(124, 63, 156, 0.16); }
+
 .mode-list button {
   border: 1px solid rgba(124, 63, 156, 0.3);
   padding: 0.18rem 0.28rem;
@@ -384,6 +415,17 @@ kbd {
   color: var(--paper);
 }
 
+.story-transport {
+  color: rgba(26, 29, 33, 0.7);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
+.story-transport .play-button {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .story-fields {
   display: grid;
   gap: 0.35rem;
@@ -398,6 +440,11 @@ kbd {
 }
 
 .story-fields input { accent-color: var(--accent); }
+
+.story-fields .envelope-toggle {
+  grid-template-columns: auto 1fr;
+  justify-content: start;
+}
 
 .story-fields p {
   margin: 0.1rem 0 0;
@@ -416,6 +463,51 @@ kbd {
 }
 
 .capacity-panel span + span { border-left: 1px solid rgba(26, 29, 33, 0.16); padding-left: 0.35rem; }
+
+.mode-energy {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+}
+
+.mode-energy > div {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(1rem, 1fr) 4.2rem;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.mode-energy i {
+  display: block;
+  min-height: 0.35rem;
+  background: #147267;
+}
+
+.mode-energy b { font-weight: 400; text-align: right; }
+
+.failure-panel {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.45rem;
+  border-left: 3px solid var(--danger);
+  background: rgba(192, 57, 43, 0.07);
+  color: rgba(26, 29, 33, 0.82);
+}
+
+.failure-panel button { justify-self: start; border-color: rgba(192, 57, 43, 0.5); color: var(--danger); }
+.failure-panel details p, .failure-panel ol { margin: 0.35rem 0 0; line-height: 1.35; }
+.failure-panel ol { padding-left: 1.1rem; }
+
+.resonance-panel {
+  padding: 0.38rem 0.45rem;
+  border-left: 3px solid #7c3f9c;
+  background: rgba(124, 63, 156, 0.09);
+  color: #63307f;
+  font-family: var(--font-mono);
+  font-size: 0.67rem;
+}
 
 .test-console-header button {
   border-color: var(--accent);

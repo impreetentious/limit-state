@@ -8,6 +8,9 @@ import { PRESETS } from '../presets/scenes';
 import { decodeModel, encodeModel } from '../share/serialize';
 import { inspectStability } from '../state/stability';
 import { type EditorTool, useEditorStore } from '../state/editor-store';
+import { analyzeRamp, rampCapacity } from '../stories/ramp';
+import { analyzeTrafficAt, mergeMomentEnvelope, prepareTraffic } from '../stories/traffic';
+import { detectResonance, initialWindState, modalCoordinates, prepareWind, stepWind, windUtilization, type WindScenario } from '../stories/wind';
 import type { EigenWorkerResponse } from '../workers/eigen.worker';
 import { Inspector } from './inspector';
 import { TestConsole } from './test-console';
@@ -43,15 +46,20 @@ export function EditorApp(): React.JSX.Element {
   const setNotice = useEditorStore((state) => state.setNotice);
   const setResultDiagram = useEditorStore((state) => state.setResultDiagram);
   const setShowDeformed = useEditorStore((state) => state.setShowDeformed);
-  const analysis = useMemo(() => analyzeStaticModel(model), [model]);
-  const deformation = analysis.kind === 'stable' ? deformationDisplay(analysis.mesh, analysis.result.u, 44) : null;
+  const baseAnalysis = useMemo(() => analyzeStaticModel(model), [model]);
   const requestId = useRef(0);
   const [eigen, setEigen] = useState<EigenUiState>({ kind: 'idle' });
   const [selectedMode, setSelectedMode] = useState(0);
+  const [modeFamily, setModeFamily] = useState<'modal' | 'buckling'>('modal');
   const [modePhase, setModePhase] = useState(1);
+  const [storyPlaying, setStoryPlaying] = useState(false);
+  const [storyTime, setStoryTime] = useState(0);
+  const [momentEnvelope, setMomentEnvelope] = useState<Map<number, number>>(new Map());
+  const [envelopeEnabled, setEnvelopeEnabled] = useState(false);
+  const [windFrame, setWindFrame] = useState<WindFrame>();
 
   useEffect(() => {
-    if (analysis.kind !== 'stable') {
+    if (baseAnalysis.kind !== 'stable') {
       setEigen({ kind: 'idle' });
       return;
     }
@@ -69,29 +77,118 @@ export function EditorApp(): React.JSX.Element {
       }
     };
     worker.onerror = () => setEigen({ kind: 'error', message: 'Eigen worker could not start.' });
-    const axialForces = new Float64Array(analysis.mesh.elements.length);
-    for (let index = 0; index < axialForces.length; index++) axialForces[index] = analysis.result.elementForces[index * 5]!;
-    worker.postMessage({ id, mesh: analysis.mesh, elementN: axialForces, nModes: 8 });
+    const axialForces = new Float64Array(baseAnalysis.mesh.elements.length);
+    for (let index = 0; index < axialForces.length; index++) axialForces[index] = baseAnalysis.result.elementForces[index * 5]!;
+    worker.postMessage({ id, mesh: baseAnalysis.mesh, elementN: axialForces, nModes: 8 });
     return () => worker.terminate();
-  }, [analysis]);
+  }, [baseAnalysis]);
 
-  const activeFrequency = eigen.kind === 'ready' ? eigen.modal.values[selectedMode] : undefined;
+  const activeEigen = eigen.kind === 'ready' ? (modeFamily === 'modal' ? eigen.modal : eigen.buckling) : undefined;
+  const activeFrequency = modeFamily === 'modal' ? activeEigen?.values[selectedMode] : undefined;
+  const animationHz = activeFrequency ? activeFrequency / (Math.PI * 2) : modeFamily === 'buckling' ? 0.5 : undefined;
   useEffect(() => {
-    if (activeFrequency === undefined) {
+    if (animationHz === undefined) {
       setModePhase(1);
       return;
     }
     let frame = 0;
     const tick = (milliseconds: number) => {
-      setModePhase(Math.sin((milliseconds / 1000) * Math.PI * 2 * activeFrequency));
+      setModePhase(Math.sin((milliseconds / 1000) * Math.PI * 2 * animationHz));
       frame = window.requestAnimationFrame(tick);
     };
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
-  }, [activeFrequency]);
-  const modeGhost = eigen.kind === 'ready' && activeFrequency !== undefined
-    ? { vectors: eigen.modal.vectors, mode: selectedMode, phase: modePhase }
+  }, [animationHz]);
+  const modeGhost = activeEigen && activeEigen.values[selectedMode] !== undefined
+    ? { vectors: activeEigen.vectors, mode: selectedMode, phase: modePhase }
     : undefined;
+
+  const trafficScenario = useMemo(() => {
+    if (model.story.kind !== 'traffic' || mode !== 'test') return undefined;
+    try { return prepareTraffic(model); } catch { return undefined; }
+  }, [mode, model]);
+  const trafficFrame = useMemo(
+    () => trafficScenario && model.story.kind === 'traffic' ? analyzeTrafficAt(trafficScenario, storyTime * model.story.speed) : undefined,
+    [model.story, storyTime, trafficScenario],
+  );
+  const capacity = useMemo(() => model.story.kind === 'ramp' ? rampCapacity(model) : undefined, [model]);
+  const rampFactor = model.story.kind === 'ramp' && capacity !== undefined
+    ? Math.min(capacity, Math.max(0.001, storyTime * capacity / 8))
+    : 0.001;
+  const rampFrame = useMemo(
+    () => model.story.kind === 'ramp' && mode === 'test' ? analyzeRamp(model, rampFactor, storyTime >= 8) : undefined,
+    [mode, model, rampFactor, storyTime],
+  );
+  const analysis = trafficFrame?.analysis ?? rampFrame?.analysis ?? baseAnalysis;
+  const deformation = analysis.kind === 'stable' ? deformationDisplay(analysis.mesh, analysis.result.u, 44) : null;
+  const windScenario = useMemo(() => model.story.kind === 'wind' ? prepareWind(model) : undefined, [model]);
+  const modal = eigen.kind === 'ready' ? eigen.modal : undefined;
+  const trafficDuration = trafficFrame && model.story.kind === 'traffic'
+    ? (trafficFrame.length + 4) / Math.max(0.1, model.story.speed)
+    : undefined;
+
+  useEffect(() => {
+    setStoryPlaying(false);
+    setStoryTime(0);
+    setMomentEnvelope(new Map());
+    setWindFrame(undefined);
+  }, [model]);
+
+  useEffect(() => {
+    if (mode !== 'test' || !storyPlaying || model.story.kind === 'wind') return;
+    let frame = 0;
+    let previous = performance.now();
+    const tick = (now: number) => {
+      const elapsed = Math.min(0.1, Math.max(0, (now - previous) / 1000));
+      previous = now;
+      setStoryTime((current) => {
+        const next = current + elapsed;
+        if (model.story.kind === 'traffic' && trafficDuration && next >= trafficDuration) {
+          setMomentEnvelope(new Map());
+          return 0;
+        }
+        if (model.story.kind === 'ramp' && capacity !== undefined && next >= 8) {
+          setStoryPlaying(false);
+          return 8;
+        }
+        return next;
+      });
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [capacity, mode, model.story.kind, storyPlaying, trafficDuration]);
+
+  useEffect(() => {
+    if (!envelopeEnabled || !trafficFrame) return;
+    setMomentEnvelope((previous) => mergeMomentEnvelope(previous, trafficFrame.analysis));
+  }, [envelopeEnabled, trafficFrame]);
+
+  useEffect(() => {
+    if (mode !== 'test' || !storyPlaying || !windScenario || !modal) return;
+    const initial = initialWindState(windScenario, modal);
+    if (!initial) return;
+    const initialCoordinates = modalCoordinates(windScenario.mesh, modal, initial.u, windScenario.mass);
+    let current = initial;
+    let history: number[] = [];
+    let frame = 0;
+    const tick = () => {
+      current = stepWind(windScenario, current);
+      const rawCoordinates = modalCoordinates(windScenario.mesh, modal, current.u, windScenario.mass);
+      const coordinates = new Float64Array(rawCoordinates.length);
+      for (let index = 0; index < coordinates.length; index++) coordinates[index] = rawCoordinates[index]! - initialCoordinates[index]!;
+      const nearestMode = nearestFrequencyMode(modal, windScenario.model.freqHz);
+      history = [...history, Math.abs(coordinates[nearestMode] ?? 0)].slice(-Math.ceil(5 * 60 / Math.max(0.05, windScenario.model.freqHz)));
+      const resonanceMode = detectResonance(windScenario.model.freqHz, modal, windScenario.model.zeta, history);
+      const yieldMember = governingYieldMember(windUtilization(windScenario, current.u));
+      setWindFrame({ scenario: windScenario, t: current.t, u: current.u, coordinates, resonanceMode, yieldMember });
+      setStoryTime(current.t);
+      frame = window.requestAnimationFrame(tick);
+    };
+    setWindFrame({ scenario: windScenario, t: initial.t, u: initial.u, coordinates: new Float64Array(initialCoordinates.length) });
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [modal, mode, storyPlaying, windScenario]);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,7 +228,13 @@ export function EditorApp(): React.JSX.Element {
         if (event.shiftKey) redo(); else undo();
         return;
       }
-      if (event.key === ' ') { if (mode === 'test') event.preventDefault(); return; }
+      if (event.key === ' ') {
+        if (mode === 'test') {
+          event.preventDefault();
+          setStoryPlaying((playing) => !playing);
+        }
+        return;
+      }
       if (event.key === 'Backspace' || event.key === 'Delete') { setTool('delete'); return; }
       const matching = TOOLS.find((candidate) => candidate.key.toLowerCase() === event.key.toLowerCase());
       if (matching) setTool(matching.id);
@@ -173,7 +276,15 @@ export function EditorApp(): React.JSX.Element {
           </div>
         </nav>
         <section className="canvas-panel" aria-label="Structure workspace">
-          <StructureCanvas analysis={analysis} diagram={resultDiagram} showDeformed={showDeformed} modeGhost={modeGhost} />
+          <StructureCanvas
+            analysis={analysis}
+            diagram={resultDiagram}
+            showDeformed={showDeformed}
+            modeGhost={modeGhost}
+            trafficAxles={trafficFrame?.axles}
+            momentEnvelope={envelopeEnabled ? momentEnvelope : undefined}
+            dynamicDisplacement={windFrame?.u}
+          />
           <div className={`lint-badge lint-${stability.kind}`}>{stability.message}</div>
           {notice && <div className="canvas-notice" role="status">{notice}</div>}
           {analysis.kind === 'stable' && <div className="result-controls" aria-label="Static result display">
@@ -181,19 +292,39 @@ export function EditorApp(): React.JSX.Element {
             <label><input type="checkbox" checked={showDeformed} onChange={(event) => setShowDeformed(event.target.checked)} /> Deformed</label>
           </div>}
           {deformation && showDeformed && deformation.maxMeters > 0 && <div className="deformation-badge">deformation ×{formatScale(deformation.scale)} — true max {formatLength(deformation.maxMeters)}</div>}
+          {windFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(windFrame.scenario.mesh, windFrame.u, 44).scale)} · simplified uniform wind field</div>}
           {analysis.kind === 'stable' && <div className="eigen-panel" aria-live="polite">
             <span>Modal + Buckling</span>
             {eigen.kind === 'loading' && <p>Solving in worker…</p>}
             {eigen.kind === 'error' && <p className="eigen-error">{eigen.message}</p>}
             {eigen.kind === 'ready' && <>
-              <div className="mode-list" aria-label="Animated mode shapes">
-                {Array.from(eigen.modal.values, (omega, index) => <button key={index} type="button" className={selectedMode === index ? 'active' : ''} onClick={() => setSelectedMode(index)}>f{index + 1} {(omega / (Math.PI * 2)).toFixed(2)} Hz</button>)}
+              <div className="mode-family" aria-label="Mode shape family">
+                <button type="button" className={modeFamily === 'modal' ? 'active' : ''} onClick={() => { setModeFamily('modal'); setSelectedMode(0); }}>Modal</button>
+                <button type="button" className={modeFamily === 'buckling' ? 'active' : ''} onClick={() => { setModeFamily('buckling'); setSelectedMode(0); }}>Buckling</button>
               </div>
-              <p>mode shape normalized — animating at {activeFrequency ? (activeFrequency / (Math.PI * 2)).toFixed(2) : '0.00'} Hz</p>
+              <div className="mode-list" aria-label="Animated mode shapes">
+                {Array.from((modeFamily === 'modal' ? eigen.modal : eigen.buckling).values, (value, index) => <button key={index} type="button" className={selectedMode === index ? 'active' : ''} onClick={() => setSelectedMode(index)}>{modeFamily === 'modal' ? `f${index + 1} ${(value / (Math.PI * 2)).toFixed(2)} Hz` : `λ${index + 1} ${value.toFixed(2)}`}</button>)}
+              </div>
+              <p>{modeFamily === 'modal' ? `mode shape normalized — animating at ${activeFrequency ? (activeFrequency / (Math.PI * 2)).toFixed(2) : '0.00'} Hz` : 'buckling mode normalized — illustrative animation, not displacement'}</p>
               <p>{eigen.buckling.values[0] ? `λcr ${eigen.buckling.values[0]!.toFixed(2)} × reference load` : 'No buckling under this load direction.'}</p>
             </>}
           </div>}
-          {mode === 'test' && <TestConsole model={model} modal={eigen.kind === 'ready' ? eigen.modal : undefined} buckling={eigen.kind === 'ready' ? eigen.buckling : undefined} onReturn={() => setMode('build')} />}
+          {mode === 'test' && <TestConsole
+            model={model}
+            modal={modal}
+            buckling={eigen.kind === 'ready' ? eigen.buckling : undefined}
+            playing={storyPlaying}
+            storyTime={storyTime}
+            traffic={trafficFrame}
+            envelopeEnabled={envelopeEnabled}
+            onEnvelopeEnabled={setEnvelopeEnabled}
+            ramp={rampFrame}
+            rampCapacity={capacity}
+            wind={windFrame}
+            onTogglePlayback={() => setStoryPlaying((playing) => !playing)}
+            onRestart={() => { setStoryTime(0); setMomentEnvelope(new Map()); setWindFrame(undefined); setStoryPlaying(false); }}
+            onReturn={() => setMode('build')}
+          />}
         </section>
         <Inspector />
       </section>
@@ -207,10 +338,45 @@ type EigenUiState =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; modal: EigenResult; buckling: EigenResult };
 
+interface WindFrame {
+  scenario: WindScenario;
+  t: number;
+  u: Float64Array;
+  coordinates: Float64Array;
+  resonanceMode?: number;
+  yieldMember?: number;
+}
+
+function nearestFrequencyMode(modal: EigenResult, frequency: number): number {
+  let nearest = 0;
+  let difference = Infinity;
+  for (let index = 0; index < modal.values.length; index++) {
+    const candidate = Math.abs(modal.values[index]! / (Math.PI * 2) - frequency);
+    if (candidate < difference) {
+      difference = candidate;
+      nearest = index;
+    }
+  }
+  return nearest;
+}
+
+function governingYieldMember(utilization: ReadonlyMap<number, number>): number | undefined {
+  let member: number | undefined;
+  let maximum = 1;
+  for (const [id, value] of utilization) {
+    if (value >= maximum) {
+      maximum = value;
+      member = id;
+    }
+  }
+  return member;
+}
+
 function formatScale(value: number): string {
   return value >= 100 ? value.toFixed(0) : value.toFixed(1).replace(/\.0$/, '');
 }
 
 function formatLength(value: number): string {
+  if (value < 0.00001) return `${(value * 1_000_000).toFixed(2)} µm`;
   return value < 0.01 ? `${(value * 1000).toFixed(2)} mm` : `${value.toFixed(3)} m`;
 }
