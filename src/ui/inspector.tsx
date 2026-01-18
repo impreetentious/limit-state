@@ -53,6 +53,11 @@ export function Inspector(): React.JSX.Element {
     }
   }
 
+  if (selection.kind === 'members') {
+    const members = model.members.filter((candidate) => selection.ids.includes(candidate.id));
+    if (members.length > 1) return <BulkMemberInspector members={members} />;
+  }
+
   return (
     <aside className="inspector inspector-empty" aria-label="Model inspector">
       <PanelHeading eyebrow="Model" title="Build deliberately" />
@@ -109,6 +114,34 @@ function MemberInspector({ member }: { member: MemberSpec }): React.JSX.Element 
       <button className="danger-button" type="button" onClick={() => deleteMember(member.id)}>Delete member</button>
     </aside>
   );
+}
+
+function BulkMemberInspector({ members }: { members: MemberSpec[] }): React.JSX.Element {
+  const updateMembers = useEditorStore((state) => state.updateMembers);
+  const ids = members.map((member) => member.id);
+  const sharedMaterial = members.every((member) => member.material === members[0]!.material) ? members[0]!.material : '';
+  const sharedSection = members.every((member) => member.section.kind === members[0]!.section.kind) ? members[0]!.section.kind : '';
+  return <aside className="inspector" aria-label="Bulk member inspector">
+    <PanelHeading eyebrow={`${members.length} members`} title="Bulk section assignment" />
+    <p>Shift-click members in Select mode to add or remove them from this assignment.</p>
+    <label className="field">
+      <span>Material</span>
+      <select value={sharedMaterial} onChange={(event) => updateMembers(ids, { material: event.target.value as MemberSpec['material'] })}>
+        {!sharedMaterial && <option value="" disabled>Mixed — choose material</option>}
+        {Object.values(MATERIALS).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}
+      </select>
+    </label>
+    <label className="field">
+      <span>Section</span>
+      <select value={sharedSection} onChange={(event) => updateMembers(ids, { section: defaultSection(event.target.value as SectionSpec['kind']) })}>
+        {!sharedSection && <option value="" disabled>Mixed — choose section</option>}
+        <option value="rect">Solid rectangle</option>
+        <option value="box">Box</option>
+        <option value="ibeam">I-beam</option>
+        <option value="tube">Tube</option>
+      </select>
+    </label>
+  </aside>;
 }
 
 function SectionFields({ section, onChange }: { section: SectionSpec; onChange: (section: SectionSpec) => void }): React.JSX.Element {

@@ -9,7 +9,8 @@ export type ResultDiagram = 'none' | 'axial' | 'shear' | 'moment';
 export type Selection =
   | { kind: 'none' }
   | { kind: 'node'; id: number }
-  | { kind: 'member'; id: number };
+  | { kind: 'member'; id: number }
+  | { kind: 'members'; ids: number[] };
 
 export type Stability =
   | { kind: 'idle'; message: string }
@@ -40,7 +41,9 @@ export interface EditorStore {
   addNode: (x: number, y: number) => number;
   updateNode: (id: number, x: number, y: number) => void;
   addMember: (a: number, b: number) => number | undefined;
+  splitMember: (id: number, x: number, y: number) => number | undefined;
   updateMember: (id: number, patch: Partial<Omit<MemberSpec, 'id' | 'a' | 'b'>>) => void;
+  updateMembers: (ids: readonly number[], patch: Partial<Omit<MemberSpec, 'id' | 'a' | 'b'>>) => void;
   setSupport: (node: number, kind: SupportKind | undefined) => void;
   cycleSupport: (node: number) => void;
   setPointLoad: (node: number, fx: number, fy: number) => void;
@@ -57,6 +60,8 @@ export interface EditorStore {
 }
 
 const HISTORY_LIMIT = 100;
+export const MEMBER_SOFT_LIMIT = 120;
+export const MEMBER_HARD_LIMIT = 200;
 
 /** Blank grid preset. */
 export function createBlankModel(): EditorModel {
@@ -125,7 +130,12 @@ export const useEditorStore = create<EditorStore>((set) => ({
   })),
   addMember: (a, b) => {
     let id: number | undefined;
+    let reachedLimit = false;
     mutate(set, (model) => {
+      if (model.members.length >= MEMBER_HARD_LIMIT) {
+        reachedLimit = true;
+        return model;
+      }
       if (a === b) return model;
       if (!model.nodes.some((node) => node.id === a) || !model.nodes.some((node) => node.id === b)) return model;
       if (model.members.some((member) => (member.a === a && member.b === b) || (member.a === b && member.b === a))) {
@@ -148,12 +158,46 @@ export const useEditorStore = create<EditorStore>((set) => ({
         ],
       };
     }, () => (id === undefined ? undefined : { kind: 'member', id }));
+    if (reachedLimit) set({ notice: `Member limit reached (${MEMBER_HARD_LIMIT}). Simplify the model before adding more members.` });
     return id;
+  },
+  splitMember: (id, x, y) => {
+    let nodeId: number | undefined;
+    let appendedMemberId: number | undefined;
+    let reachedLimit = false;
+    mutate(set, (model) => {
+      const member = model.members.find((candidate) => candidate.id === id);
+      if (!member) return model;
+      if (model.members.length >= MEMBER_HARD_LIMIT) {
+        reachedLimit = true;
+        return model;
+      }
+      nodeId = nextId(model.nodes);
+      appendedMemberId = nextId(model.members);
+      const first: MemberSpec = { ...member, b: nodeId, releaseB: false };
+      const second: MemberSpec = { ...member, id: appendedMemberId, a: nodeId, releaseA: false };
+      return {
+        ...model,
+        nodes: [...model.nodes, { id: nodeId, x, y }],
+        members: model.members.flatMap((candidate) => candidate.id === id ? [first, second] : [candidate]),
+        deck: splitDeckPath(model.deck, model.members, member, appendedMemberId),
+      };
+    }, () => nodeId === undefined ? undefined : { kind: 'node', id: nodeId });
+    if (reachedLimit) set({ notice: `Member limit reached (${MEMBER_HARD_LIMIT}). Simplify the model before splitting members.` });
+    return nodeId;
   },
   updateMember: (id, patch) => mutate(set, (model) => ({
     ...model,
     members: model.members.map((member) => (member.id === id ? { ...member, ...patch } : member)),
   })),
+  updateMembers: (ids, patch) => {
+    const selected = new Set(ids);
+    if (selected.size === 0) return;
+    mutate(set, (model) => ({
+      ...model,
+      members: model.members.map((member) => selected.has(member.id) ? { ...member, ...patch } : member),
+    }));
+  },
   setSupport: (node, kind) => mutate(set, (model) => ({
     ...model,
     supports: kind === undefined
@@ -272,6 +316,25 @@ function nextId(items: ReadonlyArray<{ id: number }>): number {
 
 function sharesNode(a: MemberSpec, b: MemberSpec): boolean {
   return a.a === b.a || a.a === b.b || a.b === b.a || a.b === b.b;
+}
+
+/** Preserve the traffic path while replacing one drawn member with its two collinear segments. */
+function splitDeckPath(deck: readonly number[], members: readonly MemberSpec[], member: MemberSpec, appendedMemberId: number): number[] {
+  const index = deck.indexOf(member.id);
+  if (index < 0) return [...deck];
+  const before = index > 0 ? members.find((candidate) => candidate.id === deck[index - 1]!) : undefined;
+  const after = index < deck.length - 1 ? members.find((candidate) => candidate.id === deck[index + 1]!) : undefined;
+  const enteredAt = before ? sharedNode(before, member) : after ? otherEnd(member, sharedNode(after, member)) : member.a;
+  const replacement = enteredAt === member.b ? [appendedMemberId, member.id] : [member.id, appendedMemberId];
+  return [...deck.slice(0, index), ...replacement, ...deck.slice(index + 1)];
+}
+
+function sharedNode(a: MemberSpec, b: MemberSpec): number | undefined {
+  return [a.a, a.b].find((id) => id === b.a || id === b.b);
+}
+
+function otherEnd(member: MemberSpec, node: number | undefined): number {
+  return node === member.a ? member.b : member.a;
 }
 
 export function defaultSection(kind: SectionSpec['kind']): SectionSpec {

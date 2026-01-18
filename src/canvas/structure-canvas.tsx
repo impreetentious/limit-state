@@ -10,6 +10,7 @@ interface Point { x: number; y: number }
 interface CanvasSize { width: number; height: number }
 interface ModeGhost { vectors: Float64Array; mode: number; phase: number }
 interface TrafficAxle { x: number; y: number }
+interface FailureCinematic { u: Float64Array; phase: number; reducedMotion: boolean }
 
 const SCALE = 44;
 const NODE_RADIUS = 5;
@@ -24,6 +25,7 @@ export function StructureCanvas({
   trafficAxles,
   momentEnvelope,
   dynamicDisplacement,
+  failureCinematic,
 }: {
   analysis: StaticAnalysis;
   diagram: ResultDiagram;
@@ -32,6 +34,7 @@ export function StructureCanvas({
   trafficAxles?: readonly TrafficAxle[];
   momentEnvelope?: ReadonlyMap<number, number>;
   dynamicDisplacement?: Float64Array;
+  failureCinematic?: FailureCinematic;
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [resizeVersion, setResizeVersion] = useState(0);
@@ -45,6 +48,7 @@ export function StructureCanvas({
   const select = useEditorStore((state) => state.select);
   const addNode = useEditorStore((state) => state.addNode);
   const addMember = useEditorStore((state) => state.addMember);
+  const splitMember = useEditorStore((state) => state.splitMember);
   const cycleSupport = useEditorStore((state) => state.cycleSupport);
   const setPointLoad = useEditorStore((state) => state.setPointLoad);
   const toggleDeckMember = useEditorStore((state) => state.toggleDeckMember);
@@ -80,8 +84,8 @@ export function StructureCanvas({
     const context = canvas.getContext('2d');
     if (!context) return;
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawScene(context, size, model.nodes, model.members, model.supports, model.loads.points, model.deck, selection, pointer, draftStart.current, stability, analysis, diagram, showDeformed, modeGhost, trafficAxles, momentEnvelope, dynamicDisplacement);
-  }, [analysis, diagram, dynamicDisplacement, modeGhost, model, momentEnvelope, pointer, resizeVersion, selection, showDeformed, stability, trafficAxles]);
+    drawScene(context, size, model.nodes, model.members, model.supports, model.loads.points, model.deck, selection, pointer, draftStart.current, stability, analysis, diagram, showDeformed, modeGhost, trafficAxles, momentEnvelope, dynamicDisplacement, failureCinematic);
+  }, [analysis, diagram, dynamicDisplacement, failureCinematic, modeGhost, model, momentEnvelope, pointer, resizeVersion, selection, showDeformed, stability, trafficAxles]);
 
   const worldPoint = (event: React.PointerEvent<HTMLCanvasElement>): Point => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -99,18 +103,25 @@ export function StructureCanvas({
     setPointer(point);
     if (tool === 'member') {
       event.currentTarget.setPointerCapture(event.pointerId);
-      draftStart.current = hit.kind === 'node' ? hit.id : addNode(point.x, point.y);
-      select({ kind: 'node', id: draftStart.current });
+      const start = nodeAtPointer(hit, point);
+      if (start === undefined) return;
+      draftStart.current = start;
+      select({ kind: 'node', id: start });
       return;
     }
-    applyTool(tool, hit, point);
+    applyTool(tool, hit, point, event.shiftKey);
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (tool !== 'member' || draftStart.current === null) return;
     const point = worldPoint(event);
     const hit = hitTest(point, model.nodes, model.members);
-    const end = hit.kind === 'node' ? hit.id : addNode(point.x, point.y);
+    const end = nodeAtPointer(hit, point);
+    if (end === undefined) {
+      draftStart.current = null;
+      setPointer(null);
+      return;
+    }
     const member = addMember(draftStart.current, end);
     if (member !== undefined) select({ kind: 'member', id: member });
     draftStart.current = null;
@@ -119,13 +130,35 @@ export function StructureCanvas({
 
   const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => setPointer(worldPoint(event));
 
-  const applyTool = (activeTool: EditorTool, hit: Hit, point: Point) => {
+  const nodeAtPointer = (hit: Hit, point: Point): number | undefined => {
+    if (hit.kind === 'node') return hit.id;
+    if (hit.kind === 'member') {
+      const member = model.members.find((candidate) => candidate.id === hit.id);
+      const a = member && model.nodes.find((candidate) => candidate.id === member.a);
+      const b = member && model.nodes.find((candidate) => candidate.id === member.b);
+      return a && b ? splitMember(member.id, projectToSegment(point, a, b).x, projectToSegment(point, a, b).y) : undefined;
+    }
+    return addNode(point.x, point.y);
+  };
+
+  const applyTool = (activeTool: EditorTool, hit: Hit, point: Point, additive: boolean) => {
     switch (activeTool) {
       case 'select':
-        select(hit.kind === 'none' ? { kind: 'none' } : hit);
+        if (additive && hit.kind === 'member') {
+          const selected = selection.kind === 'members'
+            ? [...selection.ids]
+            : selection.kind === 'member' ? [selection.id] : [];
+          const index = selected.indexOf(hit.id);
+          if (index >= 0) selected.splice(index, 1); else selected.push(hit.id);
+          select(selected.length === 0 ? { kind: 'none' } : selected.length === 1 ? { kind: 'member', id: selected[0]! } : { kind: 'members', ids: selected });
+        } else select(hit.kind === 'none' ? { kind: 'none' } : hit);
         break;
       case 'node':
-        select(hit.kind === 'node' ? hit : { kind: 'node', id: addNode(point.x, point.y) });
+        if (hit.kind === 'node') select(hit);
+        else {
+          const node = nodeAtPointer(hit, point);
+          if (node !== undefined) select({ kind: 'node', id: node });
+        }
         break;
       case 'support':
         if (hit.kind === 'node') cycleSupport(hit.id);
@@ -159,7 +192,7 @@ export function StructureCanvas({
   />;
 }
 
-type Hit = Selection;
+type Hit = Exclude<Selection, { kind: 'members' }>;
 
 function hitTest(point: Point, nodes: NodeSpec[], members: MemberSpec[]): Hit {
   const node = nodes.find((candidate) => Math.hypot(candidate.x - point.x, candidate.y - point.y) * SCALE <= HIT_RADIUS);
@@ -194,6 +227,7 @@ function drawScene(
   trafficAxles: readonly TrafficAxle[] | undefined,
   momentEnvelope: ReadonlyMap<number, number> | undefined,
   dynamicDisplacement: Float64Array | undefined,
+  failureCinematic: FailureCinematic | undefined,
 ): void {
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(context, size);
@@ -201,6 +235,14 @@ function drawScene(
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const deckSet = new Set(deck);
   const utilization = analysis.kind === 'stable' ? analysis.result.utilization : undefined;
+  const axialByMember = new Map<number, number>();
+  if (analysis.kind === 'stable') {
+    for (let index = 0; index < analysis.mesh.elements.length; index++) {
+      const memberId = analysis.mesh.elements[index]!.memberId;
+      axialByMember.set(memberId, Math.max(axialByMember.get(memberId) ?? 0, Math.abs(analysis.result.elementForces[index * 5]!)));
+    }
+  }
+  const axialMaximum = Math.max(...axialByMember.values(), 1);
   const envelopeMaximum = momentEnvelope ? Math.max(...momentEnvelope.values(), 1) : 1;
 
   for (const member of members) {
@@ -212,8 +254,10 @@ function drawScene(
     context.beginPath();
     context.moveTo(aScreen.x, aScreen.y);
     context.lineTo(bScreen.x, bScreen.y);
-    context.strokeStyle = selection.kind === 'member' && selection.id === member.id ? '#2456a4' : utilization ? stressColor(utilization.get(member.id) ?? 0) : deckSet.has(member.id) ? '#4d78bb' : '#1a1d21';
-    context.lineWidth = selection.kind === 'member' && selection.id === member.id ? 4 : deckSet.has(member.id) ? 3 : 2;
+    const selected = memberIsSelected(selection, member.id);
+    context.strokeStyle = selected ? '#2456a4' : utilization ? stressColor(utilization.get(member.id) ?? 0) : deckSet.has(member.id) ? '#4d78bb' : '#1a1d21';
+    const axialWidth = 2 + 2 * (axialByMember.get(member.id) ?? 0) / axialMaximum;
+    context.lineWidth = selected ? axialWidth + 1.5 : deckSet.has(member.id) ? Math.max(3, axialWidth) : axialWidth;
     context.stroke();
     const envelope = momentEnvelope?.get(member.id) ?? 0;
     if (envelope > 0) {
@@ -251,6 +295,7 @@ function drawScene(
 
   if (analysis.kind === 'stable' && showDeformed) drawDeformedShape(context, size, analysis);
   if (analysis.kind === 'stable' && dynamicDisplacement) drawDynamicShape(context, size, analysis.mesh, dynamicDisplacement);
+  if (analysis.kind === 'stable' && failureCinematic) drawFailureCinematic(context, size, analysis.mesh, failureCinematic);
   if (analysis.kind === 'stable' && modeGhost) drawModeShape(context, size, analysis.mesh, modeGhost);
   if (analysis.kind === 'stable' && diagram !== 'none') drawDiagram(context, nodes, members, toScreen, analysis, diagram);
 
@@ -379,6 +424,54 @@ function drawDynamicShape(context: CanvasRenderingContext2D, size: CanvasSize, m
   context.restore();
 }
 
+/** Illustrative failure playback derived from the computed first-limit displacement. */
+function drawFailureCinematic(context: CanvasRenderingContext2D, size: CanvasSize, mesh: AnalysisMesh, cinematic: FailureCinematic): void {
+  if (cinematic.u.length !== mesh.ndof) return;
+  const display = deformationDisplay(mesh, cinematic.u, SCALE);
+  if (display.maxMeters === 0) return;
+  const amplitude = cinematic.reducedMotion ? 1 : 0.25 + cinematic.phase * 0.75;
+  const toScreen = (x: number, y: number): Point => ({ x: size.width / 2 + x * SCALE, y: size.height - 68 - y * SCALE });
+  context.save();
+  context.strokeStyle = 'rgba(192, 57, 43, 0.88)';
+  context.lineWidth = 2.4;
+  context.setLineDash(cinematic.reducedMotion ? [] : [8, 3]);
+  for (const element of mesh.elements) {
+    const a = toScreen(
+      mesh.coords[2 * element.na]! + cinematic.u[3 * element.na]! * display.scale * amplitude,
+      mesh.coords[2 * element.na + 1]! + cinematic.u[3 * element.na + 1]! * display.scale * amplitude,
+    );
+    const b = toScreen(
+      mesh.coords[2 * element.nb]! + cinematic.u[3 * element.nb]! * display.scale * amplitude,
+      mesh.coords[2 * element.nb + 1]! + cinematic.u[3 * element.nb + 1]! * display.scale * amplitude,
+    );
+    context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke();
+  }
+  if (cinematic.reducedMotion) drawFailureArrow(context, size, mesh, cinematic.u, display.scale);
+  context.restore();
+}
+
+function drawFailureArrow(context: CanvasRenderingContext2D, size: CanvasSize, mesh: AnalysisMesh, u: Float64Array, scale: number): void {
+  let node = -1;
+  let maximum = 0;
+  for (let index = 0; index < mesh.coords.length / 2; index++) {
+    const magnitude = Math.hypot(u[3 * index]!, u[3 * index + 1]!);
+    if (magnitude > maximum) { maximum = magnitude; node = index; }
+  }
+  if (node < 0 || maximum === 0) return;
+  const start = {
+    x: size.width / 2 + mesh.coords[2 * node]! * SCALE,
+    y: size.height - 68 - mesh.coords[2 * node + 1]! * SCALE,
+  };
+  const end = { x: start.x + u[3 * node]! * scale * SCALE, y: start.y - u[3 * node + 1]! * scale * SCALE };
+  const angle = Math.atan2(end.y - start.y, end.x - start.x);
+  context.beginPath(); context.moveTo(start.x, start.y); context.lineTo(end.x, end.y); context.stroke();
+  context.beginPath();
+  context.moveTo(end.x, end.y);
+  context.lineTo(end.x - 7 * Math.cos(angle - Math.PI / 6), end.y - 7 * Math.sin(angle - Math.PI / 6));
+  context.lineTo(end.x - 7 * Math.cos(angle + Math.PI / 6), end.y - 7 * Math.sin(angle + Math.PI / 6));
+  context.closePath(); context.fillStyle = 'rgba(192, 57, 43, 0.88)'; context.fill();
+}
+
 function drawTrafficAxle(context: CanvasRenderingContext2D, point: Point): void {
   context.save();
   context.fillStyle = '#c0392b';
@@ -458,6 +551,18 @@ function drawDiagram(
     const direction = value >= 0 ? 1 : -1;
     const offset = { x: normal.x * height * direction, y: normal.y * height * direction };
     context.beginPath(); context.moveTo(from.x, from.y); context.lineTo(from.x + offset.x, from.y + offset.y); context.lineTo(to.x + offset.x, to.y + offset.y); context.lineTo(to.x, to.y); context.closePath(); context.fill(); context.stroke();
+    context.save();
+    context.clip();
+    context.strokeStyle = 'rgba(36, 86, 164, 0.42)';
+    context.lineWidth = 0.7;
+    const minX = Math.min(from.x, to.x, from.x + offset.x, to.x + offset.x) - 36;
+    const maxX = Math.max(from.x, to.x, from.x + offset.x, to.x + offset.x) + 36;
+    const minY = Math.min(from.y, to.y, from.y + offset.y, to.y + offset.y) - 36;
+    const maxY = Math.max(from.y, to.y, from.y + offset.y, to.y + offset.y) + 36;
+    for (let x = minX - (maxY - minY); x < maxX + (maxY - minY); x += 6) {
+      context.beginPath(); context.moveTo(x, maxY); context.lineTo(x + (maxY - minY), minY); context.stroke();
+    }
+    context.restore();
     const mid = { x: (from.x + to.x) / 2 + offset.x, y: (from.y + to.y) / 2 + offset.y };
     context.fillStyle = '#2456a4'; context.fillText(`${label} ${(value / 1000).toFixed(1)} k`, mid.x + 3, mid.y - 3); context.fillStyle = 'rgba(36, 86, 164, 0.11)';
   }
@@ -482,6 +587,18 @@ function distanceToSegment(point: Point, a: Point, b: Point): number {
   if (lengthSquared === 0) return Math.hypot(point.x - a.x, point.y - a.y);
   const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared));
   return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
+}
+
+function projectToSegment(point: Point, a: Point, b: Point): Point {
+  const dx = b.x - a.x; const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return { ...a };
+  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared));
+  return { x: a.x + t * dx, y: a.y + t * dy };
+}
+
+function memberIsSelected(selection: Selection, id: number): boolean {
+  return selection.kind === 'member' ? selection.id === id : selection.kind === 'members' && selection.ids.includes(id);
 }
 
 function snap(value: number): number { return Math.round(value * 2) / 2; }
