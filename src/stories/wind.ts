@@ -5,11 +5,20 @@
 import { assembleM } from '../fem/assemble';
 import { newmarkStep, prepareNewmarkSystem, rayleighFit, type NewmarkState } from '../fem/dynamics';
 import { buildMesh } from '../fem/mesh';
-import { analyzeStaticModel, utilizationAtDisplacement, type StaticAnalysis } from '../fem/statics';
+import {
+  analyzeStaticModel,
+  prepareStaticSystem,
+  solveStatic,
+  utilizationAtDisplacement,
+  type StaticAnalysis,
+  type StaticSystem,
+} from '../fem/statics';
 import type { AnalysisMesh, EditorModel, EigenResult } from '../fem/types';
 
 export interface WindScenario {
   mesh: AnalysisMesh;
+  /** Cached factorization for the unit-wind reference response. */
+  staticSystem: StaticSystem;
   baseAnalysis: StaticAnalysis;
   /** Retained gravity/point-load equilibrium applied throughout the transient. */
   baseLoad: Float64Array;
@@ -29,26 +38,84 @@ export function prepareWind(model: EditorModel): WindScenario | undefined {
     const baseAnalysis = analyzeStaticModel(model);
     const baseLoad = baseAnalysis.kind === 'stable' ? new Float64Array(baseAnalysis.loads.F) : new Float64Array(mesh.ndof);
     const baseFixedEnd = baseAnalysis.kind === 'stable' ? new Float64Array(baseAnalysis.loads.elementFixedEnd) : new Float64Array(mesh.elements.length * 6);
-    return { mesh, baseAnalysis, baseLoad, baseFixedEnd, dt: 1 / 240, mass: assembleM(mesh), model: model.story, seed: model.seed };
+    return {
+      mesh,
+      staticSystem: prepareStaticSystem(mesh),
+      baseAnalysis,
+      baseLoad,
+      baseFixedEnd,
+      dt: 1 / 240,
+      mass: assembleM(mesh),
+      model: model.story,
+      seed: model.seed,
+    };
   } catch {
     return undefined;
   }
 }
 
 /**
- * Equivalent nodal horizontal wind forces q·L_vertical/2 at each element end.
- * q is a kN/m line load over the member's projected vertical extent.
+ * Equivalent nodal wind forces q·L_projected/2 at each element end.
+ * This in-plane model treats wind as uniform member-normal pressure: vertical
+ * faces receive horizontal force and horizontal faces receive vertical force.
  */
 export function windLoadAt(scenario: WindScenario, time: number): Float64Array {
   const load = new Float64Array(scenario.baseLoad);
-  const q = scenario.model.amplitudekNm * 1000 * windMultiplier(scenario.model, scenario.seed, time);
+  const increment = windIncrementAt(scenario, time);
+  for (let dof = 0; dof < load.length; dof++) load[dof] = load[dof]! + increment[dof]!;
+  return load;
+}
+
+/** Unit-amplitude wind load for an honest measured dynamic-amplification reference. */
+export function windReferenceCoordinates(scenario: WindScenario, modal: EigenResult): Float64Array {
+  const loads = {
+    F: windIncrementForMultiplier(scenario, 1),
+    elementFixedEnd: new Float64Array(scenario.mesh.elements.length * 6),
+  };
+  const analysis = solveStatic(scenario.mesh, loads, scenario.staticSystem);
+  return analysis.kind === 'stable'
+    ? modalCoordinates(scenario.mesh, modal, analysis.result.u, scenario.mass)
+    : new Float64Array(modal.values.length);
+}
+
+/** Dynamic/static ratio for the modal coordinate that currently dominates the response. */
+export function measuredDaf(
+  coordinates: Float64Array,
+  referenceCoordinates: Float64Array,
+): { mode: number; ratio: number } | undefined {
+  let mode = -1;
+  let largest = 0;
+  for (let index = 0; index < Math.min(coordinates.length, referenceCoordinates.length); index++) {
+    const reference = Math.abs(referenceCoordinates[index]!);
+    const amplitude = Math.abs(coordinates[index]!);
+    if (reference > 1e-12 && amplitude > largest) {
+      largest = amplitude;
+      mode = index;
+    }
+  }
+  return mode >= 0 ? { mode, ratio: largest / Math.abs(referenceCoordinates[mode]!) } : undefined;
+}
+
+function windIncrementAt(scenario: WindScenario, time: number): Float64Array {
+  return windIncrementForMultiplier(scenario, windMultiplier(scenario.model, scenario.seed, time));
+}
+
+function windIncrementForMultiplier(scenario: WindScenario, multiplier: number): Float64Array {
+  const load = new Float64Array(scenario.mesh.ndof);
+  const q = scenario.model.amplitudekNm * 1000 * multiplier;
   for (const element of scenario.mesh.elements) {
-    const tributary = Math.abs(element.sin) * element.L;
+    // A horizontal member still has an exposed vertical depth (2c); without
+    // it, a slender deck would receive no wind excitation in a 2D section.
+    const tributary = Math.max(Math.abs(element.sin) * element.L, 2 * element.c);
     const force = q * tributary / 2;
     const aDof = 3 * element.na;
     const bDof = 3 * element.nb;
-    load[aDof] = load[aDof]! + force;
-    load[bDof] = load[bDof]! + force;
+    const normalX = element.sin;
+    const normalY = -element.cos;
+    load[aDof] = load[aDof]! + force * normalX;
+    load[aDof + 1] = load[aDof + 1]! + force * normalY;
+    load[bDof] = load[bDof]! + force * normalX;
+    load[bDof + 1] = load[bDof + 1]! + force * normalY;
   }
   return load;
 }
@@ -102,16 +169,26 @@ export function detectResonance(
   modal: EigenResult | undefined,
   zeta: number,
   recentCoordinates: readonly number[],
+  samplesPerCycle = 1,
 ): number | undefined {
-  if (!modal || zeta >= 0.05 || recentCoordinates.length < 2) return undefined;
-  const first = recentCoordinates[0] ?? 0;
-  const latest = recentCoordinates.at(-1) ?? 0;
-  if (Math.abs(latest) <= Math.max(1e-12, Math.abs(first) * 1.5)) return undefined;
+  const samples = Math.max(1, Math.ceil(samplesPerCycle));
+  const required = samples * 5;
+  if (!modal || zeta >= 0.05 || recentCoordinates.length < required) return undefined;
+  const window = recentCoordinates.slice(-required);
+  const first = peakMagnitude(window.slice(0, samples));
+  const latest = peakMagnitude(window.slice(-samples));
+  if (latest <= Math.max(1e-12, first * 1.5)) return undefined;
   for (let mode = 0; mode < modal.values.length; mode++) {
     const frequency = modal.values[mode]! / (Math.PI * 2);
     if (Math.abs(forcingHz - frequency) / frequency <= 0.1) return mode;
   }
   return undefined;
+}
+
+function peakMagnitude(values: readonly number[]): number {
+  let peak = 0;
+  for (const value of values) peak = Math.max(peak, Math.abs(value));
+  return peak;
 }
 
 function windMultiplier(story: WindScenario['model'], seed: number, time: number): number {

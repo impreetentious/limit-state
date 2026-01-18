@@ -7,10 +7,20 @@ import type { EigenResult } from '../fem/types';
 import { PRESETS } from '../presets/scenes';
 import { decodeModel, encodeModel } from '../share/serialize';
 import { inspectStability } from '../state/stability';
-import { type EditorTool, useEditorStore } from '../state/editor-store';
+import { MEMBER_HARD_LIMIT, MEMBER_SOFT_LIMIT, type EditorTool, useEditorStore } from '../state/editor-store';
 import { analyzeRamp, rampCapacity } from '../stories/ramp';
-import { analyzeTrafficAt, mergeMomentEnvelope, prepareTraffic } from '../stories/traffic';
-import { detectResonance, initialWindState, modalCoordinates, prepareWind, stepWind, windUtilization, type WindScenario } from '../stories/wind';
+import { analyzeTrafficAt, mergeMomentEnvelope, prepareTraffic, trafficYieldWeightAt } from '../stories/traffic';
+import {
+  detectResonance,
+  initialWindState,
+  measuredDaf,
+  modalCoordinates,
+  prepareWind,
+  stepWind,
+  windReferenceCoordinates,
+  windUtilization,
+  type WindScenario,
+} from '../stories/wind';
 import type { EigenWorkerResponse } from '../workers/eigen.worker';
 import { Inspector } from './inspector';
 import { TestConsole } from './test-console';
@@ -57,6 +67,9 @@ export function EditorApp(): React.JSX.Element {
   const [momentEnvelope, setMomentEnvelope] = useState<Map<number, number>>(new Map());
   const [envelopeEnabled, setEnvelopeEnabled] = useState(false);
   const [windFrame, setWindFrame] = useState<WindFrame>();
+  const [failureReplay, setFailureReplay] = useState(0);
+  const [failurePhase, setFailurePhase] = useState<number>();
+  const reducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
     if (baseAnalysis.kind !== 'stable') {
@@ -85,9 +98,10 @@ export function EditorApp(): React.JSX.Element {
 
   const activeEigen = eigen.kind === 'ready' ? (modeFamily === 'modal' ? eigen.modal : eigen.buckling) : undefined;
   const activeFrequency = modeFamily === 'modal' ? activeEigen?.values[selectedMode] : undefined;
-  const animationHz = activeFrequency ? activeFrequency / (Math.PI * 2) : modeFamily === 'buckling' ? 0.5 : undefined;
+  const nativeAnimationHz = activeFrequency ? activeFrequency / (Math.PI * 2) : modeFamily === 'buckling' ? 0.5 : undefined;
+  const animationHz = nativeAnimationHz && nativeAnimationHz > 2 ? nativeAnimationHz / 4 : nativeAnimationHz;
   useEffect(() => {
-    if (animationHz === undefined) {
+    if (animationHz === undefined || reducedMotion) {
       setModePhase(1);
       return;
     }
@@ -98,7 +112,7 @@ export function EditorApp(): React.JSX.Element {
     };
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
-  }, [animationHz]);
+  }, [animationHz, reducedMotion]);
   const modeGhost = activeEigen && activeEigen.values[selectedMode] !== undefined
     ? { vectors: activeEigen.vectors, mode: selectedMode, phase: modePhase }
     : undefined;
@@ -126,6 +140,14 @@ export function EditorApp(): React.JSX.Element {
   const trafficDuration = trafficFrame && model.story.kind === 'traffic'
     ? (trafficFrame.length + 4) / Math.max(0.1, model.story.speed)
     : undefined;
+  const trafficYieldCapacity = useMemo(
+    () => !storyPlaying && trafficScenario && model.story.kind === 'traffic'
+      ? trafficYieldWeightAt(trafficScenario, storyTime * model.story.speed) ?? null
+      : undefined,
+    [model.story, storyPlaying, storyTime, trafficScenario],
+  );
+  const failureReport = rampFrame?.report && rampFrame.report.kind !== 'stable' ? rampFrame.report : undefined;
+  const failureKey = failureReport ? `${failureReport.kind}-${rampFrame?.factor ?? 0}` : undefined;
 
   useEffect(() => {
     setStoryPlaying(false);
@@ -133,6 +155,26 @@ export function EditorApp(): React.JSX.Element {
     setMomentEnvelope(new Map());
     setWindFrame(undefined);
   }, [model]);
+
+  useEffect(() => {
+    if (!failureKey) {
+      setFailurePhase(undefined);
+      return;
+    }
+    if (reducedMotion) {
+      setFailurePhase(1);
+      return;
+    }
+    let frame = 0;
+    const started = performance.now();
+    const tick = (now: number) => {
+      setFailurePhase(Math.min(1, (now - started) / 1200));
+      if (now - started < 1200) frame = window.requestAnimationFrame(tick);
+    };
+    setFailurePhase(0);
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [failureKey, failureReplay, reducedMotion]);
 
   useEffect(() => {
     if (mode !== 'test' || !storyPlaying || model.story.kind === 'wind') return;
@@ -169,6 +211,7 @@ export function EditorApp(): React.JSX.Element {
     const initial = initialWindState(windScenario, modal);
     if (!initial) return;
     const initialCoordinates = modalCoordinates(windScenario.mesh, modal, initial.u, windScenario.mass);
+    const referenceCoordinates = windReferenceCoordinates(windScenario, modal);
     let current = initial;
     let history: number[] = [];
     let frame = 0;
@@ -178,14 +221,16 @@ export function EditorApp(): React.JSX.Element {
       const coordinates = new Float64Array(rawCoordinates.length);
       for (let index = 0; index < coordinates.length; index++) coordinates[index] = rawCoordinates[index]! - initialCoordinates[index]!;
       const nearestMode = nearestFrequencyMode(modal, windScenario.model.freqHz);
-      history = [...history, Math.abs(coordinates[nearestMode] ?? 0)].slice(-Math.ceil(5 * 60 / Math.max(0.05, windScenario.model.freqHz)));
-      const resonanceMode = detectResonance(windScenario.model.freqHz, modal, windScenario.model.zeta, history);
+      const samplesPerCycle = Math.max(1, Math.ceil(1 / (windScenario.dt * 4 * Math.max(0.05, windScenario.model.freqHz))));
+      history = [...history, Math.abs(coordinates[nearestMode] ?? 0)].slice(-samplesPerCycle * 5);
+      const resonanceMode = detectResonance(windScenario.model.freqHz, modal, windScenario.model.zeta, history, samplesPerCycle);
+      const daf = measuredDaf(coordinates, referenceCoordinates);
       const yieldMember = governingYieldMember(windUtilization(windScenario, current.u));
-      setWindFrame({ scenario: windScenario, t: current.t, u: current.u, coordinates, resonanceMode, yieldMember });
+      setWindFrame({ scenario: windScenario, t: current.t, u: current.u, coordinates, daf, resonanceMode, yieldMember });
       setStoryTime(current.t);
       frame = window.requestAnimationFrame(tick);
     };
-    setWindFrame({ scenario: windScenario, t: initial.t, u: initial.u, coordinates: new Float64Array(initialCoordinates.length) });
+    setWindFrame({ scenario: windScenario, t: initial.t, u: initial.u, coordinates: new Float64Array(initialCoordinates.length), daf: measuredDaf(new Float64Array(initialCoordinates.length), referenceCoordinates) });
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
   }, [modal, mode, storyPlaying, windScenario]);
@@ -284,6 +329,9 @@ export function EditorApp(): React.JSX.Element {
             trafficAxles={trafficFrame?.axles}
             momentEnvelope={envelopeEnabled ? momentEnvelope : undefined}
             dynamicDisplacement={windFrame?.u}
+            failureCinematic={failurePhase !== undefined && rampFrame?.analysis.kind === 'stable'
+              ? { u: rampFrame.analysis.result.u, phase: failurePhase, reducedMotion }
+              : undefined}
           />
           <div className={`lint-badge lint-${stability.kind}`}>{stability.message}</div>
           {notice && <div className="canvas-notice" role="status">{notice}</div>}
@@ -292,7 +340,9 @@ export function EditorApp(): React.JSX.Element {
             <label><input type="checkbox" checked={showDeformed} onChange={(event) => setShowDeformed(event.target.checked)} /> Deformed</label>
           </div>}
           {deformation && showDeformed && deformation.maxMeters > 0 && <div className="deformation-badge">deformation ×{formatScale(deformation.scale)} — true max {formatLength(deformation.maxMeters)}</div>}
-          {windFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(windFrame.scenario.mesh, windFrame.u, 44).scale)} · simplified uniform wind field</div>}
+          {windFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(windFrame.scenario.mesh, windFrame.u, 44).scale)} · simplified uniform wind field (member-normal 2D pressure)</div>}
+          {failurePhase !== undefined && <div className="failure-cinematic-badge">failure animation ×{reducedMotion ? 'static' : formatScale(0.25 + failurePhase * 0.75)} — illustrative, computed onset and mechanism</div>}
+          {model.members.length >= MEMBER_SOFT_LIMIT && <div className="member-limit-badge">{model.members.length}/{MEMBER_HARD_LIMIT} members — performance warning at {MEMBER_SOFT_LIMIT}; hard cap {MEMBER_HARD_LIMIT}</div>}
           {analysis.kind === 'stable' && <div className="eigen-panel" aria-live="polite">
             <span>Modal + Buckling</span>
             {eigen.kind === 'loading' && <p>Solving in worker…</p>}
@@ -305,7 +355,9 @@ export function EditorApp(): React.JSX.Element {
               <div className="mode-list" aria-label="Animated mode shapes">
                 {Array.from((modeFamily === 'modal' ? eigen.modal : eigen.buckling).values, (value, index) => <button key={index} type="button" className={selectedMode === index ? 'active' : ''} onClick={() => setSelectedMode(index)}>{modeFamily === 'modal' ? `f${index + 1} ${(value / (Math.PI * 2)).toFixed(2)} Hz` : `λ${index + 1} ${value.toFixed(2)}`}</button>)}
               </div>
-              <p>{modeFamily === 'modal' ? `mode shape normalized — animating at ${activeFrequency ? (activeFrequency / (Math.PI * 2)).toFixed(2) : '0.00'} Hz` : 'buckling mode normalized — illustrative animation, not displacement'}</p>
+              <p>{modeFamily === 'modal'
+                ? `mode shape normalized — ${reducedMotion ? 'static (reduced motion)' : `animating at ${(animationHz ?? 0).toFixed(2)} Hz${nativeAnimationHz && nativeAnimationHz > 2 ? ' (display slowed ×4)' : ''}`}`
+                : `buckling mode normalized — ${reducedMotion ? 'static (reduced motion)' : 'illustrative animation, not displacement'}`}</p>
               <p>{eigen.buckling.values[0] ? `λcr ${eigen.buckling.values[0]!.toFixed(2)} × reference load` : 'No buckling under this load direction.'}</p>
             </>}
           </div>}
@@ -316,6 +368,7 @@ export function EditorApp(): React.JSX.Element {
             playing={storyPlaying}
             storyTime={storyTime}
             traffic={trafficFrame}
+            trafficYieldCapacity={trafficYieldCapacity}
             envelopeEnabled={envelopeEnabled}
             onEnvelopeEnabled={setEnvelopeEnabled}
             ramp={rampFrame}
@@ -323,6 +376,12 @@ export function EditorApp(): React.JSX.Element {
             wind={windFrame}
             onTogglePlayback={() => setStoryPlaying((playing) => !playing)}
             onRestart={() => { setStoryTime(0); setMomentEnvelope(new Map()); setWindFrame(undefined); setStoryPlaying(false); }}
+            onSeekTrafficStation={(station) => {
+              if (model.story.kind !== 'traffic') return;
+              setStoryPlaying(false);
+              setStoryTime(station / Math.max(0.1, model.story.speed));
+            }}
+            onReplayFailure={() => { setStoryPlaying(false); setStoryTime(8); setFailureReplay((value) => value + 1); }}
             onReturn={() => setMode('build')}
           />}
         </section>
@@ -343,6 +402,7 @@ interface WindFrame {
   t: number;
   u: Float64Array;
   coordinates: Float64Array;
+  daf?: { mode: number; ratio: number };
   resonanceMode?: number;
   yieldMember?: number;
 }
@@ -379,4 +439,16 @@ function formatScale(value: number): string {
 function formatLength(value: number): string {
   if (value < 0.00001) return `${(value * 1_000_000).toFixed(2)} µm`;
   return value < 0.01 ? `${(value * 1000).toFixed(2)} mm` : `${value.toFixed(3)} m`;
+}
+
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReduced(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return reduced;
 }

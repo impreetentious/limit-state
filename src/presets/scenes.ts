@@ -9,6 +9,8 @@ export interface PresetScene {
 
 const BOX: SectionSpec = { kind: 'box', b: 0.2, h: 0.2, t: 0.008 };
 const SLENDER: SectionSpec = { kind: 'rect', b: 0.12, h: 0.32 };
+// A 60 m steel beam tuned to f₁ ≈ 0.4 Hz for the in-plane resonance lesson.
+const RESONANT_DECK: SectionSpec = { kind: 'rect', b: 0.12, h: 0.64 };
 
 export const PRESETS: PresetScene[] = [
   { id: 'simple-beam', label: '1 · Simple beam', model: scene('Simple beam', [node(1, -4, 0), node(2, 4, 0)], [member(1, 1, 2)], [{ node: 1, kind: 'pin' }, { node: 2, kind: 'roller' }], [1]) },
@@ -32,7 +34,7 @@ export const PRESETS: PresetScene[] = [
   {
     id: 'slender-deck',
     label: '5 · Slender deck',
-    model: scene('Slender deck', [node(1, -30, 0), node(2, 0, 0), node(3, 30, 0)], [member(1, 1, 2, 'steel-s355', SLENDER), member(2, 2, 3, 'steel-s355', SLENDER)], [{ node: 1, kind: 'pin' }, { node: 3, kind: 'roller' }], [1, 2], { kind: 'wind', pattern: 'sine', amplitudekNm: 2, freqHz: 0.4, zeta: 0.02 }),
+    model: scene('Slender deck', [node(1, -30, 0), node(2, 0, 0), node(3, 30, 0)], [member(1, 1, 2, 'steel-s355', RESONANT_DECK), member(2, 2, 3, 'steel-s355', RESONANT_DECK)], [{ node: 1, kind: 'pin' }, { node: 3, kind: 'roller' }], [1, 2], { kind: 'wind', pattern: 'sine', amplitudekNm: 2, freqHz: 0.4, zeta: 0.02 }),
   },
   { id: 'blank', label: '6 · Blank grid', model: { v: 1, name: 'Untitled structure', seed: 42, nodes: [], members: [], supports: [], loads: { gravity: true, points: [] }, deck: [], story: { kind: 'traffic', weightkN: 300, speed: 12 } } },
 ];

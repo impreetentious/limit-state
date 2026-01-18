@@ -20,6 +20,34 @@ export interface TrafficFrame {
   axles: TrafficAxle[];
 }
 
+/** Yield-only vehicle capacity at one deck station, found with the same cached static solver. */
+export function trafficYieldWeightAt(scenario: TrafficScenario, frontStation: number): number | undefined {
+  if (!(frontStation > 0)) return undefined;
+  const baseline = analyzeTrafficAtWeight(scenario, frontStation, 0).analysis;
+  if (baseline.kind !== 'stable') return undefined;
+  if (maximumUtilization(baseline) >= 1) return 0;
+  const initial = scenario.model.story.kind === 'traffic' ? scenario.model.story.weightkN : 300;
+  let lower = 0;
+  let upper = Math.max(10, initial);
+  for (let iteration = 0; iteration < 12; iteration++) {
+    const frame = analyzeTrafficAtWeight(scenario, frontStation, upper);
+    if (frame.analysis.kind !== 'stable') return undefined;
+    if (maximumUtilization(frame.analysis) >= 1) break;
+    lower = upper;
+    upper *= 2;
+  }
+  const upperFrame = analyzeTrafficAtWeight(scenario, frontStation, upper);
+  if (upperFrame.analysis.kind !== 'stable' || maximumUtilization(upperFrame.analysis) < 1) return undefined;
+  for (let iteration = 0; iteration < 36; iteration++) {
+    const middle = (lower + upper) / 2;
+    const frame = analyzeTrafficAtWeight(scenario, frontStation, middle);
+    if (frame.analysis.kind !== 'stable') return undefined;
+    if (maximumUtilization(frame.analysis) >= 1) upper = middle;
+    else lower = middle;
+  }
+  return upper;
+}
+
 /** Cached mesh/factorization for one moving-load sweep. */
 export interface TrafficScenario {
   model: EditorModel;
@@ -67,6 +95,11 @@ export function prepareTraffic(model: EditorModel): TrafficScenario {
 
 /** Re-solve a cached traffic deck with a new axle station. */
 export function analyzeTrafficAt(scenario: TrafficScenario, frontStation: number): TrafficFrame {
+  const weightkN = scenario.model.story.kind === 'traffic' ? scenario.model.story.weightkN : 0;
+  return analyzeTrafficAtWeight(scenario, frontStation, weightkN);
+}
+
+function analyzeTrafficAtWeight(scenario: TrafficScenario, frontStation: number, weightkN: number): TrafficFrame {
   try {
     const { model, mesh, route, length, nodeIndex, system } = scenario;
     const axleStations = [frontStation, frontStation - 4];
@@ -75,7 +108,7 @@ export function analyzeTrafficAt(scenario: TrafficScenario, frontStation: number
       const meshNode = nodeIndex.get(point.node);
       return meshNode === undefined ? [] : [{ meshNode, fx: point.fx, fy: point.fy }];
     });
-    const axleForce = model.story.kind === 'traffic' ? (model.story.weightkN * 1000) / 2 : 0;
+    const axleForce = Math.max(0, weightkN) * 1000 / 2;
     const loads = assembleLoadCase(mesh, {
       gravity: model.loads.gravity,
       points,
@@ -93,6 +126,12 @@ export function analyzeTrafficAt(scenario: TrafficScenario, frontStation: number
       axles: [],
     };
   }
+}
+
+function maximumUtilization(analysis: Extract<StaticAnalysis, { kind: 'stable' }>): number {
+  let maximum = 0;
+  for (const utilization of analysis.result.utilization.values()) maximum = Math.max(maximum, utilization);
+  return maximum;
 }
 
 /** Merge per-member maximum |M| values into a persistent moving-load envelope. */

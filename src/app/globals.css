@@ -275,6 +275,28 @@ kbd {
   font-size: 0.66rem;
 }
 
+.failure-cinematic-badge,
+.member-limit-badge {
+  position: absolute;
+  right: 0.85rem;
+  padding: 0.28rem;
+  background: rgba(244, 241, 234, 0.94);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
+.failure-cinematic-badge {
+  top: 5.85rem;
+  border: 1px solid rgba(192, 57, 43, 0.42);
+  color: var(--danger);
+}
+
+.member-limit-badge {
+  top: 7.7rem;
+  border: 1px solid rgba(217, 144, 24, 0.5);
+  color: #a46012;
+}
+
 .result-controls { left: 0.85rem; }
 
 .result-controls button {
@@ -452,6 +474,12 @@ kbd {
   line-height: 1.35;
 }
 
+.story-fields .honesty-note {
+  padding-left: 0.45rem;
+  border-left: 2px solid rgba(124, 63, 156, 0.48);
+  color: #63307f;
+}
+
 .capacity-panel {
   flex-wrap: wrap;
   margin-top: 0.55rem;
@@ -499,6 +527,7 @@ kbd {
 .failure-panel button { justify-self: start; border-color: rgba(192, 57, 43, 0.5); color: var(--danger); }
 .failure-panel details p, .failure-panel ol { margin: 0.35rem 0 0; line-height: 1.35; }
 .failure-panel ol { padding-left: 1.1rem; }
+.failure-panel .failure-formula { color: #7d251d; font-family: var(--font-mono); font-size: 0.66rem; }
 
 .resonance-panel {
   padding: 0.38rem 0.45rem;
