@@ -6,7 +6,7 @@
 import { assembleLoadCase } from '../fem/assemble';
 import { buildMesh } from '../fem/mesh';
 import { prepareStaticSystem, solveStatic, type StaticAnalysis, type StaticSystem } from '../fem/statics';
-import type { AnalysisMesh, EditorModel } from '../fem/types';
+import type { AnalysisMesh, AnalysisOptions, EditorModel } from '../fem/types';
 
 export interface TrafficAxle {
   station: number;
@@ -67,9 +67,9 @@ interface DeckSegment {
 }
 
 /** Solve the model under two W/2 axles separated by four metres. */
-export function analyzeTraffic(model: EditorModel, frontStation: number): TrafficFrame {
+export function analyzeTraffic(model: EditorModel, frontStation: number, options: AnalysisOptions = {}): TrafficFrame {
   try {
-    return analyzeTrafficAt(prepareTraffic(model), frontStation);
+    return analyzeTrafficAt(prepareTraffic(model, options), frontStation);
   } catch (error) {
     return {
       analysis: { kind: 'invalid', message: error instanceof Error ? error.message : 'Traffic analysis could not run.' },
@@ -80,8 +80,8 @@ export function analyzeTraffic(model: EditorModel, frontStation: number): Traffi
 }
 
 /** Build the deck route and factor the fixed stiffness once per model edit. */
-export function prepareTraffic(model: EditorModel): TrafficScenario {
-  const mesh = buildMesh(model);
+export function prepareTraffic(model: EditorModel, options: AnalysisOptions = {}): TrafficScenario {
+  const mesh = buildMesh(model, options);
   const route = deckRoute(model, mesh);
   return {
     model,

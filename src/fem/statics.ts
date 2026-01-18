@@ -96,7 +96,7 @@ function recoverElementForces(mesh: AnalysisMesh, u: Float64Array, fixedEnd: Flo
   for (let index = 0; index < mesh.elements.length; index++) {
     const element = mesh.elements[index]!;
     const localU = localElementDisplacement(u, element.na, element.nb, element.cos, element.sin);
-    const stiffness = elementLocalStiffness(element);
+    const stiffness = elementLocalStiffness(element, mesh.shearFlexible);
     const localForce = new Float64Array(6);
     for (let row = 0; row < 6; row++) {
       let value = -fixedEnd[index * 6 + row]!;

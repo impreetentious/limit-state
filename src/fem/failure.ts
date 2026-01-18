@@ -7,16 +7,16 @@ import { assembleLoadCase, type LoadAssembly } from './assemble';
 import { buckling } from './eigen';
 import { buildMesh } from './mesh';
 import { solveStatic, type StaticAnalysis } from './statics';
-import type { AnalysisMesh, CascadeResult, EditorModel, FailureReport, MemberSpec } from './types';
+import type { AnalysisMesh, AnalysisOptions, CascadeResult, EditorModel, FailureReport, MemberSpec } from './types';
 
 /**
  * Evaluate the four static failure classes at one proportional load factor.
  * λ_yield = 1/max(U), global buckling is λ_cr,
  * and the member Euler check is π²EI/L_member².
  */
-export function evaluateFailure(model: EditorModel, loadFactor: number): FailureReport {
+export function evaluateFailure(model: EditorModel, loadFactor: number, options: AnalysisOptions = {}): FailureReport {
   if (!(loadFactor > 0) || !Number.isFinite(loadFactor)) throw new Error('Failure evaluation needs a finite positive load factor.');
-  const analysis = analyzeAtFactor(model, loadFactor);
+  const analysis = analyzeAtFactor(model, loadFactor, options);
   if (analysis.kind === 'mechanism') return { kind: 'mechanism', nodeId: analysis.nodeId };
   if (analysis.kind === 'invalid') throw new Error(analysis.message);
 
@@ -53,12 +53,12 @@ export function evaluateFailure(model: EditorModel, loadFactor: number): Failure
  * a hinge at the governing bending end, then re-solve at the same load.
  * Maximum twenty steps.
  */
-export function collapseCascade(model: EditorModel, loadFactor = 1): CascadeResult {
+export function collapseCascade(model: EditorModel, loadFactor = 1, options: AnalysisOptions = {}): CascadeResult {
   if (!(loadFactor > 0) || !Number.isFinite(loadFactor)) throw new Error('Collapse cascade needs a finite positive load factor.');
   let current = cloneModel(model);
   const steps: CascadeResult['steps'] = [];
   for (let index = 0; index < 20; index++) {
-    const report = evaluateFailure(current, loadFactor);
+    const report = evaluateFailure(current, loadFactor, options);
     if (report.kind === 'mechanism') return { steps, outcome: 'collapse' };
     if (report.kind === 'stable') return { steps, outcome: 'stable' };
     // Dynamic resonance is reported by the wind story; this quasi-static path
@@ -67,7 +67,7 @@ export function collapseCascade(model: EditorModel, loadFactor = 1): CascadeResu
     const memberId = report.memberId;
     const member = current.members.find((candidate) => candidate.id === memberId);
     if (!member) return { steps, outcome: 'collapse' };
-    const analysis = analyzeAtFactor(current, loadFactor);
+    const analysis = analyzeAtFactor(current, loadFactor, options);
     if (analysis.kind !== 'stable') return { steps, outcome: 'collapse' };
     const axialDominant = memberAxialDominant(analysis.mesh, analysis.result.elementForces, memberId);
     if (report.kind === 'buckling' || axialDominant) {
@@ -91,10 +91,10 @@ export function collapseCascade(model: EditorModel, loadFactor = 1): CascadeResu
 }
 
 /** Solve the base load case at a proportional ramp factor. */
-export function analyzeAtFactor(model: EditorModel, factor: number): StaticAnalysis {
+export function analyzeAtFactor(model: EditorModel, factor: number, options: AnalysisOptions = {}): StaticAnalysis {
   if (!(factor > 0) || !Number.isFinite(factor)) return { kind: 'invalid', message: 'Ramp factor must be finite and positive.' };
   try {
-  const mesh = buildMesh(model);
+  const mesh = buildMesh(model, options);
   const nodeIndex = new Map<number, number>();
   for (let index = 0; index < mesh.editorNode.length; index++) {
     const id = mesh.editorNode[index]!;
