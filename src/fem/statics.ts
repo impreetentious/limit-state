@@ -5,7 +5,7 @@
 import { assembleK, assembleLoadCase, elementLocalStiffness, type LoadAssembly } from './assemble';
 import { buildMesh } from './mesh';
 import { expandFreeVector, factorLDLT, freeMatrix, freeVector, mechanismEditorNode, solveFactored, type Factor } from './solve';
-import type { AnalysisMesh, EditorModel, StaticResult } from './types';
+import type { AnalysisMesh, AnalysisOptions, EditorModel, StaticResult } from './types';
 
 export type StaticAnalysis =
   | { kind: 'stable'; mesh: AnalysisMesh; loads: LoadAssembly; result: StaticResult }
@@ -55,9 +55,9 @@ export function solveStatic(mesh: AnalysisMesh, loads: LoadAssembly, cachedSyste
 }
 
 /** Build the model's base static load case (self-weight plus editor point loads). */
-export function analyzeStaticModel(model: EditorModel): StaticAnalysis {
+export function analyzeStaticModel(model: EditorModel, options: AnalysisOptions = {}): StaticAnalysis {
   try {
-    const mesh = buildMesh(model);
+    const mesh = buildMesh(model, options);
     const nodeIndex = new Map<number, number>();
     for (let index = 0; index < mesh.editorNode.length; index++) {
       const id = mesh.editorNode[index]!;

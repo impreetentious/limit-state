@@ -4,7 +4,7 @@
  * Each milestone converts its `it.todo` rows into real tests.
  */
 import { describe, expect, it } from 'vitest';
-import { assembleF, assembleK, elementLocalStiffness, kLocal, kgLocal, mLocal, transformToGlobal } from '../assemble';
+import { assembleF, assembleK, elementLocalStiffness, kLocal, kgLocal, mLocal, shearFactor, transformToGlobal } from '../assemble';
 import { buckling, modal } from '../eigen';
 import { newmarkStep, rayleighDampingRatio, rayleighFit, type NewmarkState } from '../dynamics';
 import { decodeModel, encodeModel } from '../../share/serialize';
@@ -79,8 +79,87 @@ describe('element matrices (implemented — scaffold anchor)', () => {
     const r = sectionProps({ kind: 'rect', b: 0.2, h: 0.4 });
     expect(r.A).toBeCloseTo(0.08, 12);
     expect(r.I).toBeCloseTo((0.2 * 0.4 ** 3) / 12, 15);
+    expect(r.As).toBeCloseTo((5 / 6) * 0.08, 12);
+    const i = sectionProps({ kind: 'ibeam', b: 0.2, h: 0.4, tf: 0.02, tw: 0.01 });
+    expect(i.As).toBeCloseTo(0.01 * (0.4 - 2 * 0.02), 12);
     const t = sectionProps({ kind: 'tube', d: 0.2, t: 0.01 });
     expect(t.A).toBeCloseTo((Math.PI / 4) * (0.2 ** 2 - 0.18 ** 2), 12);
+    expect(t.As).toBeCloseTo(0.5 * t.A, 12);
+  });
+});
+
+describe('Phase 2A — Timoshenko shear-flexible beams', () => {
+  it('G14: Timoshenko cantilever tip = PL³/3EI + PL/(G As), rel err < 1e-9', () => {
+    // Unit properties (same harness style as G1): E=I=G=As=L=1, P=1.
+    // One analysis element recovers the closed form exactly; the product mesh
+    // uses two subdivisions and is checked below for consistency.
+    const mesh: AnalysisMesh = {
+      coords: Float64Array.of(0, 0, 1, 0),
+      elements: [{
+        memberId: 1,
+        na: 0,
+        nb: 1,
+        L: 1,
+        E: 1,
+        G: 1,
+        A: 1,
+        As: 1,
+        I: 1,
+        c: 1,
+        rho: 1,
+        fy: 1,
+        cos: 1,
+        sin: 0,
+        releaseA: false,
+        releaseB: false,
+      }],
+      editorNode: Int32Array.of(1, 2),
+      freeDofs: Int32Array.of(3, 4, 5),
+      ndof: 6,
+      shearFlexible: true,
+    };
+    const loads = assembleF(mesh, { gravity: false, points: [{ meshNode: 1, fx: 0, fy: -1 }] });
+    const result = solveMesh(mesh, loads);
+    const expected = -(1 / 3 + 1); // −(PL³/3EI + PL/(G As))
+    expect(relativeError(result.u[4]!, expected)).toBeLessThan(1e-9);
+
+    // Product path (2 subdivisions, SI steel) must still beat Euler and stay close.
+    const span = 2;
+    const P = 10_000;
+    const model = modelFor(
+      [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: span, y: 0 },
+      ],
+      [{ node: 1, kind: 'fixed' }],
+    );
+    model.loads.gravity = false;
+    model.loads.points = [{ node: 2, fx: 0, fy: -P }];
+    model.members[0]!.section = { kind: 'rect', b: 0.4, h: 0.4 }; // L/h = 5
+
+    const analysis = analyzeStaticModel(model, { shearFlexible: true });
+    if (analysis.kind !== 'stable') throw new Error(`Expected stable Timoshenko cantilever, received ${analysis.kind}.`);
+    const sample = analysis.mesh.elements[0]!;
+    const siExpected = -((P * span ** 3) / (3 * sample.E * sample.I) + P / (sample.G * sample.As));
+    expect(relativeError(analysis.result.u[3 * 1 + 1]!, siExpected)).toBeLessThan(1e-6);
+
+    const euler = analyzeStaticModel(model, { shearFlexible: false });
+    if (euler.kind !== 'stable') throw new Error(`Expected stable Euler cantilever, received ${euler.kind}.`);
+    const bendingOnly = -((P * span ** 3) / (3 * sample.E * sample.I));
+    expect(relativeError(euler.result.u[3 * 1 + 1]!, bendingOnly)).toBeLessThan(1e-10);
+    expect(Math.abs(analysis.result.u[3 * 1 + 1]!)).toBeGreaterThan(Math.abs(euler.result.u[3 * 1 + 1]!));
+  });
+
+  it('kLocal(φ) tip block recovers PL³/3EI + PL/(G As) exactly', () => {
+    // Unit properties: E=I=G=As=L=1 ⇒ φ = 12, tip v = 1/3 + 1 = 4/3.
+    const phi = shearFactor(1, 1, 1, 1, 1);
+    expect(phi).toBeCloseTo(12, 12);
+    const k = kLocal(1, 1, 1, 1, phi);
+    const kff = Float64Array.of(k[4 * 6 + 4]!, k[4 * 6 + 5]!, k[5 * 6 + 4]!, k[5 * 6 + 5]!);
+    const factored = factorLDLT(kff, 2);
+    if (!factored.ok) throw new Error('Timoshenko tip block must be positive definite.');
+    const [v] = solveFactored(factored.factor, Float64Array.of(1, 0));
+    expect(v).toBeCloseTo(4 / 3, 12);
   });
 });
 
@@ -358,7 +437,9 @@ function pinnedColumnMesh(subdivisions: number): AnalysisMesh {
       nb: index + 1,
       L: 1 / subdivisions,
       E: 1,
+      G: 1e12,
       A: 1,
+      As: 1,
       I: 1,
       c: 1,
       rho: 1,
@@ -378,6 +459,7 @@ function pinnedColumnMesh(subdivisions: number): AnalysisMesh {
     editorNode: Int32Array.from({ length: subdivisions + 1 }, (_, index) => index + 1),
     freeDofs: Int32Array.from(free),
     ndof: (subdivisions + 1) * 3,
+    shearFlexible: false,
   };
 }
 
@@ -391,7 +473,9 @@ function simplySupportedBendingBeam(): AnalysisMesh {
       nb: index + 1,
       L: 0.5,
       E: 1,
+      G: 1e12,
       A: 1,
+      As: 1,
       I: 1,
       c: 1,
       rho: 1,
@@ -406,6 +490,7 @@ function simplySupportedBendingBeam(): AnalysisMesh {
     // so this gate measures the stated transverse Euler–Bernoulli mode.
     freeDofs: Int32Array.of(2, 4, 5, 8),
     ndof: 9,
+    shearFlexible: false,
   };
 }
 
@@ -419,7 +504,9 @@ function unitSdofMesh(): AnalysisMesh {
       nb: 1,
       L: 1,
       E: 1,
+      G: 1e12,
       A: 1,
+      As: 1,
       I: 1,
       c: 1,
       // Consistent axial mass at free node is ρAL / 3 = 1.
@@ -433,6 +520,7 @@ function unitSdofMesh(): AnalysisMesh {
     editorNode: Int32Array.of(1, 2),
     freeDofs: Int32Array.of(3),
     ndof: 6,
+    shearFlexible: false,
   };
 }
 

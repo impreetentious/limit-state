@@ -1,15 +1,14 @@
 /**
  * EditorModel -> AnalysisMesh: subdivide each member into 2 elements (mid-node),
  * number DOFs, apply supports to the free-DOF list, validate deck contiguity.
- * M1.
  */
 import { MATERIALS, sectionProps } from './materials';
-import type { AnalysisMesh, EditorModel, MemberSpec, SupportSpec } from './types';
+import type { AnalysisMesh, AnalysisOptions, EditorModel, MemberSpec, SupportSpec } from './types';
 
 /**
  * Build the hidden two-element-per-member analysis mesh from an editor model.
  */
-export function buildMesh(model: EditorModel): AnalysisMesh {
+export function buildMesh(model: EditorModel, options: AnalysisOptions = {}): AnalysisMesh {
   const nodeById = new Map<number, { index: number; x: number; y: number }>();
   const coords: number[] = [];
   const editorNode: number[] = [];
@@ -51,7 +50,9 @@ export function buildMesh(model: EditorModel): AnalysisMesh {
     const common = {
       memberId: member.id,
       E: material.E,
+      G: material.G,
       A: props.A,
+      As: props.As,
       I: props.I,
       c: props.c,
       rho: material.rho,
@@ -127,6 +128,7 @@ export function buildMesh(model: EditorModel): AnalysisMesh {
     editorNode: Int32Array.from(editorNode),
     freeDofs: Int32Array.from(freeDofs),
     ndof,
+    shearFlexible: options.shearFlexible === true,
   };
 }
 

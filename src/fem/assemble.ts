@@ -14,11 +14,24 @@ export interface LoadAssembly {
   elementFixedEnd: Float64Array;
 }
 
-/** Euler–Bernoulli frame element stiffness, local axes. */
-export function kLocal(E: number, A: number, I: number, L: number): Float64Array {
+/**
+ * Shear flexibility factor φ = 12EI / (G A_s L²).
+ * φ → 0 recovers Euler–Bernoulli.
+ */
+export function shearFactor(E: number, I: number, G: number, As: number, L: number): number {
+  if (!(G > 0 && As > 0 && L > 0)) return 0;
+  return (12 * E * I) / (G * As * L * L);
+}
+
+/**
+ * Frame element stiffness, local axes.
+ * Optional φ applies the standard Timoshenko (1+φ) bending block; φ = 0 is Euler–Bernoulli.
+ */
+export function kLocal(E: number, A: number, I: number, L: number, phi = 0): Float64Array {
   const k = new Float64Array(36);
   const a = (E * A) / L;
-  const b = (E * I) / (L * L * L);
+  const denom = 1 + phi;
+  const b = (E * I) / (L * L * L * denom);
   const set = (i: number, j: number, v: number) => {
     k[i * 6 + j] = v;
     if (i !== j) k[j * 6 + i] = v;
@@ -33,10 +46,16 @@ export function kLocal(E: number, A: number, I: number, L: number): Float64Array
   set(1, 5, 6 * b * L);
   set(2, 4, -6 * b * L);
   set(4, 5, -6 * b * L);
-  set(2, 2, 4 * b * L * L);
-  set(5, 5, 4 * b * L * L);
-  set(2, 5, 2 * b * L * L);
+  set(2, 2, (4 + phi) * b * L * L);
+  set(5, 5, (4 + phi) * b * L * L);
+  set(2, 5, (2 - phi) * b * L * L);
   return k;
+}
+
+/** Element φ from mesh analysis option and section shear props. */
+export function elementPhi(element: Element, shearFlexible: boolean): number {
+  if (!shearFlexible) return 0;
+  return shearFactor(element.E, element.I, element.G, element.As, element.L);
 }
 
 /** Consistent geometric stiffness (transverse/rotation block), N tension-positive. */
@@ -110,22 +129,24 @@ export function transformToGlobal(kLoc: Float64Array, cos: number, sin: number):
 export function assembleK(mesh: AnalysisMesh): Float64Array {
   const K = new Float64Array(mesh.ndof * mesh.ndof);
   for (const element of mesh.elements) {
-    const local = elementLocalStiffness(element);
+    const local = elementLocalStiffness(element, mesh.shearFlexible);
     addElementMatrix(K, mesh.ndof, transformToGlobal(local, element.cos, element.sin), element);
   }
   return K;
 }
 
 /** Local element stiffness after end-release condensation. */
-export function elementLocalStiffness(element: Element): Float64Array {
-  return condenseReleased(kLocal(element.E, element.A, element.I, element.L), element);
+export function elementLocalStiffness(element: Element, shearFlexible = false): Float64Array {
+  const phi = elementPhi(element, shearFlexible);
+  return condenseReleased(kLocal(element.E, element.A, element.I, element.L, phi), element, phi);
 }
 
 /** Assemble global consistent M, including release-compatible mass condensation. */
 export function assembleM(mesh: AnalysisMesh): Float64Array {
   const M = new Float64Array(mesh.ndof * mesh.ndof);
   for (const element of mesh.elements) {
-    const local = condenseReleased(mLocal(element.rho, element.A, element.L), element);
+    const phi = elementPhi(element, mesh.shearFlexible);
+    const local = condenseReleased(mLocal(element.rho, element.A, element.L), element, phi);
     addElementMatrix(M, mesh.ndof, transformToGlobal(local, element.cos, element.sin), element);
   }
   return M;
@@ -141,7 +162,8 @@ export function assembleKg(mesh: AnalysisMesh, elementN: Float64Array): Float64A
     const element = mesh.elements[index]!;
     // A release constrains the compatible elastic shape, so use the same
     // k-based coordinate transform for k_g as for the consistent mass.
-    const local = condenseReleased(kgLocal(elementN[index]!, element.L), element);
+    const phi = elementPhi(element, mesh.shearFlexible);
+    const local = condenseReleased(kgLocal(elementN[index]!, element.L), element, phi);
     addElementMatrix(Kg, mesh.ndof, transformToGlobal(local, element.cos, element.sin), element);
   }
   return Kg;
@@ -246,10 +268,10 @@ function elementDofs(element: Element): readonly number[] {
  * Condense released rotational DOFs out of a local element matrix.
  * k_cond = k_kk - k_kr k_rr^-1 k_rk.
  */
-function condenseReleased(local: Float64Array, element: Element): Float64Array {
+function condenseReleased(local: Float64Array, element: Element, phi: number): Float64Array {
   const released = releasedRotations(element);
   if (released.length === 0) return local;
-  const transform = releaseTransform(element, released);
+  const transform = releaseTransform(element, phi, released);
   const condensed = new Float64Array(36);
   for (let row = 0; row < 6; row++) {
     for (let column = 0; column < 6; column++) {
@@ -269,13 +291,13 @@ function condenseReleased(local: Float64Array, element: Element): Float64Array {
  * Coordinate transform for a rotational end release:
  * q_r = -k_rr⁻¹ k_rk q_k, so every compatible matrix is Cᵀ A C.
  */
-function releaseTransform(element: Element, released = releasedRotations(element)): Float64Array {
+function releaseTransform(element: Element, phi: number, released = releasedRotations(element)): Float64Array {
   const transform = new Float64Array(36);
   const kept = [0, 1, 2, 3, 4, 5].filter((dof) => !released.includes(dof));
   for (const dof of kept) transform[dof * 6 + dof] = 1;
   if (released.length === 0) return transform;
 
-  const localK = kLocal(element.E, element.A, element.I, element.L);
+  const localK = kLocal(element.E, element.A, element.I, element.L, phi);
   const inverse = invertReleasedBlock(localK, released);
   for (let r = 0; r < released.length; r++) {
     const releasedDof = released[r]!;
@@ -294,10 +316,10 @@ function releaseTransform(element: Element, released = releasedRotations(element
  * Condense a fixed-end vector alongside the stiffness releases.
  * f_cond = f_k - k_kr k_rr^-1 f_r.
  */
-function condenseFixedEnd(fixedEnd: Float64Array, element: Element): Float64Array {
+function condenseFixedEnd(fixedEnd: Float64Array, element: Element, phi: number): Float64Array {
   const released = releasedRotations(element);
   if (released.length === 0) return fixedEnd;
-  const local = kLocal(element.E, element.A, element.I, element.L);
+  const local = kLocal(element.E, element.A, element.I, element.L, phi);
   const inverse = invertReleasedBlock(local, released);
   const condensed = new Float64Array(6);
   for (let i = 0; i < 6; i++) {
@@ -344,7 +366,7 @@ function addEquivalentLocalLoad(
   fixedEndByElement?: Float64Array,
 ): void {
   const element = mesh.elements[elementIndex]!;
-  const condensed = condenseFixedEnd(fixedEnd, element);
+  const condensed = condenseFixedEnd(fixedEnd, element, elementPhi(element, mesh.shearFlexible));
   if (fixedEndByElement) {
     for (let i = 0; i < 6; i++) {
       const offset = elementIndex * 6 + i;

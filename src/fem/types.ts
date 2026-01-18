@@ -42,7 +42,7 @@ export interface PointLoad {
 }
 
 export type StorySpec =
-  | { kind: 'traffic'; weightkN: number; speed: number }
+  | { kind: 'traffic'; weightkN: number; speed: number; movingMass?: boolean }
   | { kind: 'wind'; pattern: 'steady' | 'sine' | 'gusts'; amplitudekNm: number; freqHz: number; zeta: number }
   | { kind: 'ramp' };
 
@@ -64,6 +64,7 @@ export interface Material {
   id: MaterialId;
   label: string;
   E: number; // Pa
+  G: number; // Pa — shear modulus
   fy: number; // Pa
   rho: number; // kg/m^3
 }
@@ -72,6 +73,14 @@ export interface SectionProps {
   A: number; // m^2
   I: number; // m^4
   c: number; // extreme fiber distance, m
+  /** Effective shear area A_s (κ presets: rect 5/6, I/box web-only, tube 0.5). */
+  As: number;
+}
+
+/** Analysis options that do not live in the shareable editor model. */
+export interface AnalysisOptions {
+  /** When true, frame elements use Timoshenko (shear-flexible) bending stiffness. */
+  shearFlexible?: boolean;
 }
 
 // ---------- analysis mesh (members auto-split into 2 elements) ----------
@@ -81,7 +90,9 @@ export interface Element {
   na: number; // mesh node indices (not editor ids)
   nb: number;
   E: number;
+  G: number;
   A: number;
+  As: number;
   I: number;
   c: number;
   rho: number;
@@ -102,6 +113,8 @@ export interface AnalysisMesh {
   /** sorted free DOF indices after applying supports */
   freeDofs: Int32Array;
   ndof: number;
+  /** Timoshenko shear-flexible bending. Default false = Euler–Bernoulli. */
+  shearFlexible: boolean;
 }
 
 // ---------- results ----------
