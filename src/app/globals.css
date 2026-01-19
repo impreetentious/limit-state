@@ -321,6 +321,19 @@ kbd {
 
 .result-controls input { accent-color: var(--accent); }
 
+.shear-note {
+  position: absolute;
+  left: 0.85rem;
+  top: 3.35rem;
+  max-width: min(28rem, calc(100% - 12rem));
+  padding: 0.28rem 0.45rem;
+  border: 1px solid rgba(36, 86, 164, 0.28);
+  background: rgba(244, 241, 234, 0.94);
+  color: var(--accent);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
 .deformation-badge {
   right: 0.85rem;
   color: var(--accent);

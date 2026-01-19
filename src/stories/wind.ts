@@ -13,7 +13,7 @@ import {
   type StaticAnalysis,
   type StaticSystem,
 } from '../fem/statics';
-import type { AnalysisMesh, EditorModel, EigenResult } from '../fem/types';
+import type { AnalysisMesh, AnalysisOptions, EditorModel, EigenResult } from '../fem/types';
 
 export interface WindScenario {
   mesh: AnalysisMesh;
@@ -31,11 +31,11 @@ export interface WindScenario {
 }
 
 /** Prepare a repeatable uniform wind field, including its static starting state. */
-export function prepareWind(model: EditorModel): WindScenario | undefined {
+export function prepareWind(model: EditorModel, options: AnalysisOptions = {}): WindScenario | undefined {
   if (model.story.kind !== 'wind') return undefined;
   try {
-    const mesh = buildMesh(model);
-    const baseAnalysis = analyzeStaticModel(model);
+    const mesh = buildMesh(model, options);
+    const baseAnalysis = analyzeStaticModel(model, options);
     const baseLoad = baseAnalysis.kind === 'stable' ? new Float64Array(baseAnalysis.loads.F) : new Float64Array(mesh.ndof);
     const baseFixedEnd = baseAnalysis.kind === 'stable' ? new Float64Array(baseAnalysis.loads.elementFixedEnd) : new Float64Array(mesh.elements.length * 6);
     return {

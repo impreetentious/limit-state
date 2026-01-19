@@ -31,6 +31,8 @@ export interface EditorStore {
   notice: string | null;
   resultDiagram: ResultDiagram;
   showDeformed: boolean;
+  /** Timoshenko (shear-flexible) analysis option. */
+  shearFlexible: boolean;
   setMode: (mode: AppMode) => void;
   setTool: (tool: EditorTool) => void;
   select: (selection: Selection) => void;
@@ -54,6 +56,7 @@ export interface EditorStore {
   setNotice: (notice: string | null) => void;
   setResultDiagram: (diagram: ResultDiagram) => void;
   setShowDeformed: (show: boolean) => void;
+  setShearFlexible: (enabled: boolean) => void;
   undo: () => void;
   redo: () => void;
   reset: () => void;
@@ -103,6 +106,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
   notice: null,
   resultDiagram: 'none',
   showDeformed: true,
+  shearFlexible: false,
   setMode: (mode) => set({ mode }),
   setTool: (tool) => set({ tool, notice: null }),
   select: (selection) => set({ selection }),
@@ -259,6 +263,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
   setNotice: (notice) => set({ notice }),
   setResultDiagram: (resultDiagram) => set({ resultDiagram }),
   setShowDeformed: (showDeformed) => set({ showDeformed }),
+  setShearFlexible: (shearFlexible) => set({ shearFlexible }),
   undo: () => set((state) => {
     const previous = state.past.at(-1);
     if (!previous) return state;
