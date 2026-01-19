@@ -42,7 +42,7 @@ export interface PointLoad {
 }
 
 export type StorySpec =
-  | { kind: 'traffic'; weightkN: number; speed: number; movingMass?: boolean }
+  | { kind: 'traffic'; weightkN: number; speed: number }
   | { kind: 'wind'; pattern: 'steady' | 'sine' | 'gusts'; amplitudekNm: number; freqHz: number; zeta: number }
   | { kind: 'ramp' };
 

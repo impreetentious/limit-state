@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { evaluateFailure } from '../fem/failure';
 import { buildMesh } from '../fem/mesh';
-import type { EditorModel, EigenResult, FailureReport } from '../fem/types';
+import type { AnalysisOptions, EditorModel, EigenResult, FailureReport } from '../fem/types';
 import type { RampFrame } from '../stories/ramp';
 import type { TrafficFrame } from '../stories/traffic';
 import type { WindScenario } from '../stories/wind';
@@ -22,6 +22,7 @@ interface TestConsoleProps {
   model: EditorModel;
   modal?: EigenResult;
   buckling?: EigenResult;
+  analysisOptions?: AnalysisOptions;
   playing: boolean;
   storyTime: number;
   traffic?: TrafficFrame;
@@ -41,19 +42,19 @@ interface TestConsoleProps {
 
 /** Test-story controls, real playback state, and capacity/failure explanation. */
 export function TestConsole({
-  model, modal, buckling, playing, storyTime, traffic, trafficYieldCapacity, envelopeEnabled, onEnvelopeEnabled, ramp, rampCapacity, wind, onTogglePlayback, onRestart, onSeekTrafficStation, onReplayFailure, onReturn,
+  model, modal, buckling, analysisOptions = {}, playing, storyTime, traffic, trafficYieldCapacity, envelopeEnabled, onEnvelopeEnabled, ramp, rampCapacity, wind, onTogglePlayback, onRestart, onSeekTrafficStation, onReplayFailure, onReturn,
 }: TestConsoleProps): React.JSX.Element {
   const story = useEditorStore((state) => state.model.story);
   const setStory = useEditorStore((state) => state.setStory);
   const failure = useMemo(() => {
-    try { return evaluateFailure(model, 1); } catch { return undefined; }
-  }, [model]);
+    try { return evaluateFailure(model, 1, analysisOptions); } catch { return undefined; }
+  }, [analysisOptions, model]);
   const massKg = useMemo(() => {
     try {
-      const mesh = buildMesh(model);
+      const mesh = buildMesh(model, analysisOptions);
       return mesh.elements.reduce((sum, element) => sum + element.rho * element.A * element.L, 0);
     } catch { return 0; }
-  }, [model]);
+  }, [analysisOptions, model]);
   const referenceLoadN = useMemo(() => {
     const pointLoad = model.loads.points.reduce((sum, point) => sum + Math.hypot(point.fx, point.fy), 0);
     if (!model.loads.gravity) return pointLoad;

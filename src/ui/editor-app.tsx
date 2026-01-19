@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StructureCanvas } from '../canvas/structure-canvas';
+import { sectionDepth } from '../fem/materials';
 import { analyzeStaticModel, deformationDisplay } from '../fem/statics';
-import type { EigenResult } from '../fem/types';
+import type { EditorModel, EigenResult } from '../fem/types';
 import { PRESETS } from '../presets/scenes';
 import { decodeModel, encodeModel } from '../share/serialize';
 import { inspectStability } from '../state/stability';
@@ -44,6 +45,7 @@ export function EditorApp(): React.JSX.Element {
   const notice = useEditorStore((state) => state.notice);
   const resultDiagram = useEditorStore((state) => state.resultDiagram);
   const showDeformed = useEditorStore((state) => state.showDeformed);
+  const shearFlexible = useEditorStore((state) => state.shearFlexible);
   const setMode = useEditorStore((state) => state.setMode);
   const setTool = useEditorStore((state) => state.setTool);
   const setGridSnap = useEditorStore((state) => state.setGridSnap);
@@ -56,7 +58,10 @@ export function EditorApp(): React.JSX.Element {
   const setNotice = useEditorStore((state) => state.setNotice);
   const setResultDiagram = useEditorStore((state) => state.setResultDiagram);
   const setShowDeformed = useEditorStore((state) => state.setShowDeformed);
-  const baseAnalysis = useMemo(() => analyzeStaticModel(model), [model]);
+  const setShearFlexible = useEditorStore((state) => state.setShearFlexible);
+  const analysisOptions = useMemo(() => ({ shearFlexible }), [shearFlexible]);
+  const baseAnalysis = useMemo(() => analyzeStaticModel(model, analysisOptions), [analysisOptions, model]);
+  const stockyMembers = useMemo(() => stockyMemberIds(model), [model]);
   const requestId = useRef(0);
   const [eigen, setEigen] = useState<EigenUiState>({ kind: 'idle' });
   const [selectedMode, setSelectedMode] = useState(0);
@@ -119,23 +124,23 @@ export function EditorApp(): React.JSX.Element {
 
   const trafficScenario = useMemo(() => {
     if (model.story.kind !== 'traffic' || mode !== 'test') return undefined;
-    try { return prepareTraffic(model); } catch { return undefined; }
-  }, [mode, model]);
+    try { return prepareTraffic(model, analysisOptions); } catch { return undefined; }
+  }, [analysisOptions, mode, model]);
   const trafficFrame = useMemo(
     () => trafficScenario && model.story.kind === 'traffic' ? analyzeTrafficAt(trafficScenario, storyTime * model.story.speed) : undefined,
     [model.story, storyTime, trafficScenario],
   );
-  const capacity = useMemo(() => model.story.kind === 'ramp' ? rampCapacity(model) : undefined, [model]);
+  const capacity = useMemo(() => model.story.kind === 'ramp' ? rampCapacity(model, analysisOptions) : undefined, [analysisOptions, model]);
   const rampFactor = model.story.kind === 'ramp' && capacity !== undefined
     ? Math.min(capacity, Math.max(0.001, storyTime * capacity / 8))
     : 0.001;
   const rampFrame = useMemo(
-    () => model.story.kind === 'ramp' && mode === 'test' ? analyzeRamp(model, rampFactor, storyTime >= 8) : undefined,
-    [mode, model, rampFactor, storyTime],
+    () => model.story.kind === 'ramp' && mode === 'test' ? analyzeRamp(model, rampFactor, storyTime >= 8, analysisOptions) : undefined,
+    [analysisOptions, mode, model, rampFactor, storyTime],
   );
   const analysis = trafficFrame?.analysis ?? rampFrame?.analysis ?? baseAnalysis;
   const deformation = analysis.kind === 'stable' ? deformationDisplay(analysis.mesh, analysis.result.u, 44) : null;
-  const windScenario = useMemo(() => model.story.kind === 'wind' ? prepareWind(model) : undefined, [model]);
+  const windScenario = useMemo(() => model.story.kind === 'wind' ? prepareWind(model, analysisOptions) : undefined, [analysisOptions, model]);
   const modal = eigen.kind === 'ready' ? eigen.modal : undefined;
   const trafficDuration = trafficFrame && model.story.kind === 'traffic'
     ? (trafficFrame.length + 4) / Math.max(0.1, model.story.speed)
@@ -260,9 +265,9 @@ export function EditorApp(): React.JSX.Element {
 
   useEffect(() => {
     setStability({ kind: 'checking', message: 'Checking stability…' });
-    const timer = window.setTimeout(() => setStability(inspectStability(model)), 300);
+    const timer = window.setTimeout(() => setStability(inspectStability(model, analysisOptions)), 300);
     return () => window.clearTimeout(timer);
-  }, [model, setStability]);
+  }, [analysisOptions, model, setStability]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -338,7 +343,9 @@ export function EditorApp(): React.JSX.Element {
           {analysis.kind === 'stable' && <div className="result-controls" aria-label="Static result display">
             {(['none', 'axial', 'shear', 'moment'] as const).map((diagram) => <button key={diagram} type="button" className={resultDiagram === diagram ? 'active' : ''} onClick={() => setResultDiagram(diagram)}>{diagram === 'none' ? 'Results' : diagram[0]!.toUpperCase() + diagram.slice(1)}</button>)}
             <label><input type="checkbox" checked={showDeformed} onChange={(event) => setShowDeformed(event.target.checked)} /> Deformed</label>
+            <label><input type="checkbox" checked={shearFlexible} onChange={(event) => setShearFlexible(event.target.checked)} /> Timoshenko</label>
           </div>}
+          {stockyMembers.length > 0 && <div className="shear-note" role="note">Shear flexibility matters when L/h &lt; 10 — {stockyMembers.length === 1 ? `member ${stockyMembers[0]} is` : `${stockyMembers.length} members are`} stocky{shearFlexible ? '' : '; enable Timoshenko to include it'}.</div>}
           {deformation && showDeformed && deformation.maxMeters > 0 && <div className="deformation-badge">deformation ×{formatScale(deformation.scale)} — true max {formatLength(deformation.maxMeters)}</div>}
           {windFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(windFrame.scenario.mesh, windFrame.u, 44).scale)} · simplified uniform wind field (member-normal 2D pressure)</div>}
           {failurePhase !== undefined && <div className="failure-cinematic-badge">failure animation ×{reducedMotion ? 'static' : formatScale(0.25 + failurePhase * 0.75)} — illustrative, computed onset and mechanism</div>}
@@ -365,6 +372,7 @@ export function EditorApp(): React.JSX.Element {
             model={model}
             modal={modal}
             buckling={eigen.kind === 'ready' ? eigen.buckling : undefined}
+            analysisOptions={analysisOptions}
             playing={storyPlaying}
             storyTime={storyTime}
             traffic={trafficFrame}
@@ -439,6 +447,21 @@ function formatScale(value: number): string {
 function formatLength(value: number): string {
   if (value < 0.00001) return `${(value * 1_000_000).toFixed(2)} µm`;
   return value < 0.01 ? `${(value * 1000).toFixed(2)} mm` : `${value.toFixed(3)} m`;
+}
+
+/** Members with L/h < 10, where shear flexibility starts to matter. */
+function stockyMemberIds(model: EditorModel): number[] {
+  const nodeById = new Map(model.nodes.map((node) => [node.id, node]));
+  const stocky: number[] = [];
+  for (const member of model.members) {
+    const a = nodeById.get(member.a);
+    const b = nodeById.get(member.b);
+    if (!a || !b) continue;
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    const depth = sectionDepth(member.section);
+    if (depth > 0 && length / depth < 10) stocky.push(member.id);
+  }
+  return stocky;
 }
 
 function usePrefersReducedMotion(): boolean {
