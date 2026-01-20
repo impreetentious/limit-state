@@ -116,6 +116,32 @@ export function dynamicAmplificationRatio(forceOmega: number, naturalOmega: numb
   return 1 / Math.sqrt((1 - ratio * ratio) ** 2 + (2 * zeta * ratio) ** 2);
 }
 
+/**
+ * Influence vector ι with unity on global-x translational DOFs (base excitation).
+ */
+export function influenceVectorX(mesh: AnalysisMesh): Float64Array {
+  const iota = new Float64Array(mesh.ndof);
+  for (let node = 0; mesh.ndof > node * 3; node++) iota[3 * node] = 1;
+  return iota;
+}
+
+/**
+ * Effective nodal load from horizontal base acceleration: −M · ι · ü_g.
+ */
+export function baseExcitationLoad(mass: Float64Array, ndof: number, iota: Float64Array, ugDdot: number): Float64Array {
+  if (mass.length !== ndof * ndof || iota.length !== ndof) {
+    throw new Error('Base-excitation load requires matching mass, ι, and ndof.');
+  }
+  const load = new Float64Array(ndof);
+  // F = −üg · (M ι)
+  for (let row = 0; row < ndof; row++) {
+    let Mi = 0;
+    for (let column = 0; column < ndof; column++) Mi += mass[row * ndof + column]! * iota[column]!;
+    load[row] = -ugDdot * Mi;
+  }
+  return load;
+}
+
 function validateState(mesh: AnalysisMesh, state: NewmarkState): void {
   if (state.u.length !== mesh.ndof || state.v.length !== mesh.ndof || state.a.length !== mesh.ndof) {
     throw new Error('Newmark state vectors must match the mesh DOF count.');
