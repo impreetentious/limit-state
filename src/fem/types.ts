@@ -44,7 +44,10 @@ export interface PointLoad {
 export type StorySpec =
   | { kind: 'traffic'; weightkN: number; speed: number }
   | { kind: 'wind'; pattern: 'steady' | 'sine' | 'gusts'; amplitudekNm: number; freqHz: number; zeta: number }
+  | { kind: 'earthquake'; record: EarthquakeRecordId; scale: number; zeta: number }
   | { kind: 'ramp' };
+
+export type EarthquakeRecordId = 'pulse' | 'chirp' | 'elcentro-scaled';
 
 export interface EditorModel {
   v: 1;
@@ -81,6 +84,8 @@ export interface SectionProps {
 export interface AnalysisOptions {
   /** When true, frame elements use Timoshenko (shear-flexible) bending stiffness. */
   shearFlexible?: boolean;
+  /** When true, statics iterates K + K_g(N) for P-Δ second-order effects. */
+  secondOrder?: boolean;
 }
 
 // ---------- analysis mesh (members auto-split into 2 elements) ----------

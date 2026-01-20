@@ -19,6 +19,8 @@ export function evaluateFailure(model: EditorModel, loadFactor: number, options:
   const analysis = analyzeAtFactor(model, loadFactor, options);
   if (analysis.kind === 'mechanism') return { kind: 'mechanism', nodeId: analysis.nodeId };
   if (analysis.kind === 'invalid') throw new Error(analysis.message);
+  if (analysis.kind === 'divergent') throw new Error(analysis.message);
+  if (analysis.kind !== 'stable') throw new Error('Failure evaluation needs a stable static solve.');
 
   const yieldState = governingYield(analysis);
   const memberBuckling = governingMemberBuckling(analysis.mesh, analysis.result.elementForces);

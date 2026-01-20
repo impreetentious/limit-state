@@ -4,12 +4,26 @@
  */
 import { assembleK, assembleLoadCase, elementLocalStiffness, type LoadAssembly } from './assemble';
 import { buildMesh } from './mesh';
+import { solveSecondOrderStatic, type SecondOrderAnalysis } from './second-order';
 import { expandFreeVector, factorLDLT, freeMatrix, freeVector, mechanismEditorNode, solveFactored, type Factor } from './solve';
 import type { AnalysisMesh, AnalysisOptions, EditorModel, StaticResult } from './types';
 
 export type StaticAnalysis =
-  | { kind: 'stable'; mesh: AnalysisMesh; loads: LoadAssembly; result: StaticResult }
+  | {
+      kind: 'stable';
+      mesh: AnalysisMesh;
+      loads: LoadAssembly;
+      result: StaticResult;
+      /** Present when AnalysisOptions.secondOrder produced a converged P-Δ solve. */
+      secondOrder?: {
+        linear: StaticResult;
+        iterations: number;
+        momentAmplification: number;
+        displacementAmplification: number;
+      };
+    }
   | { kind: 'mechanism'; nodeId: number; message: string }
+  | { kind: 'divergent'; message: string; iterations: number }
   | { kind: 'invalid'; message: string };
 
 export interface DeformationDisplay {
@@ -67,10 +81,30 @@ export function analyzeStaticModel(model: EditorModel, options: AnalysisOptions 
       const meshNode = nodeIndex.get(point.node);
       return meshNode === undefined ? [] : [{ meshNode, fx: point.fx, fy: point.fy }];
     });
-    return solveStatic(mesh, assembleLoadCase(mesh, { gravity: model.loads.gravity, points }));
+    const loads = assembleLoadCase(mesh, { gravity: model.loads.gravity, points });
+    if (options.secondOrder) return asStaticAnalysis(solveSecondOrderStatic(mesh, loads));
+    return solveStatic(mesh, loads);
   } catch (error) {
     return { kind: 'invalid', message: error instanceof Error ? error.message : 'Static analysis could not run.' };
   }
+}
+
+function asStaticAnalysis(second: SecondOrderAnalysis): StaticAnalysis {
+  if (second.kind === 'stable') {
+    return {
+      kind: 'stable',
+      mesh: second.mesh,
+      loads: second.loads,
+      result: second.result,
+      secondOrder: {
+        linear: second.linear,
+        iterations: second.iterations,
+        momentAmplification: second.momentAmplification,
+        displacementAmplification: second.displacementAmplification,
+      },
+    };
+  }
+  return second;
 }
 
 /** Honest display amplification sized to a legible 28 px maximum displacement. */
