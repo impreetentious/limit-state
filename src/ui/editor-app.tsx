@@ -12,6 +12,13 @@ import { MEMBER_HARD_LIMIT, MEMBER_SOFT_LIMIT, type EditorTool, useEditorStore }
 import { analyzeRamp, rampCapacity } from '../stories/ramp';
 import { analyzeTrafficAt, mergeMomentEnvelope, prepareTraffic, trafficYieldWeightAt } from '../stories/traffic';
 import {
+  earthquakeUtilization,
+  initialEarthquakeState,
+  prepareEarthquake,
+  stepEarthquake,
+  type EarthquakeScenario,
+} from '../stories/earthquake';
+import {
   detectResonance,
   initialWindState,
   measuredDaf,
@@ -46,6 +53,7 @@ export function EditorApp(): React.JSX.Element {
   const resultDiagram = useEditorStore((state) => state.resultDiagram);
   const showDeformed = useEditorStore((state) => state.showDeformed);
   const shearFlexible = useEditorStore((state) => state.shearFlexible);
+  const secondOrder = useEditorStore((state) => state.secondOrder);
   const setMode = useEditorStore((state) => state.setMode);
   const setTool = useEditorStore((state) => state.setTool);
   const setGridSnap = useEditorStore((state) => state.setGridSnap);
@@ -59,7 +67,8 @@ export function EditorApp(): React.JSX.Element {
   const setResultDiagram = useEditorStore((state) => state.setResultDiagram);
   const setShowDeformed = useEditorStore((state) => state.setShowDeformed);
   const setShearFlexible = useEditorStore((state) => state.setShearFlexible);
-  const analysisOptions = useMemo(() => ({ shearFlexible }), [shearFlexible]);
+  const setSecondOrder = useEditorStore((state) => state.setSecondOrder);
+  const analysisOptions = useMemo(() => ({ shearFlexible, secondOrder }), [secondOrder, shearFlexible]);
   const baseAnalysis = useMemo(() => analyzeStaticModel(model, analysisOptions), [analysisOptions, model]);
   const stockyMembers = useMemo(() => stockyMemberIds(model), [model]);
   const requestId = useRef(0);
@@ -72,6 +81,7 @@ export function EditorApp(): React.JSX.Element {
   const [momentEnvelope, setMomentEnvelope] = useState<Map<number, number>>(new Map());
   const [envelopeEnabled, setEnvelopeEnabled] = useState(false);
   const [windFrame, setWindFrame] = useState<WindFrame>();
+  const [earthquakeFrame, setEarthquakeFrame] = useState<EarthquakeFrame>();
   const [failureReplay, setFailureReplay] = useState(0);
   const [failurePhase, setFailurePhase] = useState<number>();
   const reducedMotion = usePrefersReducedMotion();
@@ -141,6 +151,10 @@ export function EditorApp(): React.JSX.Element {
   const analysis = trafficFrame?.analysis ?? rampFrame?.analysis ?? baseAnalysis;
   const deformation = analysis.kind === 'stable' ? deformationDisplay(analysis.mesh, analysis.result.u, 44) : null;
   const windScenario = useMemo(() => model.story.kind === 'wind' ? prepareWind(model, analysisOptions) : undefined, [analysisOptions, model]);
+  const earthquakeScenario = useMemo(
+    () => model.story.kind === 'earthquake' ? prepareEarthquake(model, analysisOptions) : undefined,
+    [analysisOptions, model],
+  );
   const modal = eigen.kind === 'ready' ? eigen.modal : undefined;
   const trafficDuration = trafficFrame && model.story.kind === 'traffic'
     ? (trafficFrame.length + 4) / Math.max(0.1, model.story.speed)
@@ -159,6 +173,7 @@ export function EditorApp(): React.JSX.Element {
     setStoryTime(0);
     setMomentEnvelope(new Map());
     setWindFrame(undefined);
+    setEarthquakeFrame(undefined);
   }, [model]);
 
   useEffect(() => {
@@ -182,7 +197,7 @@ export function EditorApp(): React.JSX.Element {
   }, [failureKey, failureReplay, reducedMotion]);
 
   useEffect(() => {
-    if (mode !== 'test' || !storyPlaying || model.story.kind === 'wind') return;
+    if (mode !== 'test' || !storyPlaying || model.story.kind === 'wind' || model.story.kind === 'earthquake') return;
     let frame = 0;
     let previous = performance.now();
     const tick = (now: number) => {
@@ -239,6 +254,28 @@ export function EditorApp(): React.JSX.Element {
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
   }, [modal, mode, storyPlaying, windScenario]);
+
+  useEffect(() => {
+    if (mode !== 'test' || !storyPlaying || !earthquakeScenario || !modal) return;
+    const initial = initialEarthquakeState(earthquakeScenario, modal);
+    if (!initial) return;
+    let current = initial;
+    let frame = 0;
+    const tick = () => {
+      current = stepEarthquake(earthquakeScenario, current);
+      const yieldMember = governingYieldMember(earthquakeUtilization(earthquakeScenario, current.u));
+      setEarthquakeFrame({ scenario: earthquakeScenario, t: current.t, u: current.u, yieldMember });
+      setStoryTime(current.t);
+      if (current.t >= earthquakeScenario.duration) {
+        setStoryPlaying(false);
+        return;
+      }
+      frame = window.requestAnimationFrame(tick);
+    };
+    setEarthquakeFrame({ scenario: earthquakeScenario, t: initial.t, u: initial.u });
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [earthquakeScenario, modal, mode, storyPlaying]);
 
   useEffect(() => {
     let cancelled = false;
@@ -333,7 +370,7 @@ export function EditorApp(): React.JSX.Element {
             modeGhost={modeGhost}
             trafficAxles={trafficFrame?.axles}
             momentEnvelope={envelopeEnabled ? momentEnvelope : undefined}
-            dynamicDisplacement={windFrame?.u}
+            dynamicDisplacement={windFrame?.u ?? earthquakeFrame?.u}
             failureCinematic={failurePhase !== undefined && rampFrame?.analysis.kind === 'stable'
               ? { u: rampFrame.analysis.result.u, phase: failurePhase, reducedMotion }
               : undefined}
@@ -344,10 +381,14 @@ export function EditorApp(): React.JSX.Element {
             {(['none', 'axial', 'shear', 'moment'] as const).map((diagram) => <button key={diagram} type="button" className={resultDiagram === diagram ? 'active' : ''} onClick={() => setResultDiagram(diagram)}>{diagram === 'none' ? 'Results' : diagram[0]!.toUpperCase() + diagram.slice(1)}</button>)}
             <label><input type="checkbox" checked={showDeformed} onChange={(event) => setShowDeformed(event.target.checked)} /> Deformed</label>
             <label><input type="checkbox" checked={shearFlexible} onChange={(event) => setShearFlexible(event.target.checked)} /> Timoshenko</label>
+            <label><input type="checkbox" checked={secondOrder} onChange={(event) => setSecondOrder(event.target.checked)} /> P-Δ</label>
           </div>}
+          {analysis.kind === 'divergent' && <div className="shear-note" role="alert">{analysis.message}</div>}
           {stockyMembers.length > 0 && <div className="shear-note" role="note">Shear flexibility matters when L/h &lt; 10 — {stockyMembers.length === 1 ? `member ${stockyMembers[0]} is` : `${stockyMembers.length} members are`} stocky{shearFlexible ? '' : '; enable Timoshenko to include it'}.</div>}
+          {analysis.kind === 'stable' && analysis.secondOrder && <div className="pdelta-badge" role="status">P-Δ ×{analysis.secondOrder.momentAmplification.toFixed(2)} moment · ×{analysis.secondOrder.displacementAmplification.toFixed(2)} disp vs linear ({analysis.secondOrder.iterations} iter)</div>}
           {deformation && showDeformed && deformation.maxMeters > 0 && <div className="deformation-badge">deformation ×{formatScale(deformation.scale)} — true max {formatLength(deformation.maxMeters)}</div>}
           {windFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(windFrame.scenario.mesh, windFrame.u, 44).scale)} · simplified uniform wind field (member-normal 2D pressure)</div>}
+          {earthquakeFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(earthquakeFrame.scenario.mesh, earthquakeFrame.u, 44).scale)} · horizontal base excitation −M·ι·ü_g</div>}
           {failurePhase !== undefined && <div className="failure-cinematic-badge">failure animation ×{reducedMotion ? 'static' : formatScale(0.25 + failurePhase * 0.75)} — illustrative, computed onset and mechanism</div>}
           {model.members.length >= MEMBER_SOFT_LIMIT && <div className="member-limit-badge">{model.members.length}/{MEMBER_HARD_LIMIT} members — performance warning at {MEMBER_SOFT_LIMIT}; hard cap {MEMBER_HARD_LIMIT}</div>}
           {analysis.kind === 'stable' && <div className="eigen-panel" aria-live="polite">
@@ -382,8 +423,9 @@ export function EditorApp(): React.JSX.Element {
             ramp={rampFrame}
             rampCapacity={capacity}
             wind={windFrame}
+            earthquake={earthquakeFrame}
             onTogglePlayback={() => setStoryPlaying((playing) => !playing)}
-            onRestart={() => { setStoryTime(0); setMomentEnvelope(new Map()); setWindFrame(undefined); setStoryPlaying(false); }}
+            onRestart={() => { setStoryTime(0); setMomentEnvelope(new Map()); setWindFrame(undefined); setEarthquakeFrame(undefined); setStoryPlaying(false); }}
             onSeekTrafficStation={(station) => {
               if (model.story.kind !== 'traffic') return;
               setStoryPlaying(false);
@@ -412,6 +454,13 @@ interface WindFrame {
   coordinates: Float64Array;
   daf?: { mode: number; ratio: number };
   resonanceMode?: number;
+  yieldMember?: number;
+}
+
+interface EarthquakeFrame {
+  scenario: EarthquakeScenario;
+  t: number;
+  u: Float64Array;
   yieldMember?: number;
 }
 

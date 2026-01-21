@@ -4,13 +4,16 @@
  * Each milestone converts its `it.todo` rows into real tests.
  */
 import { describe, expect, it } from 'vitest';
-import { assembleF, assembleK, elementLocalStiffness, kLocal, kgLocal, mLocal, shearFactor, transformToGlobal } from '../assemble';
+import { assembleF, assembleK, assembleLoadCase, elementLocalStiffness, kLocal, kgLocal, mLocal, shearFactor, transformToGlobal } from '../assemble';
 import { buckling, modal } from '../eigen';
 import { newmarkStep, rayleighDampingRatio, rayleighFit, type NewmarkState } from '../dynamics';
 import { decodeModel, encodeModel } from '../../share/serialize';
 import { collapseCascade, evaluateFailure } from '../failure';
 import { sectionProps } from '../materials';
 import { buildMesh } from '../mesh';
+import { earthquakeRecord } from '../records';
+import { solveSecondOrderStatic } from '../second-order';
+import { newmarkSdofRelative, peakAbs, responseSpectrum } from '../spectrum';
 import { expandFreeVector, factorLDLT, freeMatrix, freeVector, mechanismEditorNode, solveFactored } from '../solve';
 import { analyzeStaticModel } from '../statics';
 import type { AnalysisMesh, EditorModel, MemberSpec, SectionSpec, SupportSpec } from '../types';
@@ -160,6 +163,58 @@ describe('Phase 2A — Timoshenko shear-flexible beams', () => {
     if (!factored.ok) throw new Error('Timoshenko tip block must be positive definite.');
     const [v] = solveFactored(factored.factor, Float64Array.of(1, 0));
     expect(v).toBeCloseTo(4 / 3, 12);
+  });
+});
+
+describe('Phase 2B — P-Δ second-order statics', () => {
+  it('G15: beam-column moment amplification ≈ 1/(1−P/P_cr) within 2%', () => {
+    // Fixed-free cantilever: tip lateral H + axial compression P.
+    // Exact small-deflection amplification of base moment is tan(μ)/μ with
+    // μ = L√(P/EI); the engineering approximation is 1/(1−P/P_cr).
+    const L = 10;
+    const model = modelFor(
+      [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 0, y: L },
+      ],
+      [{ node: 1, kind: 'fixed' }],
+    );
+    model.loads.gravity = false;
+    model.members[0]!.section = { kind: 'rect', b: 0.2, h: 0.2 };
+    const mesh = buildMesh(model);
+    const E = mesh.elements[0]!.E;
+    const I = mesh.elements[0]!.I;
+    const Pcr = (Math.PI ** 2 * E * I) / (4 * L * L);
+    const P = 0.25 * Pcr;
+    const H = 1_000;
+    const loads = assembleLoadCase(mesh, {
+      gravity: false,
+      points: [{ meshNode: 1, fx: H, fy: -P }],
+    });
+    const second = solveSecondOrderStatic(mesh, loads);
+    if (second.kind !== 'stable') throw new Error(`Expected converged P-Δ, received ${second.kind}.`);
+    const mu = L * Math.sqrt(P / (E * I));
+    const exact = Math.tan(mu) / mu;
+    const approximate = 1 / (1 - P / Pcr);
+    expect(relativeError(second.momentAmplification, exact)).toBeLessThan(0.02);
+    // The engineering approximation — keep it within a few percent of exact.
+    expect(relativeError(approximate, exact)).toBeLessThan(0.05);
+    expect(second.momentAmplification).toBeGreaterThan(1.05);
+    expect(second.iterations).toBeLessThanOrEqual(8);
+  });
+});
+
+describe('Phase 2C — earthquake spectrum', () => {
+  it('G16: SDOF spectrum peak matches Newmark SDOF run within 2%', () => {
+    const record = earthquakeRecord('pulse');
+    const zeta = 0.05;
+    const spectrum = responseSpectrum(record, zeta);
+    const peak = spectrum.points[spectrum.peakIndex]!;
+    const omega = 2 * Math.PI * peak.freqHz;
+    const u = newmarkSdofRelative(omega, zeta, record.accel, record.dt);
+    const sa = omega * omega * peakAbs(u);
+    expect(relativeError(peak.sa, sa)).toBeLessThan(0.02);
+    expect(peak.sa).toBeGreaterThan(0);
   });
 });
 

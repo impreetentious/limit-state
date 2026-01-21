@@ -3,7 +3,9 @@
 import { useMemo } from 'react';
 import { evaluateFailure } from '../fem/failure';
 import { buildMesh } from '../fem/mesh';
-import type { AnalysisOptions, EditorModel, EigenResult, FailureReport } from '../fem/types';
+import { earthquakeRecords } from '../fem/records';
+import type { AnalysisOptions, EarthquakeRecordId, EditorModel, EigenResult, FailureReport } from '../fem/types';
+import type { EarthquakeScenario } from '../stories/earthquake';
 import type { RampFrame } from '../stories/ramp';
 import type { TrafficFrame } from '../stories/traffic';
 import type { WindScenario } from '../stories/wind';
@@ -15,6 +17,13 @@ interface WindFrame {
   coordinates: Float64Array;
   daf?: { mode: number; ratio: number };
   resonanceMode?: number;
+  yieldMember?: number;
+}
+
+interface EarthquakeFrame {
+  scenario: EarthquakeScenario;
+  t: number;
+  u: Float64Array;
   yieldMember?: number;
 }
 
@@ -33,6 +42,7 @@ interface TestConsoleProps {
   ramp?: RampFrame;
   rampCapacity?: number;
   wind?: WindFrame;
+  earthquake?: EarthquakeFrame;
   onTogglePlayback: () => void;
   onRestart: () => void;
   onSeekTrafficStation: (station: number) => void;
@@ -42,7 +52,7 @@ interface TestConsoleProps {
 
 /** Test-story controls, real playback state, and capacity/failure explanation. */
 export function TestConsole({
-  model, modal, buckling, analysisOptions = {}, playing, storyTime, traffic, trafficYieldCapacity, envelopeEnabled, onEnvelopeEnabled, ramp, rampCapacity, wind, onTogglePlayback, onRestart, onSeekTrafficStation, onReplayFailure, onReturn,
+  model, modal, buckling, analysisOptions = {}, playing, storyTime, traffic, trafficYieldCapacity, envelopeEnabled, onEnvelopeEnabled, ramp, rampCapacity, wind, earthquake, onTogglePlayback, onRestart, onSeekTrafficStation, onReplayFailure, onReturn,
 }: TestConsoleProps): React.JSX.Element {
   const story = useEditorStore((state) => state.model.story);
   const setStory = useEditorStore((state) => state.setStory);
@@ -67,20 +77,28 @@ export function TestConsole({
     : undefined;
   const frontStation = story.kind === 'traffic' ? storyTime * story.speed : 0;
   const windMarks = modal ? Array.from(modal.values.slice(0, 4), (value, index) => ({ label: `f${index + 1}`, value: value / (Math.PI * 2) })) : [];
+  const records = useMemo(() => earthquakeRecords(), []);
+  const spectrum = earthquake?.scenario.spectrum;
+  const spectrumPeak = spectrum ? spectrum.points[spectrum.peakIndex] : undefined;
 
   return <section className="test-console" aria-label="Test stories and capacity">
     <div className="test-console-header"><span>Test Console</span><button type="button" onClick={onReturn}>Return to Build</button></div>
     <div className="story-tabs">
-      {(['traffic', 'wind', 'ramp'] as const).map((kind) => <button key={kind} type="button" className={story.kind === kind ? 'active' : ''} onClick={() => {
+      {(['traffic', 'wind', 'earthquake', 'ramp'] as const).map((kind) => <button key={kind} type="button" className={story.kind === kind ? 'active' : ''} onClick={() => {
         if (kind === 'traffic') setStory({ kind, weightkN: 300, speed: 12 });
         if (kind === 'wind') setStory({ kind, pattern: 'sine', amplitudekNm: 2, freqHz: Math.min(5, Math.max(0.05, f1 ?? 1)), zeta: 0.02 });
+        if (kind === 'earthquake') setStory({ kind, record: 'pulse', scale: 1, zeta: 0.05 });
         if (kind === 'ramp') setStory({ kind });
       }}>{kind}</button>)}
     </div>
     <div className="story-transport">
       <button type="button" className="play-button" onClick={onTogglePlayback}>{playing ? 'Pause' : 'Play'} <kbd>Space</kbd></button>
       <button type="button" onClick={onRestart}>Restart</button>
-      <span>{story.kind === 'wind' ? `t ${storyTime.toFixed(2)} s` : story.kind === 'ramp' ? `λ ${(ramp?.factor ?? 0).toFixed(2)}` : `station ${frontStation.toFixed(1)} m`}</span>
+      <span>{
+        story.kind === 'wind' || story.kind === 'earthquake' ? `t ${storyTime.toFixed(2)} s`
+          : story.kind === 'ramp' ? `λ ${(ramp?.factor ?? 0).toFixed(2)}`
+            : `station ${frontStation.toFixed(1)} m`
+      }</span>
     </div>
     {story.kind === 'traffic' && <div className="story-fields">
       <label>Vehicle {story.weightkN.toFixed(0)} kN<input type="range" min="10" max="500" step="10" value={story.weightkN} onChange={(event) => setStory({ ...story, weightkN: Number(event.target.value) })} /></label>
@@ -100,6 +118,16 @@ export function TestConsole({
       {wind?.resonanceMode !== undefined && <div className="resonance-panel" role="status">{wind.yieldMember !== undefined ? `Resonance → yield at member ${wind.yieldMember}` : `Resonance with mode ${wind.resonanceMode + 1} (${(modal?.values[wind.resonanceMode]! / (Math.PI * 2)).toFixed(2)} Hz)`}</div>}
       {wind && <ModeBars coordinates={wind.coordinates} modal={modal} />}
     </div>}
+    {story.kind === 'earthquake' && <div className="story-fields">
+      <label>Record <select value={story.record} onChange={(event) => setStory({ ...story, record: event.target.value as EarthquakeRecordId })}>
+        {records.map((record) => <option key={record.id} value={record.id}>{record.label}</option>)}
+      </select></label>
+      <label>Scale ×{story.scale.toFixed(2)}<input type="range" min="0.25" max="3" step="0.05" value={story.scale} onChange={(event) => setStory({ ...story, scale: Number(event.target.value) })} /></label>
+      <label>Damping {(story.zeta * 100).toFixed(1)}%<input type="range" min="0.005" max="0.1" step="0.005" value={story.zeta} onChange={(event) => setStory({ ...story, zeta: Number(event.target.value) })} /></label>
+      <p>Horizontal base excitation F = −M·ι·ü_g(t) · {earthquake?.scenario.record.note ?? records.find((r) => r.id === story.record)?.note}</p>
+      {earthquake?.yieldMember !== undefined && <div className="resonance-panel" role="status">Yield at member {earthquake.yieldMember} under base motion</div>}
+      {spectrum && spectrumPeak && <SpectrumPanel spectrum={spectrum} peak={spectrumPeak} f1={f1} />}
+    </div>}
     {story.kind === 'ramp' && <div className="story-fields">
       <p>Proportional load ramp: {describeFailure(ramp?.report ?? failure)}</p>
       <p>Stops at the exact first limit {rampCapacity && Number.isFinite(rampCapacity) ? `λ ${rampCapacity.toFixed(2)}` : 'when a stable reference load exists'} · quasi-static sequence — inertia not modeled.</p>
@@ -114,6 +142,38 @@ export function TestConsole({
       {story.kind === 'traffic' && <span>{trafficCapacityLabel(trafficYieldCapacity)}</span>}
     </div>
   </section>;
+}
+
+function SpectrumPanel({
+  spectrum,
+  peak,
+  f1,
+}: {
+  spectrum: NonNullable<EarthquakeFrame['scenario']['spectrum']>;
+  peak: { freqHz: number; sa: number };
+  f1?: number;
+}): React.JSX.Element {
+  const maxSa = Math.max(...spectrum.points.map((point) => point.sa), 1e-9);
+  return <div className="spectrum-panel" aria-label="Response spectrum">
+    <div className="spectrum-header">
+      <span>Sa spectrum (ζ {(spectrum.zeta * 100).toFixed(0)}%)</span>
+      <span>peak {peak.sa.toFixed(2)} m/s² at {peak.freqHz.toFixed(2)} Hz</span>
+    </div>
+    <svg viewBox="0 0 320 72" className="spectrum-chart" role="img" aria-label="Pseudo-acceleration spectrum 0.1 to 10 Hz">
+      {spectrum.points.map((point, index) => {
+        const x = (index / Math.max(1, spectrum.points.length - 1)) * 300 + 10;
+        const h = (point.sa / maxSa) * 56;
+        const active = index === spectrum.peakIndex;
+        return <rect key={point.freqHz} x={x} y={64 - h} width={3.2} height={h} fill={active ? '#c0392b' : '#2456a4'} opacity={active ? 1 : 0.75} />;
+      })}
+      {f1 !== undefined && f1 >= 0.1 && f1 <= 10 && (() => {
+        const t = Math.log(f1 / 0.1) / Math.log(10 / 0.1);
+        const x = t * 300 + 10;
+        return <line x1={x} x2={x} y1={8} y2={64} stroke="#1a1d21" strokeDasharray="2 2" strokeWidth="1" />;
+      })()}
+    </svg>
+    <p className="honesty-note">SDOF pseudo-acceleration sweep 0.1–10 Hz — dashed mark is f₁ when in range.</p>
+  </div>;
 }
 
 function ModeBars({ coordinates, modal }: { coordinates: Float64Array; modal?: EigenResult }): React.JSX.Element | null {
