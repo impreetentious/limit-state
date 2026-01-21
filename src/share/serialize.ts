@@ -154,6 +154,14 @@ function parseStory(value: unknown): StorySpec {
   if (value.kind === 'wind' && (value.pattern === 'steady' || value.pattern === 'sine' || value.pattern === 'gusts') && finitePositive(value.amplitudekNm) && finitePositive(value.freqHz) && finitePositive(value.zeta)) {
     return { kind: 'wind', pattern: value.pattern, amplitudekNm: value.amplitudekNm, freqHz: value.freqHz, zeta: value.zeta };
   }
+  if (
+    value.kind === 'earthquake'
+    && (value.record === 'pulse' || value.record === 'chirp' || value.record === 'elcentro-scaled')
+    && finitePositive(value.scale)
+    && finitePositive(value.zeta)
+  ) {
+    return { kind: 'earthquake', record: value.record, scale: value.scale, zeta: value.zeta };
+  }
   throw new Error('Shared model has invalid story settings.');
 }
 

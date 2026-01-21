@@ -30,7 +30,7 @@ export function rampCapacity(model: EditorModel, options: AnalysisOptions = {}):
 export function analyzeRamp(model: EditorModel, factor: number, includeCascade = false, options: AnalysisOptions = {}): RampFrame {
   const safeFactor = Math.max(0.001, factor);
   const analysis = analyzeAtFactor(model, safeFactor, options);
-  if (analysis.kind === 'invalid' || analysis.kind === 'mechanism') return { factor: safeFactor, analysis };
+  if (analysis.kind === 'invalid' || analysis.kind === 'mechanism' || analysis.kind === 'divergent') return { factor: safeFactor, analysis };
   try {
     const report = evaluateFailure(model, safeFactor, options);
     return {
