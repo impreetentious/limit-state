@@ -108,8 +108,8 @@ function deckModel(deck: number[]): EditorModel {
     seed: 1,
     nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 8, y: 0 }, { id: 3, x: 16, y: 0 }],
     members: [
-      { id: 1, a: 1, b: 2, material: 'steel-s355', section: defaultSection('box'), releaseA: false, releaseB: false , cableOnly: false },
-      { id: 2, a: 2, b: 3, material: 'steel-s355', section: defaultSection('box'), releaseA: false, releaseB: false , cableOnly: false },
+      { id: 1, a: 1, b: 2, material: 'steel-s355', section: defaultSection('box'), releaseA: false, releaseB: false, cableOnly: false },
+      { id: 2, a: 2, b: 3, material: 'steel-s355', section: defaultSection('box'), releaseA: false, releaseB: false, cableOnly: false },
     ],
     supports: [],
     loads: { gravity: false, points: [] },

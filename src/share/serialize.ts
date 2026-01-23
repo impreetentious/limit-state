@@ -111,7 +111,21 @@ function parseMember(value: unknown): MemberSpec {
   if (!isRecord(value) || !finiteInteger(value.id) || !finiteInteger(value.a) || !finiteInteger(value.b) || !validMaterial(value.material) || typeof value.releaseA !== 'boolean' || typeof value.releaseB !== 'boolean') {
     throw new Error('Shared model has an invalid member.');
   }
-  return { id: value.id, a: value.a, b: value.b, material: value.material, section: parseSection(value.section), releaseA: value.releaseA, releaseB: value.releaseB };
+  const cableOnly = value.cableOnly === undefined ? false : value.cableOnly === true;
+  if (value.cableOnly !== undefined && typeof value.cableOnly !== 'boolean') {
+    throw new Error('Shared model has an invalid member.');
+  }
+  const member: MemberSpec = {
+    id: value.id,
+    a: value.a,
+    b: value.b,
+    material: value.material,
+    section: parseSection(value.section),
+    releaseA: cableOnly ? true : value.releaseA,
+    releaseB: cableOnly ? true : value.releaseB,
+    cableOnly,
+  };
+  return member;
 }
 
 function parseSection(value: unknown): SectionSpec {
@@ -148,6 +162,7 @@ function parsePoint(value: unknown): EditorModel['loads']['points'][number] {
 function parseStory(value: unknown): StorySpec {
   if (!isRecord(value) || typeof value.kind !== 'string') throw new Error('Shared model has an invalid story.');
   if (value.kind === 'ramp') return { kind: 'ramp' };
+  if (value.kind === 'pushover') return { kind: 'pushover' };
   if (value.kind === 'traffic' && finitePositive(value.weightkN) && finitePositive(value.speed)) {
     return { kind: 'traffic', weightkN: value.weightkN, speed: value.speed };
   }

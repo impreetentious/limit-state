@@ -162,6 +162,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
             section: { ...DEFAULT_SECTION },
             releaseA: false,
             releaseB: false,
+            cableOnly: false,
           },
         ],
       };
@@ -196,14 +197,24 @@ export const useEditorStore = create<EditorStore>((set) => ({
   },
   updateMember: (id, patch) => mutate(set, (model) => ({
     ...model,
-    members: model.members.map((member) => (member.id === id ? { ...member, ...patch } : member)),
+    members: model.members.map((member) => {
+      if (member.id !== id) return member;
+      const next = { ...member, ...patch };
+      if (next.cableOnly) return { ...next, releaseA: true, releaseB: true , cableOnly: false };
+      return next;
+    }),
   })),
   updateMembers: (ids, patch) => {
     const selected = new Set(ids);
     if (selected.size === 0) return;
     mutate(set, (model) => ({
       ...model,
-      members: model.members.map((member) => selected.has(member.id) ? { ...member, ...patch } : member),
+      members: model.members.map((member) => {
+        if (!selected.has(member.id)) return member;
+        const next = { ...member, ...patch };
+        if (next.cableOnly) return { ...next, releaseA: true, releaseB: true , cableOnly: false };
+        return next;
+      }),
     }));
   },
   setSupport: (node, kind) => mutate(set, (model) => ({

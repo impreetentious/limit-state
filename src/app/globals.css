@@ -507,6 +507,15 @@ kbd {
   background: rgba(255, 255, 255, 0.35);
 }
 
+.cable-banner {
+  margin-top: 0.45rem;
+  padding: 0.35rem 0.45rem;
+  border-left: 3px solid #147267;
+  background: rgba(20, 114, 103, 0.08);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+}
+
 .spectrum-header {
   display: flex;
   justify-content: space-between;

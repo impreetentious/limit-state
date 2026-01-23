@@ -108,8 +108,9 @@ function MemberInspector({ member }: { member: MemberSpec }): React.JSX.Element 
         <span>Mass <b>{tonnes.toFixed(3)} t</b></span>
       </div>
       <div className="release-fields">
-        <label><input type="checkbox" checked={member.releaseA} onChange={(event) => updateMember(member.id, { releaseA: event.target.checked })} /> Release A</label>
-        <label><input type="checkbox" checked={member.releaseB} onChange={(event) => updateMember(member.id, { releaseB: event.target.checked })} /> Release B</label>
+        <label><input type="checkbox" checked={member.releaseA} disabled={member.cableOnly} onChange={(event) => updateMember(member.id, { releaseA: event.target.checked })} /> Release A</label>
+        <label><input type="checkbox" checked={member.releaseB} disabled={member.cableOnly} onChange={(event) => updateMember(member.id, { releaseB: event.target.checked })} /> Release B</label>
+        <label><input type="checkbox" checked={member.cableOnly} onChange={(event) => updateMember(member.id, { cableOnly: event.target.checked })} /> Tension-only cable</label>
       </div>
       <button className="danger-button" type="button" onClick={() => deleteMember(member.id)}>Delete member</button>
     </aside>

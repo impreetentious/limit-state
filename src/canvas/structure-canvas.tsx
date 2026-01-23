@@ -257,8 +257,10 @@ function drawScene(
     const selected = memberIsSelected(selection, member.id);
     context.strokeStyle = selected ? '#2456a4' : utilization ? stressColor(utilization.get(member.id) ?? 0) : deckSet.has(member.id) ? '#4d78bb' : '#1a1d21';
     const axialWidth = 2 + 2 * (axialByMember.get(member.id) ?? 0) / axialMaximum;
-    context.lineWidth = selected ? axialWidth + 1.5 : deckSet.has(member.id) ? Math.max(3, axialWidth) : axialWidth;
+    context.setLineDash(member.cableOnly ? [5, 4] : []);
+    context.lineWidth = selected ? axialWidth + 1.5 : deckSet.has(member.id) ? Math.max(3, axialWidth) : member.cableOnly ? 1.5 : axialWidth;
     context.stroke();
+    context.setLineDash([]);
     const envelope = momentEnvelope?.get(member.id) ?? 0;
     if (envelope > 0) {
       context.beginPath();
