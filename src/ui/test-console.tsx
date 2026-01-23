@@ -1,7 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { evaluateFailure } from '../fem/failure';
+import {
+  computeInfluenceLine,
+  envelopeFromInfluence,
+  type InfluenceLine,
+  type InfluenceQuantity,
+} from '../fem/influence';
 import { buildMesh } from '../fem/mesh';
 import { earthquakeRecords } from '../fem/records';
 import type { AnalysisOptions, EarthquakeRecordId, EditorModel, EigenResult, FailureReport } from '../fem/types';
@@ -39,6 +45,8 @@ interface TestConsoleProps {
   trafficYieldCapacity?: number | null;
   envelopeEnabled: boolean;
   onEnvelopeEnabled: (enabled: boolean) => void;
+  influenceEnvelope: boolean;
+  onInfluenceEnvelope: (enabled: boolean) => void;
   ramp?: RampFrame;
   rampCapacity?: number;
   wind?: WindFrame;
@@ -52,10 +60,11 @@ interface TestConsoleProps {
 
 /** Test-story controls, real playback state, and capacity/failure explanation. */
 export function TestConsole({
-  model, modal, buckling, analysisOptions = {}, playing, storyTime, traffic, trafficYieldCapacity, envelopeEnabled, onEnvelopeEnabled, ramp, rampCapacity, wind, earthquake, onTogglePlayback, onRestart, onSeekTrafficStation, onReplayFailure, onReturn,
+  model, modal, buckling, analysisOptions = {}, playing, storyTime, traffic, trafficYieldCapacity, envelopeEnabled, onEnvelopeEnabled, influenceEnvelope, onInfluenceEnvelope, ramp, rampCapacity, wind, earthquake, onTogglePlayback, onRestart, onSeekTrafficStation, onReplayFailure, onReturn,
 }: TestConsoleProps): React.JSX.Element {
   const story = useEditorStore((state) => state.model.story);
   const setStory = useEditorStore((state) => state.setStory);
+  const [influenceKey, setInfluenceKey] = useState('moment-mid');
   const failure = useMemo(() => {
     try { return evaluateFailure(model, 1, analysisOptions); } catch { return undefined; }
   }, [analysisOptions, model]);
@@ -80,6 +89,22 @@ export function TestConsole({
   const records = useMemo(() => earthquakeRecords(), []);
   const spectrum = earthquake?.scenario.spectrum;
   const spectrumPeak = spectrum ? spectrum.points[spectrum.peakIndex] : undefined;
+  const influenceChoices = useMemo(() => influenceQuantityChoices(model), [model]);
+  const influenceQuantity = influenceChoices.find((choice) => choice.key === influenceKey)?.quantity
+    ?? influenceChoices[0]?.quantity;
+  const influenceLine = useMemo(() => {
+    if (story.kind !== 'traffic' || !influenceQuantity || model.deck.length === 0) return undefined;
+    try {
+      return computeInfluenceLine(model, influenceQuantity, analysisOptions);
+    } catch {
+      return undefined;
+    }
+  }, [analysisOptions, influenceQuantity, model, story.kind]);
+  const influenceTrafficEnvelope = useMemo(() => {
+    if (!influenceLine || story.kind !== 'traffic') return undefined;
+    const axleForce = Math.max(0, story.weightkN) * 1000 / 2;
+    return envelopeFromInfluence(influenceLine, axleForce);
+  }, [influenceLine, story]);
 
   return <section className="test-console" aria-label="Test stories and capacity">
     <div className="test-console-header"><span>Test Console</span><button type="button" onClick={onReturn}>Return to Build</button></div>
@@ -105,7 +130,12 @@ export function TestConsole({
       <label>Speed {story.speed.toFixed(0)} m/s<input type="range" min="5" max="30" step="1" value={story.speed} onChange={(event) => setStory({ ...story, speed: Number(event.target.value) })} /></label>
       <label>Truck station {frontStation.toFixed(1)} m<input aria-label="Truck station" type="range" min="0" max={Math.max(0, traffic?.length ?? 0)} step="0.05" value={Math.min(Math.max(0, frontStation), Math.max(0, traffic?.length ?? 0))} disabled={!traffic || traffic.length === 0} onChange={(event) => onSeekTrafficStation(Number(event.target.value))} /></label>
       <label className="envelope-toggle"><input type="checkbox" checked={envelopeEnabled} onChange={(event) => onEnvelopeEnabled(event.target.checked)} /> Moment envelope</label>
+      <label className="envelope-toggle"><input type="checkbox" checked={influenceEnvelope} disabled={!envelopeEnabled || model.deck.length === 0} onChange={(event) => onInfluenceEnvelope(event.target.checked)} /> from influence line</label>
       <p>Two axles, 4 m apart · {traffic ? `${traffic.length.toFixed(1)} m deck sweep` : 'paint a contiguous deck path'} · quasi-static — real vehicles add roughly 10–30% dynamic amplification.</p>
+      {influenceChoices.length > 0 && <label>Influence <select aria-label="Influence quantity" value={influenceChoices.some((choice) => choice.key === influenceKey) ? influenceKey : influenceChoices[0]!.key} onChange={(event) => setInfluenceKey(event.target.value)}>
+        {influenceChoices.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
+      </select></label>}
+      {influenceLine && <InfluencePanel line={influenceLine} trafficEnvelope={influenceTrafficEnvelope} station={frontStation} />}
     </div>}
     {story.kind === 'wind' && <div className="story-fields">
       <label>Pattern <select value={story.pattern} onChange={(event) => setStory({ ...story, pattern: event.target.value as typeof story.pattern })}><option value="steady">steady</option><option value="sine">sine</option><option value="gusts">gusts</option></select></label>
@@ -142,6 +172,63 @@ export function TestConsole({
       {story.kind === 'traffic' && <span>{trafficCapacityLabel(trafficYieldCapacity)}</span>}
     </div>
   </section>;
+}
+
+function InfluencePanel({
+  line,
+  trafficEnvelope,
+  station,
+}: {
+  line: InfluenceLine;
+  trafficEnvelope?: { maxAbs: number; criticalStation: number };
+  station: number;
+}): React.JSX.Element {
+  const peak = Math.max(...line.samples.map((sample) => Math.abs(sample.value)), 1e-12);
+  const points = line.samples.map((sample, index) => {
+    const x = line.length <= 0 ? 10 : (sample.station / line.length) * 300 + 10;
+    const y = 36 - (sample.value / peak) * 28;
+    return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
+  const markerX = line.length <= 0 ? 10 : (Math.min(Math.max(0, station), line.length) / line.length) * 300 + 10;
+  return <div className="influence-panel" aria-label="Influence line">
+    <div className="spectrum-header">
+      <span>Influence line · unit downward load</span>
+      <span>peak {formatInfluence(line.peak.value)} at {line.peak.station.toFixed(1)} m</span>
+    </div>
+    <svg viewBox="0 0 320 72" className="spectrum-chart" role="img" aria-label="Influence line along the deck">
+      <line x1="10" x2="310" y1="36" y2="36" stroke="rgba(26,29,33,0.25)" strokeWidth="1" />
+      <path d={points} fill="none" stroke="#2456a4" strokeWidth="1.6" />
+      <line x1={markerX} x2={markerX} y1="8" y2="64" stroke="#c0392b" strokeDasharray="2 2" strokeWidth="1" />
+    </svg>
+    <p className="honesty-note">
+      Unit-load sweep along the painted deck
+      {trafficEnvelope ? ` · two-axle envelope |η|max ${formatInfluence(trafficEnvelope.maxAbs)} at front ${trafficEnvelope.criticalStation.toFixed(1)} m` : ''}.
+    </p>
+  </div>;
+}
+
+function influenceQuantityChoices(model: EditorModel): Array<{ key: string; label: string; quantity: InfluenceQuantity }> {
+  if (model.deck.length === 0) return [];
+  const choices: Array<{ key: string; label: string; quantity: InfluenceQuantity }> = [];
+  for (const memberId of model.deck) {
+    choices.push({ key: `moment-${memberId}`, label: `M mid · member ${memberId}`, quantity: { kind: 'moment', memberId, at: 'mid' } });
+    choices.push({ key: `axial-${memberId}`, label: `N · member ${memberId}`, quantity: { kind: 'axial', memberId } });
+  }
+  for (const support of model.supports) {
+    choices.push({
+      key: `reaction-${support.node}`,
+      label: `R_y · node ${support.node}`,
+      quantity: { kind: 'reaction', nodeId: support.node, component: 'fy' },
+    });
+  }
+  return choices;
+}
+
+function formatInfluence(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 100) return value.toFixed(1);
+  if (abs >= 1) return value.toFixed(3);
+  return value.toExponential(2);
 }
 
 function SpectrumPanel({

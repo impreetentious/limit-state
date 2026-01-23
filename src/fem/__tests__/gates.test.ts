@@ -15,6 +15,7 @@ import { earthquakeRecord } from '../records';
 import { solveSecondOrderStatic } from '../second-order';
 import { newmarkSdofRelative, peakAbs, responseSpectrum } from '../spectrum';
 import { expandFreeVector, factorLDLT, freeMatrix, freeVector, mechanismEditorNode, solveFactored } from '../solve';
+import { computeInfluenceLine } from '../influence';
 import { analyzeStaticModel } from '../statics';
 import type { AnalysisMesh, EditorModel, MemberSpec, SectionSpec, SupportSpec } from '../types';
 
@@ -215,6 +216,37 @@ describe('Phase 2C — earthquake spectrum', () => {
     const sa = omega * omega * peakAbs(u);
     expect(relativeError(peak.sa, sa)).toBeLessThan(0.02);
     expect(peak.sa).toBeGreaterThan(0);
+  });
+});
+
+describe('Phase 2D — influence lines', () => {
+  it('G17: SS beam midspan-moment influence line is piecewise-linear with peak L/4 (exact)', () => {
+    // Simply-supported span: η_M(mid)(x) = x/2 for x ≤ L/2 and (L−x)/2 for x ≥ L/2.
+    // Peak at midspan load is L/4. Gate G17.
+    const L = 8;
+    const model = modelFor(
+      [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: L, y: 0 },
+      ],
+      [{ node: 1, kind: 'pin' }, { node: 2, kind: 'roller' }],
+    );
+    model.deck = [1];
+    const line = computeInfluenceLine(model, { kind: 'moment', memberId: 1, at: 'mid' }, { step: L / 40 });
+    expect(line.samples.length).toBeGreaterThan(10);
+    expect(relativeError(line.peak.value, L / 4)).toBeLessThan(1e-12);
+    expect(Math.abs(line.peak.station - L / 2)).toBeLessThan(L / 40 + 1e-12);
+    for (const sample of line.samples) {
+      const expected = sample.station <= L / 2 ? sample.station / 2 : (L - sample.station) / 2;
+      expect(relativeError(sample.value, expected)).toBeLessThan(1e-12);
+    }
+    // Piecewise linearity: samples on each half lie on the analytical rays.
+    const left = line.samples.filter((sample) => sample.station <= L / 2);
+    const right = line.samples.filter((sample) => sample.station >= L / 2);
+    expect(left.length).toBeGreaterThan(2);
+    expect(right.length).toBeGreaterThan(2);
+    expect(relativeError(left[0]!.value, 0)).toBeLessThan(1e-12);
+    expect(relativeError(right[right.length - 1]!.value, 0)).toBeLessThan(1e-12);
   });
 });
 

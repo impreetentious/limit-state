@@ -499,7 +499,8 @@ kbd {
   line-height: 1.35;
 }
 
-.spectrum-panel {
+.spectrum-panel,
+.influence-panel {
   margin-top: 0.45rem;
   padding: 0.4rem 0.45rem;
   border: 1px solid rgba(26, 29, 33, 0.14);

@@ -11,6 +11,7 @@ import { inspectStability } from '../state/stability';
 import { MEMBER_HARD_LIMIT, MEMBER_SOFT_LIMIT, type EditorTool, useEditorStore } from '../state/editor-store';
 import { analyzeRamp, rampCapacity } from '../stories/ramp';
 import { analyzeTrafficAt, mergeMomentEnvelope, prepareTraffic, trafficYieldWeightAt } from '../stories/traffic';
+import { memberMomentEnvelopeFromInfluence } from '../fem/influence';
 import {
   earthquakeUtilization,
   initialEarthquakeState,
@@ -80,6 +81,7 @@ export function EditorApp(): React.JSX.Element {
   const [storyTime, setStoryTime] = useState(0);
   const [momentEnvelope, setMomentEnvelope] = useState<Map<number, number>>(new Map());
   const [envelopeEnabled, setEnvelopeEnabled] = useState(false);
+  const [influenceEnvelope, setInfluenceEnvelope] = useState(false);
   const [windFrame, setWindFrame] = useState<WindFrame>();
   const [earthquakeFrame, setEarthquakeFrame] = useState<EarthquakeFrame>();
   const [failureReplay, setFailureReplay] = useState(0);
@@ -172,13 +174,31 @@ export function EditorApp(): React.JSX.Element {
     setStoryPlaying(false);
     setStoryTime(0);
     setMomentEnvelope(new Map());
+    setInfluenceEnvelope(false);
     setWindFrame(undefined);
     setEarthquakeFrame(undefined);
   }, [model]);
 
   useEffect(() => {
-    if (!failureKey) {
-      setFailurePhase(undefined);
+    if (!envelopeEnabled) {
+      setInfluenceEnvelope(false);
+      setMomentEnvelope(new Map());
+      return;
+    }
+    if (!influenceEnvelope) return;
+    if (model.story.kind !== 'traffic' || model.deck.length === 0) {
+      setMomentEnvelope(new Map());
+      return;
+    }
+    try {
+      setMomentEnvelope(memberMomentEnvelopeFromInfluence(model, analysisOptions));
+    } catch {
+      setMomentEnvelope(new Map());
+    }
+  }, [analysisOptions, envelopeEnabled, influenceEnvelope, model]);
+
+  useEffect(() => {
+    if (!failureKey) {      setFailurePhase(undefined);
       return;
     }
     if (reducedMotion) {
@@ -222,9 +242,9 @@ export function EditorApp(): React.JSX.Element {
   }, [capacity, mode, model.story.kind, storyPlaying, trafficDuration]);
 
   useEffect(() => {
-    if (!envelopeEnabled || !trafficFrame) return;
+    if (!envelopeEnabled || influenceEnvelope || !trafficFrame) return;
     setMomentEnvelope((previous) => mergeMomentEnvelope(previous, trafficFrame.analysis));
-  }, [envelopeEnabled, trafficFrame]);
+  }, [envelopeEnabled, influenceEnvelope, trafficFrame]);
 
   useEffect(() => {
     if (mode !== 'test' || !storyPlaying || !windScenario || !modal) return;
@@ -419,13 +439,35 @@ export function EditorApp(): React.JSX.Element {
             traffic={trafficFrame}
             trafficYieldCapacity={trafficYieldCapacity}
             envelopeEnabled={envelopeEnabled}
-            onEnvelopeEnabled={setEnvelopeEnabled}
+            onEnvelopeEnabled={(enabled) => {
+              setEnvelopeEnabled(enabled);
+              if (!enabled) {
+                setInfluenceEnvelope(false);
+                setMomentEnvelope(new Map());
+              }
+            }}
+            influenceEnvelope={influenceEnvelope}
+            onInfluenceEnvelope={(enabled) => {
+              setInfluenceEnvelope(enabled);
+              if (!enabled) setMomentEnvelope(new Map());
+            }}
             ramp={rampFrame}
             rampCapacity={capacity}
             wind={windFrame}
             earthquake={earthquakeFrame}
             onTogglePlayback={() => setStoryPlaying((playing) => !playing)}
-            onRestart={() => { setStoryTime(0); setMomentEnvelope(new Map()); setWindFrame(undefined); setEarthquakeFrame(undefined); setStoryPlaying(false); }}
+            onRestart={() => {
+              setStoryTime(0);
+              setWindFrame(undefined);
+              setEarthquakeFrame(undefined);
+              setStoryPlaying(false);
+              if (influenceEnvelope && model.story.kind === 'traffic' && model.deck.length > 0) {
+                try { setMomentEnvelope(memberMomentEnvelopeFromInfluence(model, analysisOptions)); }
+                catch { setMomentEnvelope(new Map()); }
+              } else {
+                setMomentEnvelope(new Map());
+              }
+            }}
             onSeekTrafficStation={(station) => {
               if (model.story.kind !== 'traffic') return;
               setStoryPlaying(false);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeTraffic, prepareTraffic, trafficYieldWeightAt } from '../traffic';
 import { detectResonance, measuredDaf, prepareWind, windLoadAt } from '../wind';
+import { computeInfluenceLine, envelopeFromInfluence, memberMomentEnvelopeFromInfluence } from '../../fem/influence';
 import { modal } from '../../fem/eigen';
 import { buildMesh } from '../../fem/mesh';
 import type { EditorModel, EigenResult } from '../../fem/types';
@@ -72,6 +73,20 @@ describe('story controllers', () => {
     expect(frequency).toBeGreaterThanOrEqual(0.3);
     expect(frequency).toBeLessThanOrEqual(0.5);
   });
+
+  it('builds a two-axle moment envelope from the midspan influence line', () => {
+    const model = simpleBeam({ kind: 'traffic', weightkN: 200, speed: 12 });
+    model.deck = [1];
+    const line = computeInfluenceLine(model, { kind: 'moment', memberId: 1, at: 'mid' });
+    const axleForce = 100_000;
+    const fromLine = envelopeFromInfluence(line, axleForce);
+    // Equal axles on an SS beam: peak midspan moment is W/2 · L/4 + W/2 · η(L/2−4).
+    const L = 8;
+    const expected = axleForce * (L / 4) + axleForce * ((L / 2 - 4) / 2);
+    expect(relativeError(fromLine.maxAbs, expected)).toBeLessThan(1e-9);
+    const members = memberMomentEnvelopeFromInfluence(model);
+    expect(members.get(1)).toBeCloseTo(fromLine.maxAbs, 8);
+  });
 });
 
 function simpleBeam(story: EditorModel['story']): EditorModel {
@@ -94,4 +109,9 @@ function simpleBeam(story: EditorModel['story']): EditorModel {
     deck: [],
     story,
   };
+}
+
+function relativeError(actual: number, expected: number): number {
+  const scale = Math.max(Math.abs(actual), Math.abs(expected), 1);
+  return Math.abs(actual - expected) / scale;
 }

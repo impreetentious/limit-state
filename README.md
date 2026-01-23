@@ -62,4 +62,4 @@ This IST timestamp rule is permanent for all future workflows, commits, and AI a
 Follow this format for version control:
 
 * **Base Format Version:** 0.0.0 — the version of the version-block schema itself (the shape of these lines).
-* **Product Version:** `v0.3.8_2026-01-22_21:06:40` (IST)
+* **Product Version:** `v0.3.9_2026-01-23_22:32:21` (IST)
