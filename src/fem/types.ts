@@ -27,7 +27,7 @@ export interface MemberSpec {
   releaseA: boolean; // moment release at end a (truss/hinge)
   releaseB: boolean;
   /** Tension-only axial member (Phase 2E). Implies truss releases; slack under compression. */
-  cableOnly?: boolean;
+  cableOnly: boolean;
 }
 
 export type SupportKind = 'pin' | 'roller' | 'fixed';
@@ -44,7 +44,7 @@ export interface PointLoad {
 }
 
 export type StorySpec =
-  | { kind: 'traffic'; weightkN: number; speed: number; movingMass?: boolean }
+  | { kind: 'traffic'; weightkN: number; speed: number }
   | { kind: 'wind'; pattern: 'steady' | 'sine' | 'gusts'; amplitudekNm: number; freqHz: number; zeta: number }
   | { kind: 'earthquake'; record: EarthquakeRecordId; scale: number; zeta: number }
   | { kind: 'ramp' }

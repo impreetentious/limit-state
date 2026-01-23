@@ -103,6 +103,7 @@ function simpleBeam(story: EditorModel['story']): EditorModel {
       section: { kind: 'rect', b: 0.2, h: 0.3 },
       releaseA: false,
       releaseB: false,
+      cableOnly: false,
     }],
     supports: [{ node: 1, kind: 'pin' }, { node: 2, kind: 'roller' }],
     loads: { gravity: false, points: [] },

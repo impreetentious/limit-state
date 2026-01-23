@@ -5,17 +5,19 @@
  */
 import { describe, expect, it } from 'vitest';
 import { assembleF, assembleK, assembleLoadCase, elementLocalStiffness, kLocal, kgLocal, mLocal, shearFactor, transformToGlobal } from '../assemble';
+import { solveTensionOnly } from '../cables';
 import { buckling, modal } from '../eigen';
 import { newmarkStep, rayleighDampingRatio, rayleighFit, type NewmarkState } from '../dynamics';
 import { decodeModel, encodeModel } from '../../share/serialize';
 import { collapseCascade, evaluateFailure } from '../failure';
-import { sectionProps } from '../materials';
+import { computeInfluenceLine } from '../influence';
+import { MATERIALS, plasticMoment, sectionProps } from '../materials';
 import { buildMesh } from '../mesh';
+import { runPushover } from '../pushover';
 import { earthquakeRecord } from '../records';
 import { solveSecondOrderStatic } from '../second-order';
 import { newmarkSdofRelative, peakAbs, responseSpectrum } from '../spectrum';
 import { expandFreeVector, factorLDLT, freeMatrix, freeVector, mechanismEditorNode, solveFactored } from '../solve';
-import { computeInfluenceLine } from '../influence';
 import { analyzeStaticModel } from '../statics';
 import type { AnalysisMesh, EditorModel, MemberSpec, SectionSpec, SupportSpec } from '../types';
 
@@ -250,6 +252,79 @@ describe('Phase 2D — influence lines', () => {
   });
 });
 
+describe('Phase 2E — tension-only cables', () => {
+  it('G18: guyed mast under lateral load — load-side guy slack, restraint guy taut (golden)', () => {
+    // Tip +Fx: left restraint guy stays in tension, right load-side guy goes slack.
+    // Gate G18.
+    const model = modelFor(
+      [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 0, y: 20 },
+        { id: 3, x: -12, y: 0 },
+        { id: 4, x: 12, y: 0 },
+      ],
+      [{ node: 1, kind: 'fixed' }, { node: 3, kind: 'pin' }, { node: 4, kind: 'pin' }],
+      [
+        {
+          id: 1, a: 1, b: 2, material: 'steel-s355',
+          section: { kind: 'tube', d: 0.2, t: 0.01 },
+          releaseA: false, releaseB: false, cableOnly: false,
+        },
+        {
+          id: 2, a: 3, b: 2, material: 'steel-s355',
+          section: { kind: 'rect', b: 0.02, h: 0.02 },
+          releaseA: true, releaseB: true, cableOnly: true,
+        },
+        {
+          id: 3, a: 4, b: 2, material: 'steel-s355',
+          section: { kind: 'rect', b: 0.02, h: 0.02 },
+          releaseA: true, releaseB: true, cableOnly: true,
+        },
+      ],
+    );
+    model.loads = { gravity: false, points: [{ node: 2, fx: 50_000, fy: 0 }] };
+    const result = solveTensionOnly(model);
+    expect(result.analysis.kind).toBe('stable');
+    expect(result.frozen).toBe(false);
+    expect(result.activeCables).toEqual([2]);
+    expect(result.slackCables).toEqual([3]);
+    if (result.analysis.kind !== 'stable') throw new Error('expected stable');
+    const leftN = result.analysis.result.elementForces[
+      result.analysis.mesh.elements.findIndex((element) => element.memberId === 2) * 5
+    ]!;
+    expect(leftN).toBeGreaterThan(0);
+  });
+});
+
+describe('Phase 2F — plastic pushover', () => {
+  it('G19: portal frame collapse load vs 4M_p/h within 3%', () => {
+    // Fixed-base single bay portal, equal M_p, eaves lateral load. Gate G19.
+    const h = 4;
+    const section = { kind: 'rect' as const, b: 0.2, h: 0.3 };
+    const model = modelFor(
+      [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 8, y: 0 },
+        { id: 3, x: 0, y: h },
+        { id: 4, x: 8, y: h },
+      ],
+      [{ node: 1, kind: 'fixed' }, { node: 2, kind: 'fixed' }],
+      [
+        { id: 1, a: 1, b: 3, material: 'steel-s355', section, releaseA: false, releaseB: false, cableOnly: false },
+        { id: 2, a: 2, b: 4, material: 'steel-s355', section, releaseA: false, releaseB: false, cableOnly: false },
+        { id: 3, a: 3, b: 4, material: 'steel-s355', section, releaseA: false, releaseB: false, cableOnly: false },
+      ],
+    );
+    model.loads = { gravity: false, points: [{ node: 3, fx: 1_000, fy: 0 }] };
+    const Mp = plasticMoment(section, MATERIALS['steel-s355'].fy);
+    const expected = (4 * Mp) / h;
+    const result = runPushover(model);
+    expect(result.outcome).toBe('mechanism');
+    expect(result.hinges.length).toBeGreaterThanOrEqual(3);
+    expect(relativeError(result.collapseBaseShear, expected)).toBeLessThan(0.03);
+  });
+});
+
 describe('M1 gates — statics', () => {
   it('G2: SS beam UDL midspan = 5wL⁴/384EI at mid-node, rel err < 1e-10', () => {
     const span = 8;
@@ -327,6 +402,7 @@ describe('M1 gates — statics', () => {
       ...member(id, a, b),
       releaseA: true,
       releaseB: true,
+      cableOnly: false,
     });
     const mesh = buildMesh(modelFor(
       [
@@ -642,6 +718,7 @@ function overloadedRadioMast(): EditorModel {
       section: { kind: 'rect', b: 0.02, h: 0.02 },
       releaseA: false,
       releaseB: false,
+      cableOnly: false,
     }],
     supports: [{ node: 1, kind: 'fixed' }],
     loads: { gravity: false, points: [{ node: 2, fx: 0, fy: -100 }] },
