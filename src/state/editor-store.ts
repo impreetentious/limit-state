@@ -200,7 +200,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
     members: model.members.map((member) => {
       if (member.id !== id) return member;
       const next = { ...member, ...patch };
-      if (next.cableOnly) return { ...next, releaseA: true, releaseB: true };
+      if (next.cableOnly) return { ...next, releaseA: true, releaseB: true , cableOnly: false };
       return next;
     }),
   })),
@@ -212,7 +212,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
       members: model.members.map((member) => {
         if (!selected.has(member.id)) return member;
         const next = { ...member, ...patch };
-        if (next.cableOnly) return { ...next, releaseA: true, releaseB: true };
+        if (next.cableOnly) return { ...next, releaseA: true, releaseB: true , cableOnly: false };
         return next;
       }),
     }));
