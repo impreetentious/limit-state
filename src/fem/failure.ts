@@ -4,6 +4,7 @@
  * quasi-static collapse cascade. M6.
  */
 import { assembleLoadCase, type LoadAssembly } from './assemble';
+import { modelHasCables, solveTensionOnly } from './cables';
 import { buckling } from './eigen';
 import { buildMesh } from './mesh';
 import { solveStatic, type StaticAnalysis } from './statics';
@@ -96,18 +97,19 @@ export function collapseCascade(model: EditorModel, loadFactor = 1, options: Ana
 export function analyzeAtFactor(model: EditorModel, factor: number, options: AnalysisOptions = {}): StaticAnalysis {
   if (!(factor > 0) || !Number.isFinite(factor)) return { kind: 'invalid', message: 'Ramp factor must be finite and positive.' };
   try {
-  const mesh = buildMesh(model, options);
-  const nodeIndex = new Map<number, number>();
-  for (let index = 0; index < mesh.editorNode.length; index++) {
-    const id = mesh.editorNode[index]!;
-    if (id >= 0) nodeIndex.set(id, index);
-  }
-  const points = model.loads.points.flatMap((point) => {
-    const meshNode = nodeIndex.get(point.node);
-    return meshNode === undefined ? [] : [{ meshNode, fx: point.fx, fy: point.fy }];
-  });
-  const base = assembleLoadCase(mesh, { gravity: model.loads.gravity, points });
-  return solveStatic(mesh, scaleLoadAssembly(base, factor));
+    if (modelHasCables(model)) return solveTensionOnly(model, options, factor).analysis;
+    const mesh = buildMesh(model, options);
+    const nodeIndex = new Map<number, number>();
+    for (let index = 0; index < mesh.editorNode.length; index++) {
+      const id = mesh.editorNode[index]!;
+      if (id >= 0) nodeIndex.set(id, index);
+    }
+    const points = model.loads.points.flatMap((point) => {
+      const meshNode = nodeIndex.get(point.node);
+      return meshNode === undefined ? [] : [{ meshNode, fx: point.fx, fy: point.fy }];
+    });
+    const base = assembleLoadCase(mesh, { gravity: model.loads.gravity, points });
+    return solveStatic(mesh, scaleLoadAssembly(base, factor));
   } catch (error) {
     return { kind: 'invalid', message: error instanceof Error ? error.message : 'Ramp analysis could not run.' };
   }

@@ -61,12 +61,19 @@ export function buildMesh(model: EditorModel, options: AnalysisOptions = {}): An
       sin: dy / memberLength,
     };
 
-    // A member released at both physical ends is an exact axial truss bar.
-    // Subdividing it would add an artificial collinear node with an unrestrained
-    // transverse DOF, creating a false mechanism, so retain one axial element.
-    const truss = member.releaseA && member.releaseB;
+    // A member released at both physical ends, or a tension-only cable, is an
+    // exact axial truss bar. Subdividing it would add an artificial collinear
+    // node with an unrestrained transverse DOF.
+    const truss = member.cableOnly || (member.releaseA && member.releaseB);
     if (truss) {
-      elements.push({ ...common, na: a.index, nb: b.index, L: memberLength, releaseA: true, releaseB: true });
+      elements.push({
+        ...common,
+        na: a.index,
+        nb: b.index,
+        L: memberLength,
+        releaseA: true,
+        releaseB: true,
+      });
       continue;
     }
 

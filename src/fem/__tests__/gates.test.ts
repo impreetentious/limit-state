@@ -491,6 +491,7 @@ function member(id: number, a: number, b: number): MemberSpec {
     section: DEFAULT_SECTION,
     releaseA: false,
     releaseB: false,
+    cableOnly: false,
   };
 }
 
