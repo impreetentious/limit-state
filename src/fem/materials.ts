@@ -61,3 +61,33 @@ export function sectionDepth(s: SectionSpec): number {
       return s.d;
   }
 }
+
+/**
+ * Plastic section modulus Z (first moment of area about the plastic NA).
+ * M_p = Z · f_y.
+ */
+export function plasticModulus(s: SectionSpec): number {
+  switch (s.kind) {
+    case 'rect':
+      return (s.b * s.h * s.h) / 4;
+    case 'box': {
+      const bi = s.b - 2 * s.t;
+      const hi = s.h - 2 * s.t;
+      return (s.b * s.h * s.h - bi * hi * hi) / 4;
+    }
+    case 'ibeam': {
+      // Flanges fully plastic + web contribution about mid-depth.
+      const web = s.h - 2 * s.tf;
+      return s.b * s.tf * (s.h - s.tf) + (s.tw * web * web) / 4;
+    }
+    case 'tube': {
+      const di = s.d - 2 * s.t;
+      return (s.d ** 3 - di ** 3) / 6;
+    }
+  }
+}
+
+/** Plastic moment capacity M_p = Z · f_y. */
+export function plasticMoment(s: SectionSpec, fy: number): number {
+  return plasticModulus(s) * fy;
+}

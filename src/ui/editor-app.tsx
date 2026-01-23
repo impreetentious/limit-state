@@ -12,6 +12,7 @@ import { MEMBER_HARD_LIMIT, MEMBER_SOFT_LIMIT, type EditorTool, useEditorStore }
 import { analyzeRamp, rampCapacity } from '../stories/ramp';
 import { analyzeTrafficAt, mergeMomentEnvelope, prepareTraffic, trafficYieldWeightAt } from '../stories/traffic';
 import { memberMomentEnvelopeFromInfluence } from '../fem/influence';
+import { runPushover } from '../fem/pushover';
 import {
   earthquakeUtilization,
   initialEarthquakeState,
@@ -149,6 +150,10 @@ export function EditorApp(): React.JSX.Element {
   const rampFrame = useMemo(
     () => model.story.kind === 'ramp' && mode === 'test' ? analyzeRamp(model, rampFactor, storyTime >= 8, analysisOptions) : undefined,
     [analysisOptions, mode, model, rampFactor, storyTime],
+  );
+  const pushover = useMemo(
+    () => model.story.kind === 'pushover' && mode === 'test' ? runPushover(model, analysisOptions) : undefined,
+    [analysisOptions, mode, model],
   );
   const analysis = trafficFrame?.analysis ?? rampFrame?.analysis ?? baseAnalysis;
   const deformation = analysis.kind === 'stable' ? deformationDisplay(analysis.mesh, analysis.result.u, 44) : null;
@@ -453,6 +458,7 @@ export function EditorApp(): React.JSX.Element {
             }}
             ramp={rampFrame}
             rampCapacity={capacity}
+            pushover={pushover}
             wind={windFrame}
             earthquake={earthquakeFrame}
             onTogglePlayback={() => setStoryPlaying((playing) => !playing)}

@@ -36,6 +36,44 @@ export const PRESETS: PresetScene[] = [
     label: '5 · Slender deck',
     model: scene('Slender deck', [node(1, -30, 0), node(2, 0, 0), node(3, 30, 0)], [member(1, 1, 2, 'steel-s355', RESONANT_DECK), member(2, 2, 3, 'steel-s355', RESONANT_DECK)], [{ node: 1, kind: 'pin' }, { node: 3, kind: 'roller' }], [1, 2], { kind: 'wind', pattern: 'sine', amplitudekNm: 2, freqHz: 0.4, zeta: 0.02 }),
   },
+  {
+    id: 'guyed-mast',
+    label: '7 · Guyed mast',
+    model: {
+      ...scene(
+        'Guyed mast',
+        [node(1, 0, 0), node(2, 0, 20), node(3, -12, 0), node(4, 12, 0)],
+        [
+          member(1, 1, 2, 'steel-s355', { kind: 'tube', d: 0.2, t: 0.01 }),
+          cable(2, 3, 2, 'steel-s355', { kind: 'rect', b: 0.02, h: 0.02 }),
+          cable(3, 4, 2, 'steel-s355', { kind: 'rect', b: 0.02, h: 0.02 }),
+        ],
+        [{ node: 1, kind: 'fixed' }, { node: 3, kind: 'pin' }, { node: 4, kind: 'pin' }],
+        [],
+        { kind: 'ramp' },
+      ),
+      loads: { gravity: false, points: [{ node: 2, fx: 50_000, fy: 0 }] },
+    },
+  },
+  {
+    id: 'portal-pushover',
+    label: '8 · Portal pushover',
+    model: {
+      ...scene(
+        'Portal frame',
+        [node(1, 0, 0), node(2, 8, 0), node(3, 0, 4), node(4, 8, 4)],
+        [
+          member(1, 1, 3, 'steel-s355', { kind: 'rect', b: 0.2, h: 0.3 }),
+          member(2, 2, 4, 'steel-s355', { kind: 'rect', b: 0.2, h: 0.3 }),
+          member(3, 3, 4, 'steel-s355', { kind: 'rect', b: 0.2, h: 0.3 }),
+        ],
+        [{ node: 1, kind: 'fixed' }, { node: 2, kind: 'fixed' }],
+        [],
+        { kind: 'pushover' },
+      ),
+      loads: { gravity: false, points: [{ node: 3, fx: 1_000, fy: 0 }] },
+    },
+  },
   { id: 'blank', label: '6 · Blank grid', model: { v: 1, name: 'Untitled structure', seed: 42, nodes: [], members: [], supports: [], loads: { gravity: true, points: [] }, deck: [], story: { kind: 'traffic', weightkN: 300, speed: 12 } } },
 ];
 
@@ -48,9 +86,13 @@ function node(id: number, x: number, y: number): EditorModel['nodes'][number] {
 }
 
 function member(id: number, a: number, b: number, material: MemberSpec['material'] = 'steel-s355', section: SectionSpec = BOX): MemberSpec {
-  return { id, a, b, material, section: { ...section }, releaseA: false, releaseB: false };
+  return { id, a, b, material, section: { ...section }, releaseA: false, releaseB: false, cableOnly: false };
 }
 
 function truss(id: number, a: number, b: number): MemberSpec {
-  return { ...member(id, a, b, 'steel-s355', { kind: 'rect', b: 0.08, h: 0.08 }), releaseA: true, releaseB: true };
+  return { ...member(id, a, b, 'steel-s355', { kind: 'rect', b: 0.08, h: 0.08 }), releaseA: true, releaseB: true, cableOnly: false };
+}
+
+function cable(id: number, a: number, b: number, material: MemberSpec['material'] = 'steel-s355', section: SectionSpec = { kind: 'rect', b: 0.02, h: 0.02 }): MemberSpec {
+  return { ...member(id, a, b, material, section), releaseA: true, releaseB: true, cableOnly: true };
 }

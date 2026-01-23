@@ -8,6 +8,8 @@ import {
   type InfluenceLine,
   type InfluenceQuantity,
 } from '../fem/influence';
+import { modelHasCables, solveTensionOnly } from '../fem/cables';
+import { type PushoverResult } from '../fem/pushover';
 import { buildMesh } from '../fem/mesh';
 import { earthquakeRecords } from '../fem/records';
 import type { AnalysisOptions, EarthquakeRecordId, EditorModel, EigenResult, FailureReport } from '../fem/types';
@@ -49,6 +51,7 @@ interface TestConsoleProps {
   onInfluenceEnvelope: (enabled: boolean) => void;
   ramp?: RampFrame;
   rampCapacity?: number;
+  pushover?: PushoverResult;
   wind?: WindFrame;
   earthquake?: EarthquakeFrame;
   onTogglePlayback: () => void;
@@ -60,7 +63,7 @@ interface TestConsoleProps {
 
 /** Test-story controls, real playback state, and capacity/failure explanation. */
 export function TestConsole({
-  model, modal, buckling, analysisOptions = {}, playing, storyTime, traffic, trafficYieldCapacity, envelopeEnabled, onEnvelopeEnabled, influenceEnvelope, onInfluenceEnvelope, ramp, rampCapacity, wind, earthquake, onTogglePlayback, onRestart, onSeekTrafficStation, onReplayFailure, onReturn,
+  model, modal, buckling, analysisOptions = {}, playing, storyTime, traffic, trafficYieldCapacity, envelopeEnabled, onEnvelopeEnabled, influenceEnvelope, onInfluenceEnvelope, ramp, rampCapacity, pushover, wind, earthquake, onTogglePlayback, onRestart, onSeekTrafficStation, onReplayFailure, onReturn,
 }: TestConsoleProps): React.JSX.Element {
   const story = useEditorStore((state) => state.model.story);
   const setStory = useEditorStore((state) => state.setStory);
@@ -105,15 +108,20 @@ export function TestConsole({
     const axleForce = Math.max(0, story.weightkN) * 1000 / 2;
     return envelopeFromInfluence(influenceLine, axleForce);
   }, [influenceLine, story]);
+  const cableState = useMemo(() => {
+    if (!modelHasCables(model)) return undefined;
+    try { return solveTensionOnly(model, analysisOptions); } catch { return undefined; }
+  }, [analysisOptions, model]);
 
   return <section className="test-console" aria-label="Test stories and capacity">
     <div className="test-console-header"><span>Test Console</span><button type="button" onClick={onReturn}>Return to Build</button></div>
     <div className="story-tabs">
-      {(['traffic', 'wind', 'earthquake', 'ramp'] as const).map((kind) => <button key={kind} type="button" className={story.kind === kind ? 'active' : ''} onClick={() => {
+      {(['traffic', 'wind', 'earthquake', 'ramp', 'pushover'] as const).map((kind) => <button key={kind} type="button" className={story.kind === kind ? 'active' : ''} onClick={() => {
         if (kind === 'traffic') setStory({ kind, weightkN: 300, speed: 12 });
         if (kind === 'wind') setStory({ kind, pattern: 'sine', amplitudekNm: 2, freqHz: Math.min(5, Math.max(0.05, f1 ?? 1)), zeta: 0.02 });
         if (kind === 'earthquake') setStory({ kind, record: 'pulse', scale: 1, zeta: 0.05 });
         if (kind === 'ramp') setStory({ kind });
+        if (kind === 'pushover') setStory({ kind });
       }}>{kind}</button>)}
     </div>
     <div className="story-transport">
@@ -122,7 +130,8 @@ export function TestConsole({
       <span>{
         story.kind === 'wind' || story.kind === 'earthquake' ? `t ${storyTime.toFixed(2)} s`
           : story.kind === 'ramp' ? `λ ${(ramp?.factor ?? 0).toFixed(2)}`
-            : `station ${frontStation.toFixed(1)} m`
+            : story.kind === 'pushover' ? `H ${((pushover?.collapseBaseShear ?? 0) / 1000).toFixed(1)} kN collapse`
+              : `station ${frontStation.toFixed(1)} m`
       }</span>
     </div>
     {story.kind === 'traffic' && <div className="story-fields">
@@ -163,6 +172,15 @@ export function TestConsole({
       <p>Stops at the exact first limit {rampCapacity && Number.isFinite(rampCapacity) ? `λ ${rampCapacity.toFixed(2)}` : 'when a stable reference load exists'} · quasi-static sequence — inertia not modeled.</p>
       {ramp?.report && ramp.report.kind !== 'stable' && <FailurePanel report={ramp.report} ramp={ramp} onReplay={onReplayFailure} />}
     </div>}
+    {story.kind === 'pushover' && <div className="story-fields">
+      <p>Plastic pushover — hinges when |M| reaches M_p = Z·f_y · bilinear moment-curvature, event-to-event.</p>
+      {pushover ? <PushoverPanel result={pushover} /> : <p>Add lateral point loads to run a pushover curve.</p>}
+    </div>}
+    {cableState && <div className="cable-banner" role="status">
+      Cables: {cableState.activeCables.length} taut · {cableState.slackCables.length} slack
+      {cableState.slackCables.length > 0 ? ` (members ${cableState.slackCables.join(', ')})` : ''}
+      {cableState.frozen ? ' · iteration frozen' : ` · ${cableState.iterations} iter`}
+    </div>}
     <div className="capacity-panel">
       <span>{capacity && Number.isFinite(capacity) ? `Capacity λ ${capacity.toFixed(2)}` : 'Capacity needs a stable loaded model'}</span>
       <span>{buckling?.values[0] ? `Buckling λ ${buckling.values[0]!.toFixed(2)}` : 'Buckling: no compression'}</span>
@@ -172,6 +190,35 @@ export function TestConsole({
       {story.kind === 'traffic' && <span>{trafficCapacityLabel(trafficYieldCapacity)}</span>}
     </div>
   </section>;
+}
+
+function PushoverPanel({ result }: { result: PushoverResult }): React.JSX.Element {
+  const maxShear = Math.max(...result.points.map((point) => point.baseShear), 1e-9);
+  const maxDisp = Math.max(...result.points.map((point) => point.roofDisp), 1e-12);
+  const path = result.points.map((point, index) => {
+    const x = (point.roofDisp / maxDisp) * 300 + 10;
+    const y = 64 - (point.baseShear / maxShear) * 56;
+    return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
+  return <div className="influence-panel" aria-label="Pushover curve">
+    <div className="spectrum-header">
+      <span>Base shear vs roof displacement</span>
+      <span>{(result.collapseBaseShear / 1000).toFixed(1)} kN · {result.outcome}</span>
+    </div>
+    <svg viewBox="0 0 320 72" className="spectrum-chart" role="img" aria-label="Pushover curve">
+      <path d={path} fill="none" stroke="#2456a4" strokeWidth="1.6" />
+      {result.points.map((point, index) => {
+        const x = (point.roofDisp / maxDisp) * 300 + 10;
+        const y = 64 - (point.baseShear / maxShear) * 56;
+        return <circle key={index} cx={x} cy={y} r={index === result.points.length - 1 ? 3 : 2} fill={index === result.points.length - 1 ? '#c0392b' : '#2456a4'} />;
+      })}
+    </svg>
+    <p className="honesty-note">
+      {result.hinges.length} plastic hinge{result.hinges.length === 1 ? '' : 's'}
+      {result.hinges.length > 0 ? ` · last at member ${result.hinges[result.hinges.length - 1]!.memberId}${result.hinges[result.hinges.length - 1]!.end}` : ''}
+      · quasi-static, no geometric nonlinearity.
+    </p>
+  </div>;
 }
 
 function InfluencePanel({
