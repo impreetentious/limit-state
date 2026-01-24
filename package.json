@@ -1,7 +1,7 @@
 {
   "name": "limit-state",
   "private": true,
-  "version": "0.3.14",
+  "version": "0.3.15",
   "description": "Limit State — a structural sandbox that tells the truth. True FEM core, playful surface.",
   "scripts": {
     "dev": "next dev",
@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "gallery:generate": "npx vite-node scripts/generate-gallery.mts"
   },
   "engines": {
     "node": ">=22"

@@ -20,6 +20,12 @@ export async function encodeModel(model: EditorModel): Promise<string> {
   }
 }
 
+/** Deterministic `#mu=` share fragment for curated gallery JSON. */
+export function encodeModelUncompressed(model: EditorModel): string {
+  const valid = validateModel(model);
+  return `#mu=${base64urlEncode(new TextEncoder().encode(JSON.stringify(valid)))}`;
+}
+
 /** Decode a #m/#mu fragment and validate its exact v1 model shape before it reaches editor state. */
 export async function decodeModel(hash: string): Promise<EditorModel> {
   const fragment = hash.startsWith('#') ? hash : new URL(hash, 'https://limit-state.local').hash;
@@ -164,6 +170,9 @@ function parseStory(value: unknown): StorySpec {
   if (value.kind === 'ramp') return { kind: 'ramp' };
   if (value.kind === 'pushover') return { kind: 'pushover' };
   if (value.kind === 'traffic' && finitePositive(value.weightkN) && finitePositive(value.speed)) {
+    if (value.movingMass !== undefined && value.movingMass !== false) {
+      throw new Error('Moving-mass traffic is not supported by this model version.');
+    }
     return { kind: 'traffic', weightkN: value.weightkN, speed: value.speed };
   }
   if (value.kind === 'wind' && (value.pattern === 'steady' || value.pattern === 'sine' || value.pattern === 'gusts') && finitePositive(value.amplitudekNm) && finitePositive(value.freqHz) && finitePositive(value.zeta)) {
