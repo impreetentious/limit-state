@@ -109,10 +109,12 @@ button {
   background: var(--ink);
 }
 
-.quiet-button {
+.quiet-button,
+a.quiet-button {
   padding: 0.35rem 0.4rem;
   color: rgba(26, 29, 33, 0.7);
   font-size: 0.78rem;
+  text-decoration: none;
 }
 
 .preset-menu {
@@ -738,6 +740,176 @@ kbd {
 
 .key-hints kbd { margin-right: 0.25rem; }
 
+/* Phase 2G — challenges + gallery */
+.challenge-panel {
+  position: absolute;
+  top: 3.25rem;
+  left: 0.75rem;
+  z-index: 4;
+  width: min(22rem, calc(100% - 1.5rem));
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(26, 29, 33, 0.18);
+  background: rgba(244, 241, 234, 0.96);
+  box-shadow: 0 8px 24px rgba(26, 29, 33, 0.08);
+}
+
+.challenge-panel.challenge-passed {
+  border-color: rgba(45, 106, 79, 0.45);
+}
+
+.challenge-panel-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.challenge-panel-header p {
+  margin: 0.25rem 0 0;
+  color: rgba(26, 29, 33, 0.72);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.challenge-checks {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.challenge-checks li {
+  display: grid;
+  grid-template-columns: 1.1rem 1fr;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.challenge-checks .ok { color: #2d6a4f; }
+.challenge-checks .fail { color: rgba(26, 29, 33, 0.78); }
+.challenge-mark { font-family: var(--font-mono); }
+.challenge-numbers {
+  display: block;
+  color: rgba(26, 29, 33, 0.62);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.challenge-status {
+  margin: 0.75rem 0 0;
+  color: rgba(26, 29, 33, 0.7);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.gallery-shell {
+  min-height: 100dvh;
+  padding: 1.5rem clamp(1rem, 4vw, 3rem) 3rem;
+  background:
+    radial-gradient(circle at top left, rgba(36, 86, 164, 0.08), transparent 28rem),
+    linear-gradient(180deg, #f7f4ee 0%, var(--paper) 40%);
+}
+
+.gallery-header {
+  max-width: 44rem;
+  margin-bottom: 2rem;
+}
+
+.gallery-header .brand {
+  margin-bottom: 1.25rem;
+}
+
+.gallery-kicker {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.gallery-header h1 {
+  margin: 0.35rem 0 0.6rem;
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.gallery-lead {
+  margin: 0;
+  max-width: 36rem;
+  color: rgba(26, 29, 33, 0.76);
+  line-height: 1.5;
+}
+
+.gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0;
+}
+
+.gallery-primary,
+.gallery-secondary,
+.gallery-card a {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.gallery-primary,
+.gallery-card a {
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #f7f4ee;
+}
+
+.gallery-secondary {
+  padding: 0.55rem 0.9rem;
+  border: 1px solid rgba(26, 29, 33, 0.22);
+  color: var(--ink);
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+
+.gallery-card {
+  padding: 1rem 1.05rem 1.1rem;
+  border-top: 2px solid rgba(36, 86, 164, 0.55);
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.gallery-card h2 {
+  margin: 0 0 0.45rem;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.gallery-card p {
+  margin: 0 0 1rem;
+  min-height: 3.2em;
+  color: rgba(26, 29, 33, 0.72);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.gallery-footer {
+  margin-top: 2.5rem;
+  color: rgba(26, 29, 33, 0.55);
+  font-size: 0.78rem;
+}
+
+.gallery-footer code {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+}
+
 @media (max-width: 880px) {
   .editor-workspace { grid-template-columns: 134px minmax(0, 1fr); }
   .inspector { display: none; }
@@ -753,4 +925,5 @@ kbd {
   .tool { width: auto; white-space: nowrap; }
   .tool kbd { display: none; }
   .canvas-panel { min-height: calc(100dvh - 115px); }
+  .challenge-panel { position: static; width: auto; margin: 0.5rem; }
 }

@@ -74,10 +74,10 @@ export const PRESETS: PresetScene[] = [
       loads: { gravity: false, points: [{ node: 3, fx: 1_000, fy: 0 }] },
     },
   },
-  { id: 'blank', label: '6 · Blank grid', model: { v: 1, name: 'Untitled structure', seed: 42, nodes: [], members: [], supports: [], loads: { gravity: true, points: [] }, deck: [], story: { kind: 'traffic', weightkN: 300, speed: 12 } } },
+  { id: 'blank', label: '6 · Blank grid', model: { v: 1, name: 'Untitled structure', seed: 42, nodes: [], members: [], supports: [], loads: { gravity: true, points: [] }, deck: [], story: { kind: 'traffic', weightkN: 300, speed: 12, movingMass: false } } },
 ];
 
-function scene(name: string, nodes: EditorModel['nodes'], members: MemberSpec[], supports: EditorModel['supports'], deck: number[], story: EditorModel['story'] = { kind: 'traffic', weightkN: 300, speed: 12 }): EditorModel {
+function scene(name: string, nodes: EditorModel['nodes'], members: MemberSpec[], supports: EditorModel['supports'], deck: number[], story: EditorModel['story'] = { kind: 'traffic', weightkN: 300, speed: 12, movingMass: false }): EditorModel {
   return { v: 1, name, seed: 42, nodes, members, supports, loads: { gravity: true, points: [] }, deck, story };
 }
 

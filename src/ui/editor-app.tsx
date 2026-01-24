@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { CHALLENGES } from '../challenges/catalog';
 import { StructureCanvas } from '../canvas/structure-canvas';
 import { sectionDepth } from '../fem/materials';
 import { analyzeStaticModel, deformationDisplay } from '../fem/statics';
@@ -10,7 +11,7 @@ import { decodeModel, encodeModel } from '../share/serialize';
 import { inspectStability } from '../state/stability';
 import { MEMBER_HARD_LIMIT, MEMBER_SOFT_LIMIT, type EditorTool, useEditorStore } from '../state/editor-store';
 import { analyzeRamp, rampCapacity } from '../stories/ramp';
-import { analyzeTrafficAt, mergeMomentEnvelope, prepareTraffic, trafficYieldWeightAt } from '../stories/traffic';
+import { analyzeTrafficAt, initialMovingMassState, mergeMomentEnvelope, prepareTraffic, stepMovingMassTraffic, trafficYieldWeightAt, type TrafficFrame } from '../stories/traffic';
 import { memberMomentEnvelopeFromInfluence } from '../fem/influence';
 import { runPushover } from '../fem/pushover';
 import {
@@ -32,8 +33,10 @@ import {
   type WindScenario,
 } from '../stories/wind';
 import type { EigenWorkerResponse } from '../workers/eigen.worker';
+import { ChallengePanel } from './challenge-panel';
 import { Inspector } from './inspector';
 import { TestConsole } from './test-console';
+import Link from 'next/link';
 
 const TOOLS: Array<{ id: EditorTool; label: string; key: string; description: string }> = [
   { id: 'select', label: 'Select', key: 'V', description: 'Inspect a node or member' },
@@ -70,6 +73,8 @@ export function EditorApp(): React.JSX.Element {
   const setShowDeformed = useEditorStore((state) => state.setShowDeformed);
   const setShearFlexible = useEditorStore((state) => state.setShearFlexible);
   const setSecondOrder = useEditorStore((state) => state.setSecondOrder);
+  const activeChallengeId = useEditorStore((state) => state.activeChallengeId);
+  const setActiveChallenge = useEditorStore((state) => state.setActiveChallenge);
   const analysisOptions = useMemo(() => ({ shearFlexible, secondOrder }), [secondOrder, shearFlexible]);
   const baseAnalysis = useMemo(() => analyzeStaticModel(model, analysisOptions), [analysisOptions, model]);
   const stockyMembers = useMemo(() => stockyMemberIds(model), [model]);
@@ -85,6 +90,7 @@ export function EditorApp(): React.JSX.Element {
   const [influenceEnvelope, setInfluenceEnvelope] = useState(false);
   const [windFrame, setWindFrame] = useState<WindFrame>();
   const [earthquakeFrame, setEarthquakeFrame] = useState<EarthquakeFrame>();
+  const [movingMassFrame, setMovingMassFrame] = useState<TrafficFrame>();
   const [failureReplay, setFailureReplay] = useState(0);
   const [failurePhase, setFailurePhase] = useState<number>();
   const reducedMotion = usePrefersReducedMotion();
@@ -139,10 +145,12 @@ export function EditorApp(): React.JSX.Element {
     if (model.story.kind !== 'traffic' || mode !== 'test') return undefined;
     try { return prepareTraffic(model, analysisOptions); } catch { return undefined; }
   }, [analysisOptions, mode, model]);
-  const trafficFrame = useMemo(
-    () => trafficScenario && model.story.kind === 'traffic' ? analyzeTrafficAt(trafficScenario, storyTime * model.story.speed) : undefined,
-    [model.story, storyTime, trafficScenario],
-  );
+  const quasiStaticTraffic = useMemo(() => {
+    if (!trafficScenario || model.story.kind !== 'traffic') return undefined;
+    if (model.story.movingMass && storyPlaying) return undefined;
+    return analyzeTrafficAt(trafficScenario, storyTime * model.story.speed);
+  }, [model.story, storyPlaying, storyTime, trafficScenario]);
+  const trafficFrame = movingMassFrame ?? quasiStaticTraffic;
   const capacity = useMemo(() => model.story.kind === 'ramp' ? rampCapacity(model, analysisOptions) : undefined, [analysisOptions, model]);
   const rampFactor = model.story.kind === 'ramp' && capacity !== undefined
     ? Math.min(capacity, Math.max(0.001, storyTime * capacity / 8))
@@ -163,8 +171,8 @@ export function EditorApp(): React.JSX.Element {
     [analysisOptions, model],
   );
   const modal = eigen.kind === 'ready' ? eigen.modal : undefined;
-  const trafficDuration = trafficFrame && model.story.kind === 'traffic'
-    ? (trafficFrame.length + 4) / Math.max(0.1, model.story.speed)
+  const trafficDuration = trafficScenario && model.story.kind === 'traffic'
+    ? (trafficScenario.length + 4) / Math.max(0.1, model.story.speed)
     : undefined;
   const trafficYieldCapacity = useMemo(
     () => !storyPlaying && trafficScenario && model.story.kind === 'traffic'
@@ -182,6 +190,7 @@ export function EditorApp(): React.JSX.Element {
     setInfluenceEnvelope(false);
     setWindFrame(undefined);
     setEarthquakeFrame(undefined);
+    setMovingMassFrame(undefined);
   }, [model]);
 
   useEffect(() => {
@@ -223,6 +232,7 @@ export function EditorApp(): React.JSX.Element {
 
   useEffect(() => {
     if (mode !== 'test' || !storyPlaying || model.story.kind === 'wind' || model.story.kind === 'earthquake') return;
+    if (model.story.kind === 'traffic' && model.story.movingMass) return;
     let frame = 0;
     let previous = performance.now();
     const tick = (now: number) => {
@@ -244,7 +254,40 @@ export function EditorApp(): React.JSX.Element {
     };
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
-  }, [capacity, mode, model.story.kind, storyPlaying, trafficDuration]);
+  }, [capacity, mode, model.story, storyPlaying, trafficDuration]);
+
+  useEffect(() => {
+    if (mode !== 'test' || !storyPlaying || model.story.kind !== 'traffic' || !model.story.movingMass || !trafficScenario) {
+      return;
+    }
+    const speed = Math.max(0.1, model.story.speed);
+    let current = initialMovingMassState(trafficScenario, storyTime * speed);
+    const duration = (trafficScenario.length + 4) / speed;
+    let frame = 0;
+    const tick = () => {
+      const stepped = stepMovingMassTraffic(trafficScenario, current);
+      current = stepped.state;
+      setMovingMassFrame(stepped.frame);
+      setStoryTime(current.t);
+      if (current.t >= duration) {
+        setStoryPlaying(false);
+        setMovingMassFrame(undefined);
+        setMomentEnvelope(new Map());
+        setStoryTime(0);
+        return;
+      }
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      setMovingMassFrame(undefined);
+    };
+  }, [mode, model.story, storyPlaying, trafficScenario]);
+
+  useEffect(() => {
+    if (model.story.kind !== 'traffic' || !model.story.movingMass) setMovingMassFrame(undefined);
+  }, [model.story]);
 
   useEffect(() => {
     if (!envelopeEnabled || influenceEnvelope || !trafficFrame) return;
@@ -314,6 +357,18 @@ export function EditorApp(): React.JSX.Element {
     return () => { cancelled = true; };
   }, [loadModel, setNotice]);
 
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith('#m=') || hash.startsWith('#mu=')) return;
+    const params = new URLSearchParams(window.location.search);
+    const challengeId = params.get('challenge');
+    if (!challengeId) return;
+    const challenge = CHALLENGES.find((candidate) => candidate.id === challengeId);
+    if (!challenge) return;
+    loadModel(challenge.starter, { challengeId: challenge.id });
+    setNotice(challenge.brief);
+  }, [loadModel, setNotice]);
+
   const shareModel = async () => {
     try {
       const hash = await encodeModel(model);
@@ -373,6 +428,18 @@ export function EditorApp(): React.JSX.Element {
             <option value="" disabled>Presets</option>
             {PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
           </select>
+          <select className="preset-menu" aria-label="Challenges" defaultValue="" onChange={(event) => {
+            const challenge = CHALLENGES.find((candidate) => candidate.id === event.target.value);
+            if (challenge) {
+              loadModel(challenge.starter, { challengeId: challenge.id });
+              setNotice(challenge.brief);
+            }
+            event.currentTarget.value = '';
+          }}>
+            <option value="" disabled>Challenges</option>
+            {CHALLENGES.map((challenge) => <option key={challenge.id} value={challenge.id}>{challenge.label}</option>)}
+          </select>
+          <Link className="quiet-button" href="/gallery">Gallery</Link>
           <button type="button" className="quiet-button" onClick={() => void shareModel()}>Share</button>
           <button type="button" className="quiet-button" onClick={reset}>Blank grid</button>
         </div>
@@ -402,6 +469,14 @@ export function EditorApp(): React.JSX.Element {
           />
           <div className={`lint-badge lint-${stability.kind}`}>{stability.message}</div>
           {notice && <div className="canvas-notice" role="status">{notice}</div>}
+          {activeChallengeId && (
+            <ChallengePanel
+              challengeId={activeChallengeId}
+              model={model}
+              analysisOptions={analysisOptions}
+              onClear={() => setActiveChallenge(null)}
+            />
+          )}
           {analysis.kind === 'stable' && <div className="result-controls" aria-label="Static result display">
             {(['none', 'axial', 'shear', 'moment'] as const).map((diagram) => <button key={diagram} type="button" className={resultDiagram === diagram ? 'active' : ''} onClick={() => setResultDiagram(diagram)}>{diagram === 'none' ? 'Results' : diagram[0]!.toUpperCase() + diagram.slice(1)}</button>)}
             <label><input type="checkbox" checked={showDeformed} onChange={(event) => setShowDeformed(event.target.checked)} /> Deformed</label>
@@ -414,6 +489,7 @@ export function EditorApp(): React.JSX.Element {
           {deformation && showDeformed && deformation.maxMeters > 0 && <div className="deformation-badge">deformation ×{formatScale(deformation.scale)} — true max {formatLength(deformation.maxMeters)}</div>}
           {windFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(windFrame.scenario.mesh, windFrame.u, 44).scale)} · simplified uniform wind field (member-normal 2D pressure)</div>}
           {earthquakeFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(earthquakeFrame.scenario.mesh, earthquakeFrame.u, 44).scale)} · horizontal base excitation −M·ι·ü_g</div>}
+          {movingMassFrame?.movingMass && <div className="dynamic-badge">Moving-mass Newmark — amp ×{movingMassFrame.movingMass.amplification.toFixed(2)} vs static at this station · vehicle mass lumped at axle contacts</div>}
           {failurePhase !== undefined && <div className="failure-cinematic-badge">failure animation ×{reducedMotion ? 'static' : formatScale(0.25 + failurePhase * 0.75)} — illustrative, computed onset and mechanism</div>}
           {model.members.length >= MEMBER_SOFT_LIMIT && <div className="member-limit-badge">{model.members.length}/{MEMBER_HARD_LIMIT} members — performance warning at {MEMBER_SOFT_LIMIT}; hard cap {MEMBER_HARD_LIMIT}</div>}
           {analysis.kind === 'stable' && <div className="eigen-panel" aria-live="polite">
@@ -466,6 +542,7 @@ export function EditorApp(): React.JSX.Element {
               setStoryTime(0);
               setWindFrame(undefined);
               setEarthquakeFrame(undefined);
+              setMovingMassFrame(undefined);
               setStoryPlaying(false);
               if (influenceEnvelope && model.story.kind === 'traffic' && model.deck.length > 0) {
                 try { setMomentEnvelope(memberMomentEnvelopeFromInfluence(model, analysisOptions)); }
@@ -477,6 +554,7 @@ export function EditorApp(): React.JSX.Element {
             onSeekTrafficStation={(station) => {
               if (model.story.kind !== 'traffic') return;
               setStoryPlaying(false);
+              setMovingMassFrame(undefined);
               setStoryTime(station / Math.max(0.1, model.story.speed));
             }}
             onReplayFailure={() => { setStoryPlaying(false); setStoryTime(8); setFailureReplay((value) => value + 1); }}

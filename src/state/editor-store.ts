@@ -35,12 +35,15 @@ export interface EditorStore {
   shearFlexible: boolean;
   /** P-Δ second-order statics. */
   secondOrder: boolean;
+  /** Active constrained-budget challenge id, or null. */
+  activeChallengeId: string | null;
   setMode: (mode: AppMode) => void;
   setTool: (tool: EditorTool) => void;
   select: (selection: Selection) => void;
   setGridSnap: (enabled: boolean) => void;
   setModelName: (name: string) => void;
-  loadModel: (model: EditorModel) => void;
+  loadModel: (model: EditorModel, options?: { challengeId?: string | null }) => void;
+  setActiveChallenge: (challengeId: string | null) => void;
   setStory: (story: StorySpec) => void;
   addNode: (x: number, y: number) => number;
   updateNode: (id: number, x: number, y: number) => void;
@@ -80,7 +83,7 @@ export function createBlankModel(): EditorModel {
     supports: [],
     loads: { gravity: true, points: [] },
     deck: [],
-    story: { kind: 'traffic', weightkN: 300, speed: 12 },
+    story: { kind: 'traffic', weightkN: 300, speed: 12, movingMass: false },
   };
 }
 
@@ -111,18 +114,21 @@ export const useEditorStore = create<EditorStore>((set) => ({
   showDeformed: true,
   shearFlexible: false,
   secondOrder: false,
+  activeChallengeId: null,
   setMode: (mode) => set({ mode }),
   setTool: (tool) => set({ tool, notice: null }),
   select: (selection) => set({ selection }),
   setGridSnap: (gridSnap) => set({ gridSnap }),
   setModelName: (name) => mutate(set, (model) => ({ ...model, name })),
-  loadModel: (model) => set((state) => ({
+  loadModel: (model, options) => set((state) => ({
     model: cloneModel(model),
     past: [...state.past, cloneModel(state.model)].slice(-HISTORY_LIMIT),
     future: [],
     selection: { kind: 'none' },
     notice: null,
+    activeChallengeId: options && 'challengeId' in options ? options.challengeId ?? null : null,
   })),
+  setActiveChallenge: (activeChallengeId) => set({ activeChallengeId }),
   setStory: (story) => mutate(set, (model) => ({ ...model, story })),
   addNode: (x, y) => {
     let id = 0;
@@ -309,6 +315,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
     future: [],
     stability: { kind: 'idle', message: 'Draw a member to begin.' },
     notice: null,
+    activeChallengeId: null,
   }),
 }));
 

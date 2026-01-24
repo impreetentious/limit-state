@@ -117,7 +117,7 @@ export function TestConsole({
     <div className="test-console-header"><span>Test Console</span><button type="button" onClick={onReturn}>Return to Build</button></div>
     <div className="story-tabs">
       {(['traffic', 'wind', 'earthquake', 'ramp', 'pushover'] as const).map((kind) => <button key={kind} type="button" className={story.kind === kind ? 'active' : ''} onClick={() => {
-        if (kind === 'traffic') setStory({ kind, movingMass: false, weightkN: 300, speed: 12 });
+        if (kind === 'traffic') setStory({ kind, weightkN: 300, speed: 12, movingMass: false });
         if (kind === 'wind') setStory({ kind, pattern: 'sine', amplitudekNm: 2, freqHz: Math.min(5, Math.max(0.05, f1 ?? 1)), zeta: 0.02 });
         if (kind === 'earthquake') setStory({ kind, record: 'pulse', scale: 1, zeta: 0.05 });
         if (kind === 'ramp') setStory({ kind });
@@ -137,10 +137,17 @@ export function TestConsole({
     {story.kind === 'traffic' && <div className="story-fields">
       <label>Vehicle {story.weightkN.toFixed(0)} kN<input type="range" min="10" max="500" step="10" value={story.weightkN} onChange={(event) => setStory({ ...story, weightkN: Number(event.target.value) })} /></label>
       <label>Speed {story.speed.toFixed(0)} m/s<input type="range" min="5" max="30" step="1" value={story.speed} onChange={(event) => setStory({ ...story, speed: Number(event.target.value) })} /></label>
-      <label>Truck station {frontStation.toFixed(1)} m<input aria-label="Truck station" type="range" min="0" max={Math.max(0, traffic?.length ?? 0)} step="0.05" value={Math.min(Math.max(0, frontStation), Math.max(0, traffic?.length ?? 0))} disabled={!traffic || traffic.length === 0} onChange={(event) => onSeekTrafficStation(Number(event.target.value))} /></label>
+      <label>Truck station {frontStation.toFixed(1)} m<input aria-label="Truck station" type="range" min="0" max={Math.max(0, traffic?.length ?? 0)} step="0.05" value={Math.min(Math.max(0, frontStation), Math.max(0, traffic?.length ?? 0))} disabled={!traffic || traffic.length === 0 || (story.movingMass && playing)} onChange={(event) => onSeekTrafficStation(Number(event.target.value))} /></label>
+      <label className="envelope-toggle"><input type="checkbox" checked={story.movingMass} onChange={(event) => setStory({ ...story, movingMass: event.target.checked })} /> Moving mass</label>
       <label className="envelope-toggle"><input type="checkbox" checked={envelopeEnabled} onChange={(event) => onEnvelopeEnabled(event.target.checked)} /> Moment envelope</label>
       <label className="envelope-toggle"><input type="checkbox" checked={influenceEnvelope} disabled={!envelopeEnabled || model.deck.length === 0} onChange={(event) => onInfluenceEnvelope(event.target.checked)} /> from influence line</label>
-      <p>Two axles, 4 m apart · {traffic ? `${traffic.length.toFixed(1)} m deck sweep` : 'paint a contiguous deck path'} · quasi-static — real vehicles add roughly 10–30% dynamic amplification.</p>
+      <p>
+        Two axles, 4 m apart · {traffic ? `${traffic.length.toFixed(1)} m deck sweep` : 'paint a contiguous deck path'}
+        {story.movingMass
+          ? ` · moving-mass Newmark (ζ = 2%) — vehicle mass lumped at axle contacts; M updated each step${traffic?.movingMass ? ` · amp ×${traffic.movingMass.amplification.toFixed(2)} vs static at this station` : ''}`
+          : ' · quasi-static — enable Moving mass for the honest ~10–30% dynamic-amplification cousin'}
+        .
+      </p>
       {influenceChoices.length > 0 && <label>Influence <select aria-label="Influence quantity" value={influenceChoices.some((choice) => choice.key === influenceKey) ? influenceKey : influenceChoices[0]!.key} onChange={(event) => setInfluenceKey(event.target.value)}>
         {influenceChoices.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
       </select></label>}
