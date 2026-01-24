@@ -170,10 +170,11 @@ function parseStory(value: unknown): StorySpec {
   if (value.kind === 'ramp') return { kind: 'ramp' };
   if (value.kind === 'pushover') return { kind: 'pushover' };
   if (value.kind === 'traffic' && finitePositive(value.weightkN) && finitePositive(value.speed)) {
-    if (value.movingMass !== undefined && value.movingMass !== false) {
-      throw new Error('Moving-mass traffic is not supported by this model version.');
+    const movingMass = value.movingMass === undefined ? false : value.movingMass === true;
+    if (value.movingMass !== undefined && typeof value.movingMass !== 'boolean') {
+      throw new Error('Shared model has invalid story settings.');
     }
-    return { kind: 'traffic', weightkN: value.weightkN, speed: value.speed };
+    return { kind: 'traffic', weightkN: value.weightkN, speed: value.speed, movingMass };
   }
   if (value.kind === 'wind' && (value.pattern === 'steady' || value.pattern === 'sine' || value.pattern === 'gusts') && finitePositive(value.amplitudekNm) && finitePositive(value.freqHz) && finitePositive(value.zeta)) {
     return { kind: 'wind', pattern: value.pattern, amplitudekNm: value.amplitudekNm, freqHz: value.freqHz, zeta: value.zeta };

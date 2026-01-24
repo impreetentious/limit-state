@@ -57,10 +57,16 @@ export function rayleighDampingRatio(params: RayleighParams, omega: number): num
 }
 
 /** Assemble and factor K̂ once for a fixed Newmark run. */
-export function prepareNewmarkSystem(mesh: AnalysisMesh, dt: number, damping: RayleighParams): NewmarkSystem {
+export function prepareNewmarkSystem(
+  mesh: AnalysisMesh,
+  dt: number,
+  damping: RayleighParams,
+  mass: Float64Array = assembleM(mesh),
+): NewmarkSystem {
   if (!(dt > 0) || !Number.isFinite(dt)) throw new Error('Newmark time step must be finite and positive.');
+  if (mass.length !== mesh.ndof * mesh.ndof) throw new Error('Newmark mass matrix size does not match the mesh.');
   const K = assembleK(mesh);
-  const M = assembleM(mesh);
+  const M = mass;
   const C = linearCombination(M, K, damping.a, damping.b);
   const beta = 1 / 4;
   const gamma = 1 / 2;
@@ -80,6 +86,7 @@ export function prepareNewmarkSystem(mesh: AnalysisMesh, dt: number, damping: Ra
 /**
  * One average-acceleration Newmark step on the mesh free-DOF partition.
  * K̂ = K + a0M + a1C, with the matching effective load.
+ * Pass `mass` to rebuild K̂ when M changes (moving vehicle).
  */
 export function newmarkStep(
   mesh: AnalysisMesh,
@@ -87,10 +94,15 @@ export function newmarkStep(
   loadAt: (t: number) => Float64Array,
   dt: number,
   damping: RayleighParams = state.damping ?? { a: 0, b: 0 },
+  mass?: Float64Array,
 ): NewmarkState {
   if (!(dt > 0) || !Number.isFinite(dt)) throw new Error('Newmark time step must be finite and positive.');
   validateState(mesh, state);
-  const system = usableSystem(state.system, mesh, dt, damping) ? state.system : prepareNewmarkSystem(mesh, dt, damping);
+  const system = mass
+    ? prepareNewmarkSystem(mesh, dt, damping, mass)
+    : usableSystem(state.system, mesh, dt, damping)
+      ? state.system
+      : prepareNewmarkSystem(mesh, dt, damping);
 
   const nextTime = state.t + dt;
   const effectiveLoad = new Float64Array(loadAt(nextTime));
@@ -106,7 +118,8 @@ export function newmarkStep(
     a[index] = system.a0 * (u[index]! - state.u[index]!) - system.a2 * state.v[index]! - system.a3 * state.a[index]!;
     v[index] = state.v[index]! + dt * (0.5 * state.a[index]! + 0.5 * a[index]!);
   }
-  return { u, v, a, t: nextTime, damping: { ...damping }, system };
+  // Varying-mass steps must not reuse a stale K̂ factor.
+  return { u, v, a, t: nextTime, damping: { ...damping }, system: mass ? undefined : system };
 }
 
 /** Exact SDOF DAF for a harmonic force, used by the honest live meter. */

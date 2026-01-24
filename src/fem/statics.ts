@@ -131,6 +131,13 @@ export function utilizationAtDisplacement(mesh: AnalysisMesh, u: Float64Array, f
   return recoverUtilization(mesh, recoverElementForces(mesh, u, fixedEnd));
 }
 
+/** Recover element end forces from a prescribed displacement state. */
+export function elementForcesAtDisplacement(mesh: AnalysisMesh, u: Float64Array, fixedEnd: Float64Array): Float64Array {
+  if (u.length !== mesh.ndof) throw new Error('Displacement vector does not match the mesh.');
+  if (fixedEnd.length !== mesh.elements.length * 6) throw new Error('Fixed-end vector does not match the mesh.');
+  return recoverElementForces(mesh, u, fixedEnd);
+}
+
 /** Element force recovery f_local = k_cond(Tu_e) − f_fixedEnd. */
 function recoverElementForces(mesh: AnalysisMesh, u: Float64Array, fixedEnd: Float64Array): Float64Array {
   const out = new Float64Array(mesh.elements.length * 5);

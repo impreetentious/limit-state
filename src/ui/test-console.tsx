@@ -117,7 +117,7 @@ export function TestConsole({
     <div className="test-console-header"><span>Test Console</span><button type="button" onClick={onReturn}>Return to Build</button></div>
     <div className="story-tabs">
       {(['traffic', 'wind', 'earthquake', 'ramp', 'pushover'] as const).map((kind) => <button key={kind} type="button" className={story.kind === kind ? 'active' : ''} onClick={() => {
-        if (kind === 'traffic') setStory({ kind, weightkN: 300, speed: 12 });
+        if (kind === 'traffic') setStory({ kind, movingMass: false, weightkN: 300, speed: 12 });
         if (kind === 'wind') setStory({ kind, pattern: 'sine', amplitudekNm: 2, freqHz: Math.min(5, Math.max(0.05, f1 ?? 1)), zeta: 0.02 });
         if (kind === 'earthquake') setStory({ kind, record: 'pulse', scale: 1, zeta: 0.05 });
         if (kind === 'ramp') setStory({ kind });

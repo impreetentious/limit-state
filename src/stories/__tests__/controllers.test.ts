@@ -30,7 +30,7 @@ describe('story controllers', () => {
   it('finds the Slender deck vehicle capacity used by the interactive traffic tab', () => {
     const preset = PRESETS.find((candidate) => candidate.id === 'slender-deck');
     if (!preset) throw new Error('Expected the Slender deck preset.');
-    const model = { ...preset.model, story: { kind: 'traffic' as const, weightkN: 300, speed: 12 } };
+    const model = { ...preset.model, story: { kind: 'traffic' as const, movingMass: false, weightkN: 300, speed: 12 } };
     const scenario = prepareTraffic(model);
     expect(trafficYieldWeightAt(scenario, 0)).toBeUndefined();
     const capacity = trafficYieldWeightAt(scenario, 30);
