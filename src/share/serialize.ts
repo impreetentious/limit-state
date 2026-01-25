@@ -1,9 +1,12 @@
 /**
  * URL-hash sharing: '#m=' + base64url(deflate-raw(JSON)) via CompressionStream,
- * '#mu=' + base64url(JSON) fallback. Schema v1 = EditorModel. M7.
- * Property gate G11: decode(encode(m)) deep-equals m.
+ * '#mu=' + base64url(JSON) fallback. Schema v1 = EditorModel; v2 = EditorModel3d
+ * with automatic v1→v2 migration.
+ * Property gate G11: decode(encode(m)) deep-equals m (v1).
+ * Gate G28: golden v1 URLs decode identically; migrateV1toV2 is deterministic.
  */
 import { buildMesh } from '../fem/mesh';
+import { buildMesh3d, NO_RELEASES, type EditorModel3d, type EndReleases3d, type SupportKind3d } from '../fem/space';
 import type { EditorModel, MemberSpec, SectionSpec, StorySpec } from '../fem/types';
 
 /** Encode a validated model as a URL fragment, compressing when the platform provides CompressionStream. */
@@ -208,4 +211,181 @@ function finiteInteger(value: unknown): value is number {
 
 function validMaterial(value: unknown): value is MemberSpec['material'] {
   return value === 'steel-s355' || value === 'alu-6061' || value === 'timber' || value === 'spaghetti';
+}
+
+/**
+ * Lift a planar v1 model into schema v2: z = 0, roll = 0, moment releases → θz.
+ * Old share URLs still decode as v1 via decodeModel; this is the explicit upgrade path.
+ * Gate G28.
+ */
+export function migrateV1toV2(model: EditorModel): EditorModel3d {
+  const valid = validateModel(model);
+  return {
+    v: 2,
+    name: valid.name,
+    seed: valid.seed,
+    nodes: valid.nodes.map((node) => ({ id: node.id, x: node.x, y: node.y, z: 0 })),
+    members: valid.members.map((member) => ({
+      id: member.id,
+      a: member.a,
+      b: member.b,
+      material: member.material,
+      section: member.section,
+      releaseA: boolReleaseTo3d(member.releaseA || member.cableOnly),
+      releaseB: boolReleaseTo3d(member.releaseB || member.cableOnly),
+      roll: 0,
+    })),
+    supports: valid.supports.map((support) => ({
+      node: support.node,
+      kind: migrateSupportKind(support.kind),
+    })),
+    loads: {
+      gravity: valid.loads.gravity,
+      points: valid.loads.points.map((point) => ({
+        node: point.node,
+        fx: point.fx,
+        fy: point.fy,
+        fz: 0,
+      })),
+    },
+  };
+}
+
+function boolReleaseTo3d(released: boolean): EndReleases3d {
+  return released ? { tx: true, ty: true, tz: true } : { ...NO_RELEASES };
+}
+
+function migrateSupportKind(kind: 'pin' | 'roller' | 'fixed'): SupportKind3d {
+  if (kind === 'fixed') return 'fixed';
+  if (kind === 'roller') return 'rollerX'; // 2D roller intent: free horizontal
+  return 'pin';
+}
+
+/** Encode a validated v2 space-frame model as a URL fragment. */
+export async function encodeModel3d(model: EditorModel3d): Promise<string> {
+  const valid = validateModel3d(model);
+  const bytes = new TextEncoder().encode(JSON.stringify(valid));
+  if (typeof CompressionStream === 'undefined') return `#mu=${base64urlEncode(bytes)}`;
+  try {
+    const compressed = await streamBytes(blobFromBytes(bytes).stream().pipeThrough(new CompressionStream('deflate-raw')));
+    return `#m=${base64urlEncode(compressed)}`;
+  } catch {
+    return `#mu=${base64urlEncode(bytes)}`;
+  }
+}
+
+/** Decode a #m/#mu fragment as schema v2 (rejects v1 — use decodeModel + migrateV1toV2). */
+export async function decodeModel3d(hash: string): Promise<EditorModel3d> {
+  const fragment = hash.startsWith('#') ? hash : new URL(hash, 'https://limit-state.local').hash;
+  const match = /^#(m|mu)=([A-Za-z0-9_-]+)$/.exec(fragment);
+  if (!match) throw new Error('Share URL must contain a #m= or #mu= model fragment.');
+  const encoded = base64urlDecode(match[2]!);
+  let bytes = encoded;
+  if (match[1] === 'm') {
+    if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot decompress #m share URLs.');
+    try {
+      bytes = await streamBytes(blobFromBytes(encoded).stream().pipeThrough(new DecompressionStream('deflate-raw')));
+    } catch {
+      throw new Error('Shared model compression data is invalid.');
+    }
+  }
+  try {
+    return validateModel3d(JSON.parse(new TextDecoder().decode(bytes)));
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error('Shared model JSON is invalid.');
+  }
+}
+
+function validateModel3d(value: unknown): EditorModel3d {
+  if (!isRecord(value) || value.v !== 2 || typeof value.name !== 'string' || !finiteInteger(value.seed)) {
+    throw new Error('Shared model does not match Limit State schema v2.');
+  }
+  if (!Array.isArray(value.nodes) || !Array.isArray(value.members) || !Array.isArray(value.supports)) {
+    throw new Error('Shared model has malformed collections.');
+  }
+  if (!isRecord(value.loads) || typeof value.loads.gravity !== 'boolean' || !Array.isArray(value.loads.points)) {
+    throw new Error('Shared model has malformed loads.');
+  }
+  const model: EditorModel3d = {
+    v: 2,
+    name: value.name,
+    seed: value.seed,
+    nodes: value.nodes.map(parseNode3d),
+    members: value.members.map(parseMember3d),
+    supports: value.supports.map(parseSupport3d),
+    loads: { gravity: value.loads.gravity, points: value.loads.points.map(parsePoint3d) },
+  };
+  buildMesh3d(model);
+  return model;
+}
+
+function parseNode3d(value: unknown): EditorModel3d['nodes'][number] {
+  if (!isRecord(value) || !finiteInteger(value.id) || !finite(value.x) || !finite(value.y) || !finite(value.z)) {
+    throw new Error('Shared model has an invalid 3D node.');
+  }
+  return { id: value.id, x: value.x, y: value.y, z: value.z };
+}
+
+function parseMember3d(value: unknown): EditorModel3d['members'][number] {
+  if (
+    !isRecord(value)
+    || !finiteInteger(value.id)
+    || !finiteInteger(value.a)
+    || !finiteInteger(value.b)
+    || !validMaterial(value.material)
+    || !finite(value.roll)
+  ) {
+    throw new Error('Shared model has an invalid 3D member.');
+  }
+  return {
+    id: value.id,
+    a: value.a,
+    b: value.b,
+    material: value.material,
+    section: parseSection(value.section),
+    releaseA: parseReleases(value.releaseA),
+    releaseB: parseReleases(value.releaseB),
+    roll: value.roll,
+  };
+}
+
+function parseReleases(value: unknown): EndReleases3d {
+  if (!isRecord(value) || typeof value.tx !== 'boolean' || typeof value.ty !== 'boolean' || typeof value.tz !== 'boolean') {
+    throw new Error('Shared model has invalid end releases.');
+  }
+  return { tx: value.tx, ty: value.ty, tz: value.tz };
+}
+
+function parseSupport3d(value: unknown): EditorModel3d['supports'][number] {
+  const kinds: SupportKind3d[] = ['pin', 'rollerX', 'rollerY', 'rollerZ', 'fixed'];
+  if (!isRecord(value) || !finiteInteger(value.node) || typeof value.kind !== 'string' || !kinds.includes(value.kind as SupportKind3d)) {
+    throw new Error('Shared model has an invalid 3D support.');
+  }
+  return { node: value.node, kind: value.kind as SupportKind3d };
+}
+
+function parsePoint3d(value: unknown): EditorModel3d['loads']['points'][number] {
+  if (!isRecord(value) || !finiteInteger(value.node) || !finite(value.fx) || !finite(value.fy) || !finite(value.fz)) {
+    throw new Error('Shared model has an invalid 3D point load.');
+  }
+  const point: EditorModel3d['loads']['points'][number] = {
+    node: value.node,
+    fx: value.fx,
+    fy: value.fy,
+    fz: value.fz,
+  };
+  if (value.mx !== undefined) {
+    if (!finite(value.mx)) throw new Error('Shared model has an invalid 3D point load.');
+    point.mx = value.mx;
+  }
+  if (value.my !== undefined) {
+    if (!finite(value.my)) throw new Error('Shared model has an invalid 3D point load.');
+    point.my = value.my;
+  }
+  if (value.mz !== undefined) {
+    if (!finite(value.mz)) throw new Error('Shared model has an invalid 3D point load.');
+    point.mz = value.mz;
+  }
+  return point;
 }

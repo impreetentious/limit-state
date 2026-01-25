@@ -1,7 +1,7 @@
 {
   "name": "limit-state",
   "private": true,
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Limit State — a structural sandbox that tells the truth. True FEM core, playful surface.",
   "scripts": {
     "dev": "next dev",
@@ -34,6 +34,6 @@
     "oxlint": "^1.41.0",
     "prettier": "^3.8.1",
     "typescript": "^5.9.0",
-    "vitest": "^4.0.17"
+    "vitest": "^4.0.18"
   }
 }

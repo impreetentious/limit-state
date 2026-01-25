@@ -3,10 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CHALLENGES } from '../challenges/catalog';
 import { StructureCanvas } from '../canvas/structure-canvas';
+import { StructureCanvas3d } from '../canvas/structure-canvas-3d';
 import { sectionDepth } from '../fem/materials';
 import { analyzeStaticModel, deformationDisplay } from '../fem/statics';
+import { analyzeStaticModel3d, buckling3d, deformationDisplay3d, modal3d } from '../fem/space';
 import type { EditorModel, EigenResult } from '../fem/types';
 import { PRESETS } from '../presets/scenes';
+import { DEMOS_3D } from '../presets/scenes3d';
+import { useEditorStore3d, type EditorTool3d } from '../state/editor-store-3d';
 import { decodeModel, encodeModel } from '../share/serialize';
 import { inspectStability } from '../state/stability';
 import { MEMBER_HARD_LIMIT, MEMBER_SOFT_LIMIT, type EditorTool, useEditorStore } from '../state/editor-store';
@@ -46,6 +50,15 @@ const TOOLS: Array<{ id: EditorTool; label: string; key: string; description: st
   { id: 'load', label: 'Load', key: 'L', description: 'Add a 10 kN point load' },
   { id: 'deck', label: 'Deck', key: 'D', description: 'Paint a traffic path' },
   { id: 'delete', label: 'Delete', key: '⌫', description: 'Remove a node or member' },
+];
+
+const TOOLS_3D: Array<{ id: EditorTool3d; label: string; key: string }> = [
+  { id: 'select', label: 'Select', key: 'V' },
+  { id: 'node', label: 'Node', key: 'N' },
+  { id: 'member', label: 'Member', key: 'M' },
+  { id: 'support', label: 'Support', key: 'S' },
+  { id: 'load', label: 'Load', key: 'L' },
+  { id: 'delete', label: 'Delete', key: '⌫' },
 ];
 
 export function EditorApp(): React.JSX.Element {
@@ -93,7 +106,46 @@ export function EditorApp(): React.JSX.Element {
   const [movingMassFrame, setMovingMassFrame] = useState<TrafficFrame>();
   const [failureReplay, setFailureReplay] = useState(0);
   const [failurePhase, setFailurePhase] = useState<number>();
+  const [viewDimension, setViewDimension] = useState<'2d' | '3d'>('2d');
   const reducedMotion = usePrefersReducedMotion();
+
+  const model3d = useEditorStore3d((s) => s.model);
+  const tool3d = useEditorStore3d((s) => s.tool);
+  const workplane = useEditorStore3d((s) => s.workplane);
+  const selection3d = useEditorStore3d((s) => s.selection);
+  const memberStart = useEditorStore3d((s) => s.memberStart);
+  const notice3d = useEditorStore3d((s) => s.notice);
+  const setTool3d = useEditorStore3d((s) => s.setTool);
+  const setWorkplane = useEditorStore3d((s) => s.setWorkplane);
+  const loadModel3d = useEditorStore3d((s) => s.loadModel);
+  const reset3d = useEditorStore3d((s) => s.reset);
+  const addNodeAt = useEditorStore3d((s) => s.addNodeAt);
+  const addMemberBetween = useEditorStore3d((s) => s.addMemberBetween);
+  const setSupportOnNode = useEditorStore3d((s) => s.setSupportOnNode);
+  const addLoadOnNode = useEditorStore3d((s) => s.addLoadOnNode);
+  const deleteSelection3d = useEditorStore3d((s) => s.deleteSelection);
+  const setMemberStart = useEditorStore3d((s) => s.setMemberStart);
+  const setSelection3d = useEditorStore3d((s) => s.setSelection);
+  const setModelName3d = useEditorStore3d((s) => s.setModelName);
+
+  const analysis3d = useMemo(() => analyzeStaticModel3d(model3d), [model3d]);
+  const eigen3d = useMemo(() => {
+    if (analysis3d.kind !== 'stable') return undefined;
+    try {
+      return {
+        modal: modal3d(analysis3d.mesh, 4),
+        buckling: (() => {
+          const N = new Float64Array(analysis3d.mesh.elements.length);
+          for (let i = 0; i < analysis3d.mesh.elements.length; i++) {
+            N[i] = -Math.abs(analysis3d.result.elementForces[i * 12]!);
+          }
+          return buckling3d(analysis3d.mesh, N);
+        })(),
+      };
+    } catch {
+      return undefined;
+    }
+  }, [analysis3d]);
 
   useEffect(() => {
     if (baseAnalysis.kind !== 'stable') {
@@ -120,7 +172,9 @@ export function EditorApp(): React.JSX.Element {
     return () => worker.terminate();
   }, [baseAnalysis]);
 
-  const activeEigen = eigen.kind === 'ready' ? (modeFamily === 'modal' ? eigen.modal : eigen.buckling) : undefined;
+  const activeEigen = viewDimension === '3d'
+    ? (eigen3d ? (modeFamily === 'modal' ? eigen3d.modal : eigen3d.buckling) : undefined)
+    : (eigen.kind === 'ready' ? (modeFamily === 'modal' ? eigen.modal : eigen.buckling) : undefined);
   const activeFrequency = modeFamily === 'modal' ? activeEigen?.values[selectedMode] : undefined;
   const nativeAnimationHz = activeFrequency ? activeFrequency / (Math.PI * 2) : modeFamily === 'buckling' ? 0.5 : undefined;
   const animationHz = nativeAnimationHz && nativeAnimationHz > 2 ? nativeAnimationHz / 4 : nativeAnimationHz;
@@ -164,7 +218,12 @@ export function EditorApp(): React.JSX.Element {
     [analysisOptions, mode, model],
   );
   const analysis = trafficFrame?.analysis ?? rampFrame?.analysis ?? baseAnalysis;
-  const deformation = analysis.kind === 'stable' ? deformationDisplay(analysis.mesh, analysis.result.u, 44) : null;
+  const deformation = viewDimension === '3d'
+    ? (analysis3d.kind === 'stable' ? deformationDisplay3d(analysis3d.mesh, analysis3d.result.u, 44) : null)
+    : (analysis.kind === 'stable' ? deformationDisplay(analysis.mesh, analysis.result.u, 44) : null);
+  const modeGhost3d = activeEigen && viewDimension === '3d' && activeEigen.values[selectedMode] !== undefined
+    ? { result: activeEigen, mode: selectedMode, phase: modePhase }
+    : undefined;
   const windScenario = useMemo(() => model.story.kind === 'wind' ? prepareWind(model, analysisOptions) : undefined, [analysisOptions, model]);
   const earthquakeScenario = useMemo(
     () => model.story.kind === 'earthquake' ? prepareEarthquake(model, analysisOptions) : undefined,
@@ -414,12 +473,26 @@ export function EditorApp(): React.JSX.Element {
     <main className="editor-shell">
       <header className="topbar">
         <div className="brand"><span className="brand-mark" aria-hidden>△</span><span>Limit State</span></div>
-        <input className="model-name" aria-label="Model name" value={model.name} onChange={(event) => setModelName(event.target.value)} />
+        <input className="model-name" aria-label="Model name" value={viewDimension === '3d' ? model3d.name : model.name} onChange={(event) => viewDimension === '3d' ? setModelName3d(event.target.value) : setModelName(event.target.value)} />
         <div className="topbar-actions">
           <div className="mode-switch" aria-label="Mode">
             <button type="button" className={mode === 'build' ? 'active' : ''} onClick={() => setMode('build')}>Build</button>
             <button type="button" className={mode === 'test' ? 'active' : ''} onClick={() => setMode('test')}>Test</button>
           </div>
+          <div className="view-dimension" aria-label="Dimension">
+            <button type="button" className={viewDimension === '2d' ? 'active' : ''} onClick={() => setViewDimension('2d')}>2D</button>
+            <button type="button" className={viewDimension === '3d' ? 'active' : ''} onClick={() => { setViewDimension('3d'); setMode('build'); }}>3D</button>
+          </div>
+          {viewDimension === '3d' ? (
+            <select className="preset-menu" aria-label="3D demos" defaultValue="" onChange={(event) => {
+              const demo = DEMOS_3D.find((d) => d.id === event.target.value);
+              if (demo) loadModel3d(demo.build());
+              event.currentTarget.value = '';
+            }}>
+              <option value="" disabled>3D demos</option>
+              {DEMOS_3D.map((demo) => <option key={demo.id} value={demo.id}>{demo.label}</option>)}
+            </select>
+          ) : (
           <select className="preset-menu" aria-label="Presets" defaultValue="" onChange={(event) => {
             const preset = PRESETS.find((candidate) => candidate.id === event.target.value);
             if (preset) loadModel(preset.model);
@@ -428,6 +501,7 @@ export function EditorApp(): React.JSX.Element {
             <option value="" disabled>Presets</option>
             {PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
           </select>
+          )}
           <select className="preset-menu" aria-label="Challenges" defaultValue="" onChange={(event) => {
             const challenge = CHALLENGES.find((candidate) => candidate.id === event.target.value);
             if (challenge) {
@@ -441,11 +515,32 @@ export function EditorApp(): React.JSX.Element {
           </select>
           <Link className="quiet-button" href="/gallery">Gallery</Link>
           <button type="button" className="quiet-button" onClick={() => void shareModel()}>Share</button>
-          <button type="button" className="quiet-button" onClick={reset}>Blank grid</button>
+          <button type="button" className="quiet-button" onClick={() => viewDimension === '3d' ? reset3d() : reset()}>Blank grid</button>
         </div>
       </header>
       <section className="editor-workspace">
         <nav className="tool-rail" aria-label="Build tools">
+          {viewDimension === '3d' ? (
+            <>
+              <span className="rail-label">3D tools</span>
+              {TOOLS_3D.map((candidate) => (
+                <button key={candidate.id} type="button" className={tool3d === candidate.id ? 'tool active' : 'tool'} onClick={() => setTool3d(candidate.id)}>
+                  <span>{candidate.label}</span><kbd>{candidate.key}</kbd>
+                </button>
+              ))}
+              <div className="rail-bottom">
+                <label className="snap-toggle">Workplane
+                  <select value={workplane} onChange={(e) => setWorkplane(e.target.value as typeof workplane)} aria-label="Workplane">
+                    <option value="ground">Ground XY</option>
+                    <option value="xz">Elevation XZ</option>
+                    <option value="yz">Elevation YZ</option>
+                  </select>
+                </label>
+                <p className="rail-hint">Click the plane to place. Orbit with drag; member tool: node → node.</p>
+              </div>
+            </>
+          ) : (
+            <>
           <span className="rail-label">Tools</span>
           {TOOLS.map((candidate) => <button key={candidate.id} type="button" className={tool === candidate.id ? 'tool active' : 'tool'} title={`${candidate.description} (${candidate.key})`} onClick={() => setTool(candidate.id)}><span>{candidate.label}</span><kbd>{candidate.key}</kbd></button>)}
           <div className="rail-bottom">
@@ -453,8 +548,52 @@ export function EditorApp(): React.JSX.Element {
             <button type="button" className="history-button" onClick={undo}>Undo <kbd>⌘Z</kbd></button>
             <button type="button" className="history-button" onClick={redo}>Redo <kbd>⇧⌘Z</kbd></button>
           </div>
+            </>
+          )}
         </nav>
         <section className="canvas-panel" aria-label="Structure workspace">
+          {viewDimension === '3d' ? (
+            <StructureCanvas3d
+              model={model3d}
+              analysis={analysis3d}
+              showDeformed={showDeformed}
+              modeGhost={modeGhost3d}
+              workplane={workplane}
+              selectedNodeId={selection3d.kind === 'node' ? selection3d.id : null}
+              selectedMemberId={selection3d.kind === 'member' ? selection3d.id : null}
+              onWorkplaneClick={(point, hitNodeId) => {
+                if (tool3d === 'node') {
+                  addNodeAt(point.x, point.y, point.z);
+                  return;
+                }
+                if (tool3d === 'member') {
+                  if (hitNodeId !== null) {
+                    if (memberStart === null) setMemberStart(hitNodeId);
+                    else addMemberBetween(memberStart, hitNodeId);
+                  } else {
+                    const id = addNodeAt(point.x, point.y, point.z);
+                    if (memberStart === null) setMemberStart(id);
+                    else addMemberBetween(memberStart, id);
+                  }
+                  return;
+                }
+                if (tool3d === 'support' && hitNodeId !== null) {
+                  setSupportOnNode(hitNodeId);
+                  return;
+                }
+                if (tool3d === 'load' && hitNodeId !== null) {
+                  addLoadOnNode(hitNodeId);
+                  return;
+                }
+                if (tool3d === 'delete') {
+                  if (hitNodeId !== null) setSelection3d({ kind: 'node', id: hitNodeId });
+                  deleteSelection3d();
+                  return;
+                }
+                if (hitNodeId !== null) setSelection3d({ kind: 'node', id: hitNodeId });
+              }}
+            />
+          ) : (
           <StructureCanvas
             analysis={analysis}
             diagram={resultDiagram}
@@ -467,9 +606,16 @@ export function EditorApp(): React.JSX.Element {
               ? { u: rampFrame.analysis.result.u, phase: failurePhase, reducedMotion }
               : undefined}
           />
-          <div className={`lint-badge lint-${stability.kind}`}>{stability.message}</div>
-          {notice && <div className="canvas-notice" role="status">{notice}</div>}
-          {activeChallengeId && (
+          )}
+          {viewDimension === '3d' && (
+            <div className="demo3d-note" role="note">
+              3D workplane editor — draw on Ground/XZ/YZ; orbit to inspect. Stress colors + deformed + mode ghosts from the space-frame solver. Extrude/replicate still ahead.
+            </div>
+          )}
+          {viewDimension === '3d' && notice3d && <div className="canvas-notice" role="status">{notice3d}</div>}
+          {viewDimension === '2d' && <div className={`lint-badge lint-${stability.kind}`}>{stability.message}</div>}
+          {notice && viewDimension === '2d' && <div className="canvas-notice" role="status">{notice}</div>}
+          {viewDimension === '2d' && activeChallengeId && (
             <ChallengePanel
               challengeId={activeChallengeId}
               model={model}
@@ -477,40 +623,44 @@ export function EditorApp(): React.JSX.Element {
               onClear={() => setActiveChallenge(null)}
             />
           )}
-          {analysis.kind === 'stable' && <div className="result-controls" aria-label="Static result display">
-            {(['none', 'axial', 'shear', 'moment'] as const).map((diagram) => <button key={diagram} type="button" className={resultDiagram === diagram ? 'active' : ''} onClick={() => setResultDiagram(diagram)}>{diagram === 'none' ? 'Results' : diagram[0]!.toUpperCase() + diagram.slice(1)}</button>)}
+          {(viewDimension === '2d' ? analysis.kind === 'stable' : analysis3d.kind === 'stable') && <div className="result-controls" aria-label="Static result display">
+            {viewDimension === '2d' && (['none', 'axial', 'shear', 'moment'] as const).map((diagram) => <button key={diagram} type="button" className={resultDiagram === diagram ? 'active' : ''} onClick={() => setResultDiagram(diagram)}>{diagram === 'none' ? 'Results' : diagram[0]!.toUpperCase() + diagram.slice(1)}</button>)}
             <label><input type="checkbox" checked={showDeformed} onChange={(event) => setShowDeformed(event.target.checked)} /> Deformed</label>
+            {viewDimension === '2d' && <>
             <label><input type="checkbox" checked={shearFlexible} onChange={(event) => setShearFlexible(event.target.checked)} /> Timoshenko</label>
             <label><input type="checkbox" checked={secondOrder} onChange={(event) => setSecondOrder(event.target.checked)} /> P-Δ</label>
+            </>}
           </div>}
-          {analysis.kind === 'divergent' && <div className="shear-note" role="alert">{analysis.message}</div>}
-          {stockyMembers.length > 0 && <div className="shear-note" role="note">Shear flexibility matters when L/h &lt; 10 — {stockyMembers.length === 1 ? `member ${stockyMembers[0]} is` : `${stockyMembers.length} members are`} stocky{shearFlexible ? '' : '; enable Timoshenko to include it'}.</div>}
-          {analysis.kind === 'stable' && analysis.secondOrder && <div className="pdelta-badge" role="status">P-Δ ×{analysis.secondOrder.momentAmplification.toFixed(2)} moment · ×{analysis.secondOrder.displacementAmplification.toFixed(2)} disp vs linear ({analysis.secondOrder.iterations} iter)</div>}
+          {viewDimension === '2d' && analysis.kind === 'divergent' && <div className="shear-note" role="alert">{analysis.message}</div>}
+          {viewDimension === '2d' && stockyMembers.length > 0 && <div className="shear-note" role="note">Shear flexibility matters when L/h &lt; 10 — {stockyMembers.length === 1 ? `member ${stockyMembers[0]} is` : `${stockyMembers.length} members are`} stocky{shearFlexible ? '' : '; enable Timoshenko to include it'}.</div>}
+          {viewDimension === '2d' && analysis.kind === 'stable' && analysis.secondOrder && <div className="pdelta-badge" role="status">P-Δ ×{analysis.secondOrder.momentAmplification.toFixed(2)} moment · ×{analysis.secondOrder.displacementAmplification.toFixed(2)} disp vs linear ({analysis.secondOrder.iterations} iter)</div>}
           {deformation && showDeformed && deformation.maxMeters > 0 && <div className="deformation-badge">deformation ×{formatScale(deformation.scale)} — true max {formatLength(deformation.maxMeters)}</div>}
-          {windFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(windFrame.scenario.mesh, windFrame.u, 44).scale)} · simplified uniform wind field (member-normal 2D pressure)</div>}
-          {earthquakeFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(earthquakeFrame.scenario.mesh, earthquakeFrame.u, 44).scale)} · horizontal base excitation −M·ι·ü_g</div>}
-          {movingMassFrame?.movingMass && <div className="dynamic-badge">Moving-mass Newmark — amp ×{movingMassFrame.movingMass.amplification.toFixed(2)} vs static at this station · vehicle mass lumped at axle contacts</div>}
-          {failurePhase !== undefined && <div className="failure-cinematic-badge">failure animation ×{reducedMotion ? 'static' : formatScale(0.25 + failurePhase * 0.75)} — illustrative, computed onset and mechanism</div>}
-          {model.members.length >= MEMBER_SOFT_LIMIT && <div className="member-limit-badge">{model.members.length}/{MEMBER_HARD_LIMIT} members — performance warning at {MEMBER_SOFT_LIMIT}; hard cap {MEMBER_HARD_LIMIT}</div>}
-          {analysis.kind === 'stable' && <div className="eigen-panel" aria-live="polite">
-            <span>Modal + Buckling</span>
-            {eigen.kind === 'loading' && <p>Solving in worker…</p>}
-            {eigen.kind === 'error' && <p className="eigen-error">{eigen.message}</p>}
-            {eigen.kind === 'ready' && <>
+          {viewDimension === '2d' && windFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(windFrame.scenario.mesh, windFrame.u, 44).scale)} · simplified uniform wind field (member-normal 2D pressure)</div>}
+          {viewDimension === '2d' && earthquakeFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(earthquakeFrame.scenario.mesh, earthquakeFrame.u, 44).scale)} · horizontal base excitation −M·ι·ü_g</div>}
+          {viewDimension === '2d' && movingMassFrame?.movingMass && <div className="dynamic-badge">Moving-mass Newmark — amp ×{movingMassFrame.movingMass.amplification.toFixed(2)} vs static at this station · vehicle mass lumped at axle contacts</div>}
+          {viewDimension === '2d' && failurePhase !== undefined && <div className="failure-cinematic-badge">failure animation ×{reducedMotion ? 'static' : formatScale(0.25 + failurePhase * 0.75)} — illustrative, computed onset and mechanism</div>}
+          {viewDimension === '2d' && model.members.length >= MEMBER_SOFT_LIMIT && <div className="member-limit-badge">{model.members.length}/{MEMBER_HARD_LIMIT} members — performance warning at {MEMBER_SOFT_LIMIT}; hard cap {MEMBER_HARD_LIMIT}</div>}
+          {(viewDimension === '3d' ? analysis3d.kind === 'stable' : analysis.kind === 'stable') && <div className="eigen-panel" aria-live="polite">
+            <span>Modal + Buckling{viewDimension === '3d' ? ' (3D)' : ''}</span>
+            {viewDimension === '2d' && eigen.kind === 'loading' && <p>Solving in worker…</p>}
+            {viewDimension === '2d' && eigen.kind === 'error' && <p className="eigen-error">{eigen.message}</p>}
+            {((viewDimension === '2d' && eigen.kind === 'ready') || (viewDimension === '3d' && eigen3d)) && activeEigen && <>
               <div className="mode-family" aria-label="Mode shape family">
                 <button type="button" className={modeFamily === 'modal' ? 'active' : ''} onClick={() => { setModeFamily('modal'); setSelectedMode(0); }}>Modal</button>
                 <button type="button" className={modeFamily === 'buckling' ? 'active' : ''} onClick={() => { setModeFamily('buckling'); setSelectedMode(0); }}>Buckling</button>
               </div>
               <div className="mode-list" aria-label="Animated mode shapes">
-                {Array.from((modeFamily === 'modal' ? eigen.modal : eigen.buckling).values, (value, index) => <button key={index} type="button" className={selectedMode === index ? 'active' : ''} onClick={() => setSelectedMode(index)}>{modeFamily === 'modal' ? `f${index + 1} ${(value / (Math.PI * 2)).toFixed(2)} Hz` : `λ${index + 1} ${value.toFixed(2)}`}</button>)}
+                {Array.from(activeEigen.values, (value, index) => <button key={index} type="button" className={selectedMode === index ? 'active' : ''} onClick={() => setSelectedMode(index)}>{modeFamily === 'modal' ? `f${index + 1} ${(value / (Math.PI * 2)).toFixed(2)} Hz` : `λ${index + 1} ${value.toFixed(2)}`}</button>)}
               </div>
               <p>{modeFamily === 'modal'
                 ? `mode shape normalized — ${reducedMotion ? 'static (reduced motion)' : `animating at ${(animationHz ?? 0).toFixed(2)} Hz${nativeAnimationHz && nativeAnimationHz > 2 ? ' (display slowed ×4)' : ''}`}`
                 : `buckling mode normalized — ${reducedMotion ? 'static (reduced motion)' : 'illustrative animation, not displacement'}`}</p>
-              <p>{eigen.buckling.values[0] ? `λcr ${eigen.buckling.values[0]!.toFixed(2)} × reference load` : 'No buckling under this load direction.'}</p>
+              <p>{(viewDimension === '3d' ? eigen3d?.buckling.values[0] : eigen.kind === 'ready' ? eigen.buckling.values[0] : undefined)
+                ? `λcr ${(viewDimension === '3d' ? eigen3d!.buckling.values[0]! : (eigen as { kind: 'ready'; buckling: EigenResult }).buckling.values[0]!).toFixed(2)} × reference load`
+                : 'No buckling under this load direction.'}</p>
             </>}
           </div>}
-          {mode === 'test' && <TestConsole
+          {viewDimension === '2d' && mode === 'test' && <TestConsole
             model={model}
             modal={modal}
             buckling={eigen.kind === 'ready' ? eigen.buckling : undefined}
@@ -561,7 +711,7 @@ export function EditorApp(): React.JSX.Element {
             onReturn={() => setMode('build')}
           />}
         </section>
-        <Inspector />
+        {viewDimension === '2d' && <Inspector />}
       </section>
     </main>
   );

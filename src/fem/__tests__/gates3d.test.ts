@@ -351,6 +351,44 @@ describe('Phase 3 — G26 modal + G27 spatial buckling', () => {
   });
 });
 
+describe('Phase 3 — G28 schema v2 migration', () => {
+  it('G28: golden v1 decode identical; migrateV1toV2 + encode/decode3d round-trip', async () => {
+    const { decodeModel, encodeModel, encodeModel3d, decodeModel3d, migrateV1toV2 } = await import('../../share/serialize');
+    const v1: EditorModel = {
+      v: 1,
+      name: 'migrate-beam',
+      seed: 42,
+      nodes: [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 8, y: 0 },
+      ],
+      members: [{
+        id: 1,
+        a: 1,
+        b: 2,
+        material: 'steel-s355',
+        section: { kind: 'rect', b: 0.15, h: 0.3 },
+        releaseA: false,
+        releaseB: false,
+        cableOnly: false,
+      }],
+      supports: [{ node: 1, kind: 'fixed' }],
+      loads: { gravity: false, points: [{ node: 2, fx: 0, fy: -1e3 }] },
+      deck: [],
+      story: { kind: 'ramp' },
+    };
+    const hash = await encodeModel(v1);
+    expect(await decodeModel(hash)).toEqual(v1);
+
+    const v2 = migrateV1toV2(v1);
+    expect(v2.v).toBe(2);
+    expect(v2.nodes.every((n) => n.z === 0)).toBe(true);
+    expect(v2.members[0]!.roll).toBe(0);
+    const round = await decodeModel3d(await encodeModel3d(v2));
+    expect(round).toEqual(v2);
+  });
+});
+
 /** Single-element unit cantilever along +X for closed-form gates. */
 function unitCantileverMesh(): AnalysisMesh3d {
   const R = memberTriad(1, 0, 0, 0);
@@ -364,6 +402,8 @@ function unitCantileverMesh(): AnalysisMesh3d {
     Iy: 1,
     Iz: 1,
     J: 1,
+    c: 1,
+    fy: 1,
     rho: 1,
     L: 1,
     R,
@@ -401,6 +441,8 @@ function pinnedColumnMesh3dEmbed(subdivisions: number): AnalysisMesh3d {
       Iy: 1,
       Iz: 1,
       J: 1,
+      c: 1,
+      fy: 1,
       rho: 1,
       R: memberTriad(L, 0, 0, 0),
       releaseA: NO_RELEASES,
@@ -435,6 +477,8 @@ function simplySupportedBeam3dEmbed(): AnalysisMesh3d {
     Iy: 1,
     Iz: 1,
     J: 1,
+    c: 1,
+    fy: 1,
     rho: 1,
     R: memberTriad(0.5, 0, 0, 0),
     releaseA: NO_RELEASES,
@@ -463,6 +507,8 @@ function simplySupportedBeam3dBiaxial(Iy: number, Iz: number): AnalysisMesh3d {
     Iy,
     Iz,
     J: 1,
+    c: 1,
+    fy: 1,
     rho: 1,
     R: memberTriad(0.5, 0, 0, 0),
     releaseA: NO_RELEASES,
@@ -500,6 +546,8 @@ function spatialPinnedColumn(subdivisions: number, Iy: number, Iz: number): Anal
       Iy,
       Iz,
       J: 1,
+      c: 1,
+      fy: 1,
       rho: 1,
       R: memberTriad(0, 0, L, 0),
       releaseA: NO_RELEASES,
