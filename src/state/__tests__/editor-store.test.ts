@@ -114,6 +114,6 @@ function deckModel(deck: number[]): EditorModel {
     supports: [],
     loads: { gravity: false, points: [] },
     deck,
-    story: { kind: 'traffic', weightkN: 300, speed: 12 },
+    story: { kind: 'traffic', weightkN: 300, speed: 12, movingMass: false },
   };
 }

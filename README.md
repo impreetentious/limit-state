@@ -47,7 +47,7 @@ Next.js (static export) · React 19 · TypeScript (strict) · Zustand · Canvas2
 
 ## Status & plan
 
-This repo is the build plan plus a compiling scaffold. It's a three-phase program (~6 months): **Phase 1** ships the 2D core above; **Phase 2** adds Timoshenko beams, second-order (P-Δ) analysis, an earthquake story with response spectra, influence lines, tension-only cables, and plastic pushover; **Phase 3** goes 3D — space frames, torsion, WebGL — under the same honesty contract.
+This repo ships the Phase 1 2D core and Phase 2 depth (Timoshenko, P-Δ, earthquake, influence lines, cables, pushover, challenges/gallery, moving-mass traffic). **Phase 3** (remaining) goes 3D — space frames, torsion, WebGL — under the same honesty contract.
 
 ## License
 
@@ -62,4 +62,4 @@ This IST timestamp rule is permanent for all future workflows, commits, and AI a
 Follow this format for version control:
 
 * **Base Format Version:** 0.0.0 — the version of the version-block schema itself (the shape of these lines).
-* **Product Version:** `v0.3.17_2026-01-25_00:02:01` (IST)
+* **Product Version:** `v0.4.0_2026-01-25_23:10:50` (IST)

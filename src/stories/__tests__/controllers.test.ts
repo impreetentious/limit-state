@@ -9,7 +9,7 @@ import { PRESETS } from '../../presets/scenes';
 
 describe('story controllers', () => {
   it('maps a smooth two-axle traffic load to the deck and preserves total vehicle load', () => {
-    const model = simpleBeam({ kind: 'traffic', weightkN: 300, speed: 12 });
+    const model = simpleBeam({ kind: 'traffic', weightkN: 300, speed: 12, movingMass: false });
     model.deck = [1];
     const frame = analyzeTraffic(model, 4);
     expect(frame.axles).toHaveLength(2);
@@ -20,7 +20,7 @@ describe('story controllers', () => {
   });
 
   it('finds a finite yield-only vehicle capacity when the traffic story is paused', () => {
-    const model = simpleBeam({ kind: 'traffic', weightkN: 300, speed: 12 });
+    const model = simpleBeam({ kind: 'traffic', weightkN: 300, speed: 12, movingMass: false });
     model.deck = [1];
     const capacity = trafficYieldWeightAt(prepareTraffic(model), 4);
     expect(capacity).toBeTypeOf('number');
@@ -30,7 +30,7 @@ describe('story controllers', () => {
   it('finds the Slender deck vehicle capacity used by the interactive traffic tab', () => {
     const preset = PRESETS.find((candidate) => candidate.id === 'slender-deck');
     if (!preset) throw new Error('Expected the Slender deck preset.');
-    const model = { ...preset.model, story: { kind: 'traffic' as const, movingMass: false, weightkN: 300, speed: 12 } };
+    const model = { ...preset.model, story: { kind: 'traffic' as const, weightkN: 300, speed: 12, movingMass: false } };
     const scenario = prepareTraffic(model);
     expect(trafficYieldWeightAt(scenario, 0)).toBeUndefined();
     const capacity = trafficYieldWeightAt(scenario, 30);
@@ -75,7 +75,7 @@ describe('story controllers', () => {
   });
 
   it('builds a two-axle moment envelope from the midspan influence line', () => {
-    const model = simpleBeam({ kind: 'traffic', weightkN: 200, speed: 12 });
+    const model = simpleBeam({ kind: 'traffic', weightkN: 200, speed: 12, movingMass: false });
     model.deck = [1];
     const line = computeInfluenceLine(model, { kind: 'moment', memberId: 1, at: 'mid' });
     const axleForce = 100_000;

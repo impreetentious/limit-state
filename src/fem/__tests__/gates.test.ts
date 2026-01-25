@@ -12,6 +12,7 @@ import { decodeModel, encodeModel } from '../../share/serialize';
 import { collapseCascade, evaluateFailure } from '../failure';
 import { computeInfluenceLine } from '../influence';
 import { MATERIALS, plasticMoment, sectionProps } from '../materials';
+import { assembleMassWithVehicle, lumpedVehicleTranslationalTrace, vehicleMassKg } from '../moving-mass';
 import { buildMesh } from '../mesh';
 import { runPushover } from '../pushover';
 import { earthquakeRecord } from '../records';
@@ -19,6 +20,7 @@ import { solveSecondOrderStatic } from '../second-order';
 import { newmarkSdofRelative, peakAbs, responseSpectrum } from '../spectrum';
 import { expandFreeVector, factorLDLT, freeMatrix, freeVector, mechanismEditorNode, solveFactored } from '../solve';
 import { analyzeStaticModel } from '../statics';
+import { analyzeTrafficAt, initialMovingMassState, prepareTraffic, vehicleContactsAt } from '../../stories/traffic';
 import type { AnalysisMesh, EditorModel, MemberSpec, SectionSpec, SupportSpec } from '../types';
 
 const E = 1,
@@ -322,6 +324,52 @@ describe('Phase 2F — plastic pushover', () => {
     expect(result.outcome).toBe('mechanism');
     expect(result.hinges.length).toBeGreaterThanOrEqual(3);
     expect(relativeError(result.collapseBaseShear, expected)).toBeLessThan(0.03);
+  });
+});
+
+describe('Phase 2H — moving-mass traffic', () => {
+  it('G21: lumped vehicle mass conserved; parked Newmark settles to quasi-static midspan within 2%', () => {
+    // Gate G21.
+    const model: EditorModel = {
+      v: 1,
+      name: 'Moving-mass gate',
+      seed: 21,
+      nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 8, y: 0 }, { id: 3, x: 16, y: 0 }],
+      members: [member(1, 1, 2), member(2, 2, 3)],
+      supports: [{ node: 1, kind: 'pin' }, { node: 3, kind: 'roller' }],
+      loads: { gravity: false, points: [] },
+      deck: [1, 2],
+      story: { kind: 'traffic', weightkN: 200, speed: 0.5, movingMass: true },
+    };
+    const scenario = prepareTraffic(model);
+    const front = scenario.length / 2;
+    const contacts = vehicleContactsAt(scenario, front);
+    const totalMass = contacts.reduce((sum, contact) => sum + contact.massKg, 0);
+    expect(totalMass).toBeCloseTo(vehicleMassKg(200), 9);
+    expect(lumpedVehicleTranslationalTrace(contacts)).toBeCloseTo(2 * totalMass, 9);
+
+    const staticFrame = analyzeTrafficAt(scenario, front);
+    if (staticFrame.analysis.kind !== 'stable') throw new Error('expected stable static traffic');
+    const midMesh = [...scenario.mesh.editorNode].findIndex((id) => id === 2);
+    expect(midMesh).toBeGreaterThanOrEqual(0);
+    const staticMid = Math.abs(staticFrame.analysis.result.u[3 * midMesh + 1]!);
+
+    // Parked: hold station fixed while integrating with vehicle mass on the Rayleigh-damped system.
+    let state = initialMovingMassState(scenario, front);
+    const parkedLoad = staticFrame.analysis.loads.F;
+    for (let i = 0; i < 400; i++) {
+      const mass = assembleMassWithVehicle(scenario.mesh, vehicleContactsAt(scenario, front));
+      state = newmarkStep(
+        scenario.mesh,
+        state,
+        () => parkedLoad,
+        scenario.dt,
+        scenario.damping,
+        mass,
+      );
+    }
+    const dynamicMid = Math.abs(state.u[3 * midMesh + 1]!);
+    expect(relativeError(dynamicMid, staticMid)).toBeLessThan(0.02);
   });
 });
 
@@ -700,7 +748,7 @@ function shareModel(id: number, random: () => number): EditorModel {
     supports: [{ node: 1, kind: 'pin' }, { node: 2, kind: 'roller' }],
     loads: { gravity: random() > 0.5, points: [{ node: 3, fx: (random() - 0.5) * 1_000, fy: -random() * 5_000 }] },
     deck: [3],
-    story: { kind: 'traffic', weightkN: 100 + random() * 300, speed: 5 + random() * 20 },
+    story: { kind: 'traffic', weightkN: 100 + random() * 300, speed: 5 + random() * 20, movingMass: false },
   };
 }
 
