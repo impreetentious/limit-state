@@ -16,8 +16,21 @@ const MAX_REQUESTED_MODES = 8;
 
 /** Solve Kφ = ω²Mφ for the requested lowest natural frequencies. */
 export function modal(mesh: AnalysisMesh, nModes: number): EigenResult {
-  const prepared = prepare(mesh, nModes);
-  const M = freeMatrix(assembleM(mesh), mesh.ndof, mesh.freeDofs);
+  return modalAssembled(mesh, assembleK(mesh), assembleM(mesh), nModes);
+}
+
+/**
+ * Dimension-agnostic modal analysis from assembled global matrices.
+ * Used by the 2D path and the Phase 3 space-frame path.
+ */
+export function modalAssembled(
+  layout: EigenDofLayout,
+  Kfull: Float64Array,
+  Mfull: Float64Array,
+  nModes: number,
+): EigenResult {
+  const prepared = prepareAssembled(layout, Kfull, nModes);
+  const M = freeMatrix(Mfull, layout.ndof, layout.freeDofs);
   let basis = orthonormalizeMetric(initialBasis(prepared.n, prepared.p), M, prepared.n, prepared.p).basis;
   let previous = new Float64Array(0);
   let iterations = 0;
@@ -49,7 +62,7 @@ export function modal(mesh: AnalysisMesh, nModes: number): EigenResult {
   return {
     kind: 'modal',
     values,
-    vectors: expandModeVectors(mesh, ritzBasis, prepared.n, prepared.p, range(prepared.modes), M, true),
+    vectors: expandModeVectors(layout, ritzBasis, prepared.n, prepared.p, range(prepared.modes), M, true),
     iterations,
   };
 }
@@ -59,8 +72,20 @@ export function modal(mesh: AnalysisMesh, nModes: number): EigenResult {
  * Element axial forces are tension-positive, so compression makes K_g negative.
  */
 export function buckling(mesh: AnalysisMesh, elementN: Float64Array): EigenResult {
-  const prepared = prepare(mesh, MAX_REQUESTED_MODES);
-  const kg = freeMatrix(assembleKg(mesh, elementN), mesh.ndof, mesh.freeDofs);
+  return bucklingAssembled(mesh, assembleK(mesh), assembleKg(mesh, elementN));
+}
+
+/**
+ * Dimension-agnostic buckling from assembled global matrices.
+ * Used by the 2D path and the Phase 3 space-frame path.
+ */
+export function bucklingAssembled(
+  layout: EigenDofLayout,
+  Kfull: Float64Array,
+  Kgfull: Float64Array,
+): EigenResult {
+  const prepared = prepareAssembled(layout, Kfull, MAX_REQUESTED_MODES);
+  const kg = freeMatrix(Kgfull, layout.ndof, layout.freeDofs);
   const B = new Float64Array(kg.length);
   for (let index = 0; index < kg.length; index++) B[index] = -kg[index]!;
 
@@ -94,9 +119,15 @@ export function buckling(mesh: AnalysisMesh, elementN: Float64Array): EigenResul
   return {
     kind: 'buckling',
     values: factors,
-    vectors: expandModeVectors(mesh, ritzBasis, prepared.n, prepared.p, positive.indices, undefined, false),
+    vectors: expandModeVectors(layout, ritzBasis, prepared.n, prepared.p, positive.indices, undefined, false),
     iterations,
   };
+}
+
+/** DOF layout shared by 2D and 3D eigen paths. */
+export interface EigenDofLayout {
+  ndof: number;
+  freeDofs: Int32Array;
 }
 
 interface PreparedProblem {
@@ -107,11 +138,11 @@ interface PreparedProblem {
   modes: number;
 }
 
-function prepare(mesh: AnalysisMesh, requestedModes: number): PreparedProblem {
+function prepareAssembled(layout: EigenDofLayout, Kfull: Float64Array, requestedModes: number): PreparedProblem {
   if (!Number.isInteger(requestedModes) || requestedModes < 1) throw new Error('Eigenanalysis needs at least one mode.');
-  const n = mesh.freeDofs.length;
+  const n = layout.freeDofs.length;
   if (n === 0) throw new Error('Eigenanalysis needs at least one unconstrained degree of freedom.');
-  const K = freeMatrix(assembleK(mesh), mesh.ndof, mesh.freeDofs);
+  const K = freeMatrix(Kfull, layout.ndof, layout.freeDofs);
   const factor = factorLDLT(K, n);
   if (!factor.ok) throw new Error(`Eigenanalysis cannot run: mechanism at free DOF ${factor.mechanism.freeDofIndex}.`);
   const modes = Math.min(requestedModes, n);
@@ -331,7 +362,7 @@ function jacobiSymmetric(input: Float64Array, n: number): GeneralizedEigen {
 }
 
 function expandModeVectors(
-  mesh: AnalysisMesh,
+  layout: EigenDofLayout,
   basis: Float64Array,
   n: number,
   columns: number,
@@ -339,7 +370,7 @@ function expandModeVectors(
   metric: Float64Array | undefined,
   massNormalize: boolean,
 ): Float64Array {
-  const out = new Float64Array(mesh.ndof * indices.length);
+  const out = new Float64Array(layout.ndof * indices.length);
   for (let outputColumn = 0; outputColumn < indices.length; outputColumn++) {
     const inputColumn = indices[outputColumn]!;
     const vector = columnSlice(basis, n, columns, inputColumn);
@@ -352,7 +383,7 @@ function expandModeVectors(
       for (const value of vector) maximum = Math.max(maximum, Math.abs(value));
       scale = maximum > 0 ? 1 / maximum : 1;
     }
-    for (let row = 0; row < n; row++) out[mesh.freeDofs[row]! * indices.length + outputColumn] = vector[row]! * scale;
+    for (let row = 0; row < n; row++) out[layout.freeDofs[row]! * indices.length + outputColumn] = vector[row]! * scale;
   }
   return out;
 }
