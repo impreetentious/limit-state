@@ -77,10 +77,17 @@ export interface Material {
 
 export interface SectionProps {
   A: number; // m^2
+  /** Strong/in-plane second moment — alias for I_z. 2D solver uses this. */
   I: number; // m^4
+  /** Second moment about local y (out-of-plane for a 2D XY frame). */
+  Iy: number; // m^4
+  /** Second moment about local z (in-plane bending). I ≡ Iz. */
+  Iz: number; // m^4
   c: number; // extreme fiber distance, m
   /** Effective shear area A_s (κ presets: rect 5/6, I/box web-only, tube 0.5). */
   As: number;
+  /** St. Venant torsion constant. */
+  J: number; // m^4
 }
 
 /** Analysis options that do not live in the shareable editor model. */

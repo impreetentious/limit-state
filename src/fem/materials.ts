@@ -11,40 +11,89 @@ export const MATERIALS: Record<MaterialId, Material> = {
 
 export const DEFAULT_SECTION: SectionSpec = { kind: 'box', b: 0.2, h: 0.2, t: 0.008 };
 
-/** A, I, c, As from section dimensions. Unit-tested against hand calcs (gate G10). */
+/**
+ * St. Venant torsion constant for a solid rectangle.
+ * Roark / Timoshenko series approx: J = β b h³ with β from the aspect ratio.
+ */
+function solidRectJ(b: number, h: number): number {
+  const long = Math.max(b, h);
+  const short = Math.min(b, h);
+  const a = short / long;
+  // β ≈ (1/3)(1 − 0.63 a + 0.052 a⁵) for the short³·long form.
+  const beta = (1 / 3) * (1 - 0.63 * a * (1 - (a * a * a * a) / 12));
+  return beta * long * short ** 3;
+}
+
+/**
+ * Thin-walled closed-box torsion: J = 4 A_m² / ∮ ds/t.
+ * Mid-line enclosed area A_m = (b−t)(h−t); perimeter integral ≈ 2((b−t)+(h−t))/t.
+ */
+function thinBoxJ(b: number, h: number, t: number): number {
+  const bm = b - t;
+  const hm = h - t;
+  if (!(bm > 0 && hm > 0 && t > 0)) return solidRectJ(b, h);
+  const Am = bm * hm;
+  const oint = (2 * (bm + hm)) / t;
+  return (4 * Am * Am) / oint;
+}
+
+/**
+ * Open I-section St. Venant approx: sum of thin rectangles (⅓ b t³ each).
+ * Warping torsion is out of scope.
+ */
+function ibeamJ(b: number, h: number, tf: number, tw: number): number {
+  const web = Math.max(0, h - 2 * tf);
+  return (1 / 3) * (2 * b * tf ** 3 + web * tw ** 3);
+}
+
+/** A, I≡Iz, Iy, Iz, c, As, J from section dimensions. Unit-tested (gate G10). */
 export function sectionProps(s: SectionSpec): SectionProps {
   switch (s.kind) {
     case 'rect': {
       const A = s.b * s.h;
-      return { A, I: (s.b * s.h ** 3) / 12, c: s.h / 2, As: (5 / 6) * A };
+      const Iz = (s.b * s.h ** 3) / 12;
+      const Iy = (s.h * s.b ** 3) / 12;
+      return { A, I: Iz, Iy, Iz, c: s.h / 2, As: (5 / 6) * A, J: solidRectJ(s.b, s.h) };
     }
     case 'box': {
       const bi = s.b - 2 * s.t;
       const hi = s.h - 2 * s.t;
       const A = s.b * s.h - bi * hi;
+      const Iz = (s.b * s.h ** 3 - bi * hi ** 3) / 12;
+      const Iy = (s.h * s.b ** 3 - hi * bi ** 3) / 12;
       // Thin-walled box: shear carried by the two webs (I-web-only analogue).
       return {
         A,
-        I: (s.b * s.h ** 3 - bi * hi ** 3) / 12,
+        I: Iz,
+        Iy,
+        Iz,
         c: s.h / 2,
         As: 2 * hi * s.t,
+        J: thinBoxJ(s.b, s.h, s.t),
       };
     }
     case 'ibeam': {
       const web = s.h - 2 * s.tf;
       const A = 2 * s.b * s.tf + s.tw * web;
-      const I = (s.b * s.h ** 3) / 12 - ((s.b - s.tw) * web ** 3) / 12;
+      const Iz = (s.b * s.h ** 3) / 12 - ((s.b - s.tw) * web ** 3) / 12;
+      // About local y: flanges as rectangles at depth, web as thin strip.
+      const Iy = 2 * ((s.tf * s.b ** 3) / 12) + (web * s.tw ** 3) / 12;
       // I-web-only shear area.
-      return { A, I, c: s.h / 2, As: s.tw * web };
+      return { A, I: Iz, Iy, Iz, c: s.h / 2, As: s.tw * web, J: ibeamJ(s.b, s.h, s.tf, s.tw) };
     }
     case 'tube': {
       const di = s.d - 2 * s.t;
       const A = (Math.PI / 4) * (s.d ** 2 - di ** 2);
+      const I = (Math.PI / 64) * (s.d ** 4 - di ** 4);
+      // Circular tube: polar J = Iy + Iz = 2I.
       return {
         A,
-        I: (Math.PI / 64) * (s.d ** 4 - di ** 4),
+        I,
+        Iy: I,
+        Iz: I,
         c: s.d / 2,
         As: 0.5 * A,
+        J: 2 * I,
       };
     }
   }
