@@ -41,12 +41,14 @@ export function solveStatic3d(
     };
   }
   const u = expandFreeVector(mesh.ndof, mesh.freeDofs, solveFactored(system.factor, freeVector(F, mesh.freeDofs)));
+  const elementForces = recoverElementForces3d(mesh, u);
   return {
     kind: 'stable',
     mesh,
     result: {
       u,
-      elementForces: recoverElementForces3d(mesh, u),
+      elementForces,
+      utilization: recoverUtilization3d(mesh, elementForces),
       reactions: recoverReactions3d(mesh, system.K, u, F),
     },
   };
@@ -105,6 +107,67 @@ function recoverElementForces3d(mesh: AnalysisMesh3d, u: Float64Array): Float64A
     }
   }
   return out;
+}
+
+/**
+ * Combined-stress utilization |N/A ± My·c/Iy ± Mz·c/Iz| / fy at both ends.
+ */
+function recoverUtilization3d(mesh: AnalysisMesh3d, forces: Float64Array): Map<number, number> {
+  const utilization = new Map<number, number>();
+  for (let index = 0; index < mesh.elements.length; index++) {
+    const element = mesh.elements[index]!;
+    const base = index * 12;
+    // Tension-positive internal N = −Fx at end A (nodal reaction convention).
+    const Na = -forces[base]!;
+    const Nb = forces[base + 6]!;
+    const Mya = forces[base + 4]!;
+    const Mza = forces[base + 5]!;
+    const Myb = forces[base + 10]!;
+    const Mzb = forces[base + 11]!;
+    const cy = element.c ?? 0; // fiber for Iz (local y extreme ≈ section half-depth)
+    const cz = element.c ?? 0; // same extreme for square-ish sections; rect uses h/2 for both gates
+    const fy = element.fy ?? Number.POSITIVE_INFINITY;
+    const u = Math.max(
+      fiberUtilization3d(Na, Mya, Mza, element.A, element.Iy, element.Iz, cy, cz, fy),
+      fiberUtilization3d(Nb, Myb, Mzb, element.A, element.Iy, element.Iz, cy, cz, fy),
+    );
+    utilization.set(element.memberId, Math.max(utilization.get(element.memberId) ?? 0, u));
+  }
+  return utilization;
+}
+
+function fiberUtilization3d(
+  N: number,
+  My: number,
+  Mz: number,
+  A: number,
+  Iy: number,
+  Iz: number,
+  cy: number,
+  cz: number,
+  fy: number,
+): number {
+  if (!(fy > 0)) return 0;
+  const axial = Math.abs(N) / A;
+  const bending = Math.abs(My) * cy / Math.max(Iy, 1e-30) + Math.abs(Mz) * cz / Math.max(Iz, 1e-30);
+  return Math.max(axial + bending, Math.abs(axial - bending)) / fy;
+}
+
+/** Honest display amplification sized to a legible ~28 px screen displacement. */
+export function deformationDisplay3d(
+  mesh: AnalysisMesh3d,
+  u: Float64Array,
+  pixelsPerMeter: number,
+): { maxMeters: number; scale: number } {
+  let maxMeters = 0;
+  for (let node = 0; mesh.coords.length > node * 3; node++) {
+    maxMeters = Math.max(
+      maxMeters,
+      Math.hypot(u[6 * node]!, u[6 * node + 1]!, u[6 * node + 2]!),
+    );
+  }
+  if (maxMeters === 0) return { maxMeters, scale: 1 };
+  return { maxMeters, scale: Math.max(1, Math.min(100_000, 28 / (maxMeters * pixelsPerMeter))) };
 }
 
 function recoverReactions3d(

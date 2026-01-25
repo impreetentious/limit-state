@@ -66,6 +66,9 @@ export interface Element3d {
   Iy: number;
   Iz: number;
   J: number;
+  /** Extreme fiber distance for Iz bending (section depth/2). */
+  c?: number;
+  fy?: number;
   rho: number;
   L: number;
   /** Rows of R: local basis expressed in global coords. Length 9, row-major. */
@@ -87,6 +90,8 @@ export interface StaticResult3d {
   u: Float64Array;
   /** per element local end forces [Fx,Fy,Fz,Mx,My,Mz]×2 */
   elementForces: Float64Array;
+  /** per editor member: max combined-stress utilization */
+  utilization: Map<number, number>;
   reactions: Map<number, { fx: number; fy: number; fz: number; mx: number; my: number; mz: number }>;
 }
 

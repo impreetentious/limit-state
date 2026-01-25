@@ -16,6 +16,8 @@ const nextConfig: NextConfig = {
   basePath,
   images: { unoptimized: true },
   reactStrictMode: true,
+  // three/addons (OrbitControls) ships as ESM that Next must transpile.
+  transpilePackages: ['three'],
 };
 
 export default nextConfig;

@@ -57,6 +57,8 @@ export function buildMesh3d(model: EditorModel3d): AnalysisMesh3d {
       Iy: props.Iy,
       Iz: props.Iz,
       J: props.J,
+      c: props.c,
+      fy: material.fy,
       rho: material.rho,
       R,
     };

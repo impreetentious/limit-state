@@ -18,6 +18,7 @@ export {
   solveStatic3d,
   strainEnergy3d,
   externalWork3d,
+  deformationDisplay3d,
 } from './statics';
 export { buckling3d, modal3d } from './eigen';
 export type { StaticAnalysis3d, StaticSystem3d } from './statics';
