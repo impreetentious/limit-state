@@ -54,7 +54,31 @@ export interface EditorModel3d {
   members: MemberSpec3d[];
   supports: SupportSpec3d[];
   loads: { gravity: boolean; points: PointLoad3d[] };
+  /** Contiguous member-id path for traffic (3D polyline). */
+  deck?: number[];
+  /**
+   * Phase 3 stories. Wind carries a horizontal direction dial; traffic rides
+   * the deck polyline.
+   */
+  story?: StorySpec3d;
 }
+
+/** 3D story specs. */
+export type StorySpec3d =
+  | {
+      kind: 'wind';
+      pattern: 'steady' | 'sine' | 'gusts';
+      amplitudekNm: number;
+      freqHz: number;
+      zeta: number;
+      /** Horizontal azimuth in degrees: 0 = +X, 90 = +Y. */
+      directionDeg: number;
+    }
+  | {
+      kind: 'traffic';
+      weightkN: number;
+      speed: number;
+    };
 
 export interface Element3d {
   memberId: number;

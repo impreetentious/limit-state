@@ -1,10 +1,19 @@
 /**
  * Newmark-β (γ=1/2, β=1/4) with Rayleigh damping; modal projection for the
  * explainer layer; DAF meter; resonance detection. M5.
+ *
+ * Core stepping is dimension-agnostic (`DynamicDofLayout` + assembled K/M) so
+ * Phase 3 space-frame stories reuse the same integrator.
  */
 import { assembleK, assembleM } from './assemble';
 import { expandFreeVector, factorLDLT, freeMatrix, freeVector, solveFactored, type Factor } from './solve';
 import type { AnalysisMesh } from './types';
+
+/** Minimal DOF layout shared by 2D and 3D meshes. */
+export interface DynamicDofLayout {
+  ndof: number;
+  freeDofs: Int32Array;
+}
 
 export interface NewmarkState {
   u: Float64Array;
@@ -56,17 +65,21 @@ export function rayleighDampingRatio(params: RayleighParams, omega: number): num
   return 0.5 * (params.a / omega + params.b * omega);
 }
 
-/** Assemble and factor K̂ once for a fixed Newmark run. */
-export function prepareNewmarkSystem(
-  mesh: AnalysisMesh,
+/**
+ * Assemble and factor K̂ from precomputed global K and M.
+ * Dimension-agnostic — used by 2D wind and Phase 3 space-frame stories.
+ */
+export function prepareNewmarkSystemAssembled(
+  layout: DynamicDofLayout,
+  K: Float64Array,
+  M: Float64Array,
   dt: number,
   damping: RayleighParams,
-  mass: Float64Array = assembleM(mesh),
 ): NewmarkSystem {
   if (!(dt > 0) || !Number.isFinite(dt)) throw new Error('Newmark time step must be finite and positive.');
-  if (mass.length !== mesh.ndof * mesh.ndof) throw new Error('Newmark mass matrix size does not match the mesh.');
-  const K = assembleK(mesh);
-  const M = mass;
+  if (K.length !== layout.ndof * layout.ndof || M.length !== layout.ndof * layout.ndof) {
+    throw new Error('Newmark matrices must be ndof×ndof.');
+  }
   const C = linearCombination(M, K, damping.a, damping.b);
   const beta = 1 / 4;
   const gamma = 1 / 2;
@@ -78,9 +91,54 @@ export function prepareNewmarkSystem(
   const a5 = dt * (gamma / (2 * beta) - 1);
   const Khat = linearCombination(K, M, 1, a0);
   addScaled(Khat, C, a1);
-  const result = factorLDLT(freeMatrix(Khat, mesh.ndof, mesh.freeDofs), mesh.freeDofs.length);
+  const result = factorLDLT(freeMatrix(Khat, layout.ndof, layout.freeDofs), layout.freeDofs.length);
   if (!result.ok) throw new Error(`Dynamic effective stiffness is singular at free DOF ${result.mechanism.freeDofIndex}.`);
-  return { ndof: mesh.ndof, dt, damping: { ...damping }, M, C, factor: result.factor, a0, a1, a2, a3, a4, a5 };
+  return { ndof: layout.ndof, dt, damping: { ...damping }, M, C, factor: result.factor, a0, a1, a2, a3, a4, a5 };
+}
+
+/** Assemble and factor K̂ once for a fixed 2D Newmark run. */
+export function prepareNewmarkSystem(
+  mesh: AnalysisMesh,
+  dt: number,
+  damping: RayleighParams,
+  mass: Float64Array = assembleM(mesh),
+): NewmarkSystem {
+  return prepareNewmarkSystemAssembled(mesh, assembleK(mesh), mass, dt, damping);
+}
+
+/**
+ * One average-acceleration Newmark step on an assembled system.
+ * Shared by 2D and 3D stories.
+ */
+export function newmarkStepAssembled(
+  layout: DynamicDofLayout,
+  state: NewmarkState,
+  loadAt: (t: number) => Float64Array,
+  dt: number,
+  damping: RayleighParams,
+  system: NewmarkSystem,
+): NewmarkState {
+  if (!(dt > 0) || !Number.isFinite(dt)) throw new Error('Newmark time step must be finite and positive.');
+  validateState(layout, state);
+  if (system.ndof !== layout.ndof || system.dt !== dt) {
+    throw new Error('Newmark system does not match this layout / time step.');
+  }
+
+  const nextTime = state.t + dt;
+  const effectiveLoad = new Float64Array(loadAt(nextTime));
+  if (effectiveLoad.length !== layout.ndof) throw new Error('Dynamic load vector length does not match the mesh.');
+  const massState = combination3(state.u, state.v, state.a, system.a0, system.a2, system.a3);
+  const dampingState = combination3(state.u, state.v, state.a, system.a1, system.a4, system.a5);
+  addScaledVector(effectiveLoad, multiplyMatrixVector(system.M, layout.ndof, massState), 1);
+  addScaledVector(effectiveLoad, multiplyMatrixVector(system.C, layout.ndof, dampingState), 1);
+  const u = expandFreeVector(layout.ndof, layout.freeDofs, solveFactored(system.factor, freeVector(effectiveLoad, layout.freeDofs)));
+  const a = new Float64Array(layout.ndof);
+  const v = new Float64Array(layout.ndof);
+  for (let index = 0; index < layout.ndof; index++) {
+    a[index] = system.a0 * (u[index]! - state.u[index]!) - system.a2 * state.v[index]! - system.a3 * state.a[index]!;
+    v[index] = state.v[index]! + dt * (0.5 * state.a[index]! + 0.5 * a[index]!);
+  }
+  return { u, v, a, t: nextTime, damping: { ...damping }, system };
 }
 
 /**
@@ -96,30 +154,14 @@ export function newmarkStep(
   damping: RayleighParams = state.damping ?? { a: 0, b: 0 },
   mass?: Float64Array,
 ): NewmarkState {
-  if (!(dt > 0) || !Number.isFinite(dt)) throw new Error('Newmark time step must be finite and positive.');
-  validateState(mesh, state);
   const system = mass
     ? prepareNewmarkSystem(mesh, dt, damping, mass)
     : usableSystem(state.system, mesh, dt, damping)
       ? state.system
       : prepareNewmarkSystem(mesh, dt, damping);
-
-  const nextTime = state.t + dt;
-  const effectiveLoad = new Float64Array(loadAt(nextTime));
-  if (effectiveLoad.length !== mesh.ndof) throw new Error('Dynamic load vector length does not match the mesh.');
-  const massState = combination3(state.u, state.v, state.a, system.a0, system.a2, system.a3);
-  const dampingState = combination3(state.u, state.v, state.a, system.a1, system.a4, system.a5);
-  addScaledVector(effectiveLoad, multiplyMatrixVector(system.M, mesh.ndof, massState), 1);
-  addScaledVector(effectiveLoad, multiplyMatrixVector(system.C, mesh.ndof, dampingState), 1);
-  const u = expandFreeVector(mesh.ndof, mesh.freeDofs, solveFactored(system.factor, freeVector(effectiveLoad, mesh.freeDofs)));
-  const a = new Float64Array(mesh.ndof);
-  const v = new Float64Array(mesh.ndof);
-  for (let index = 0; index < mesh.ndof; index++) {
-    a[index] = system.a0 * (u[index]! - state.u[index]!) - system.a2 * state.v[index]! - system.a3 * state.a[index]!;
-    v[index] = state.v[index]! + dt * (0.5 * state.a[index]! + 0.5 * a[index]!);
-  }
+  const next = newmarkStepAssembled(mesh, state, loadAt, dt, damping, system);
   // Varying-mass steps must not reuse a stale K̂ factor.
-  return { u, v, a, t: nextTime, damping: { ...damping }, system: mass ? undefined : system };
+  return mass ? { ...next, system: undefined } : next;
 }
 
 /** Exact SDOF DAF for a harmonic force, used by the honest live meter. */
@@ -155,8 +197,8 @@ export function baseExcitationLoad(mass: Float64Array, ndof: number, iota: Float
   return load;
 }
 
-function validateState(mesh: AnalysisMesh, state: NewmarkState): void {
-  if (state.u.length !== mesh.ndof || state.v.length !== mesh.ndof || state.a.length !== mesh.ndof) {
+function validateState(layout: DynamicDofLayout, state: NewmarkState): void {
+  if (state.u.length !== layout.ndof || state.v.length !== layout.ndof || state.a.length !== layout.ndof) {
     throw new Error('Newmark state vectors must match the mesh DOF count.');
   }
   if (!Number.isFinite(state.t)) throw new Error('Newmark state time must be finite.');

@@ -34,6 +34,14 @@ export function spacePortalDemo(): EditorModel3d {
       gravity: false,
       points: [{ node: 3, fx: 0, fy: -80e3, fz: 0 }],
     },
+    story: {
+      kind: 'wind',
+      pattern: 'sine',
+      amplitudekNm: 4,
+      freqHz: 0.8,
+      zeta: 0.02,
+      directionDeg: 90,
+    },
   };
 }
 
@@ -87,3 +95,42 @@ export const DEMOS_3D = [
   { id: 'portal', label: 'Space portal', build: spacePortalDemo },
   { id: 'frame', label: 'Space frame', build: spaceFrameDemo },
 ] as const;
+
+/** Slender free-standing mast — lateral wind resonance demo. */
+export function slenderMastDemo(): EditorModel3d {
+  const H = 24;
+  const n = 4;
+  const nodes = [{ id: 1, x: 0, y: 0, z: 0 }];
+  const members = [];
+  for (let i = 1; i <= n; i++) {
+    nodes.push({ id: i + 1, x: 0, y: 0, z: (H * i) / n });
+    members.push({
+      id: i,
+      a: i,
+      b: i + 1,
+      material: STEEL,
+      section: { kind: 'tube' as const, d: 0.25, t: 0.01 },
+      releaseA: NO_RELEASES,
+      releaseB: NO_RELEASES,
+      roll: 0,
+    });
+  }
+  return {
+    v: 2,
+    name: 'Slender mast (wind)',
+    seed: 11,
+    nodes,
+    members,
+    supports: [{ node: 1, kind: 'fixed' }],
+    loads: { gravity: false, points: [] },
+    story: {
+      kind: 'wind',
+      pattern: 'sine',
+      amplitudekNm: 2.5,
+      freqHz: 0.35,
+      zeta: 0.02,
+      directionDeg: 0,
+    },
+  };
+}
+

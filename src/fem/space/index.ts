@@ -31,6 +31,7 @@ export type {
   NodeSpec3d,
   PointLoad3d,
   StaticResult3d,
+  StorySpec3d,
   SupportKind3d,
   SupportSpec3d,
 } from './types';
