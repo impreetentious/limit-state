@@ -9,7 +9,7 @@ import { analyzeStaticModel, deformationDisplay } from '../fem/statics';
 import { analyzeStaticModel3d, buckling3d, deformationDisplay3d, modal3d } from '../fem/space';
 import type { EditorModel, EigenResult } from '../fem/types';
 import { PRESETS } from '../presets/scenes';
-import { DEMOS_3D } from '../presets/scenes3d';
+import { PRESETS_3D } from '../presets/scenes3d';
 import { useEditorStore3d, type EditorTool3d } from '../state/editor-store-3d';
 import { decodeModel, encodeModel } from '../share/serialize';
 import { inspectStability } from '../state/stability';
@@ -66,6 +66,7 @@ const TOOLS_3D: Array<{ id: EditorTool3d; label: string; key: string }> = [
   { id: 'support', label: 'Support', key: 'S' },
   { id: 'load', label: 'Load', key: 'L' },
   { id: 'deck', label: 'Deck', key: 'D' },
+  { id: 'workplane', label: 'Plane', key: 'P' },
   { id: 'delete', label: 'Delete', key: '⌫' },
 ];
 
@@ -130,7 +131,9 @@ export function EditorApp(): React.JSX.Element {
   const extrudeDistance = useEditorStore3d((s) => s.extrudeDistance);
   const extrudeCount = useEditorStore3d((s) => s.extrudeCount);
   const setTool3d = useEditorStore3d((s) => s.setTool);
-  const setWorkplane = useEditorStore3d((s) => s.setWorkplane);
+  const setWorkplanePreset = useEditorStore3d((s) => s.setWorkplanePreset);
+  const beginCustomWorkplane = useEditorStore3d((s) => s.beginCustomWorkplane);
+  const pickCustomWorkplanePoint = useEditorStore3d((s) => s.pickCustomWorkplanePoint);
   const setExtrudeDistance = useEditorStore3d((s) => s.setExtrudeDistance);
   const setExtrudeCount = useEditorStore3d((s) => s.setExtrudeCount);
   const extrude3d = useEditorStore3d((s) => s.extrude);
@@ -153,9 +156,12 @@ export function EditorApp(): React.JSX.Element {
   const analysis3d = useMemo(() => analyzeStaticModel3d(model3d), [model3d]);
   const eigen3d = useMemo(() => {
     if (analysis3d.kind !== 'stable') return undefined;
+    // Soft budget: skip eigen above ~1.5k DOF so Build stays interactive.
+    if (analysis3d.mesh.ndof > 1500) return undefined;
+    const nModes = analysis3d.mesh.ndof > 600 ? 2 : 4;
     try {
       return {
-        modal: modal3d(analysis3d.mesh, 4),
+        modal: modal3d(analysis3d.mesh, nModes),
         buckling: (() => {
           const N = new Float64Array(analysis3d.mesh.elements.length);
           for (let i = 0; i < analysis3d.mesh.elements.length; i++) {
@@ -583,13 +589,13 @@ export function EditorApp(): React.JSX.Element {
             <button type="button" className={viewDimension === '3d' ? 'active' : ''} onClick={() => { setViewDimension('3d'); setMode('build'); }}>3D</button>
           </div>
           {viewDimension === '3d' ? (
-            <select className="preset-menu" aria-label="3D demos" defaultValue="" onChange={(event) => {
-              const demo = DEMOS_3D.find((d) => d.id === event.target.value);
-              if (demo) loadModel3d(demo.build());
+            <select className="preset-menu" aria-label="3D presets" defaultValue="" onChange={(event) => {
+              const preset = PRESETS_3D.find((d) => d.id === event.target.value);
+              if (preset) loadModel3d(preset.build());
               event.currentTarget.value = '';
             }}>
-              <option value="" disabled>3D demos</option>
-              {DEMOS_3D.map((demo) => <option key={demo.id} value={demo.id}>{demo.label}</option>)}
+              <option value="" disabled>3D presets</option>
+              {PRESETS_3D.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
             </select>
           ) : (
           <select className="preset-menu" aria-label="Presets" defaultValue="" onChange={(event) => {
@@ -629,10 +635,19 @@ export function EditorApp(): React.JSX.Element {
               ))}
               <div className="rail-bottom">
                 <label className="snap-toggle">Workplane
-                  <select value={workplane} onChange={(e) => setWorkplane(e.target.value as typeof workplane)} aria-label="Workplane">
+                  <select
+                    value={workplane.kind === 'custom' ? 'custom' : workplane.kind}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === 'custom') beginCustomWorkplane();
+                      else setWorkplanePreset(value as 'ground' | 'xz' | 'yz');
+                    }}
+                    aria-label="Workplane"
+                  >
                     <option value="ground">Ground XY</option>
                     <option value="xz">Elevation XZ</option>
                     <option value="yz">Elevation YZ</option>
+                    <option value="custom">Custom (3-click)…</option>
                   </select>
                 </label>
                 <div className="extrude-panel" aria-label="Extrude and replicate">
@@ -694,6 +709,10 @@ export function EditorApp(): React.JSX.Element {
               selectedNodeId={selection3d.kind === 'node' ? selection3d.id : null}
               selectedMemberId={selection3d.kind === 'member' ? selection3d.id : null}
               onWorkplaneClick={(point, hitNodeId, hitMemberId) => {
+                if (tool3d === 'workplane') {
+                  pickCustomWorkplanePoint(point);
+                  return;
+                }
                 if (tool3d === 'deck') {
                   if (hitMemberId !== null) toggleDeckMember(hitMemberId);
                   return;
@@ -745,9 +764,15 @@ export function EditorApp(): React.JSX.Element {
               : undefined}
           />
           )}
-          {viewDimension === '3d' && (
+          {viewDimension === '3d' && model3d.members.length === 0 && (
+            <div className="landing-invite" role="status">
+              <p className="landing-invite-brand">Limit State</p>
+              <p className="landing-invite-line">Draw on the workplane — or open a 3D preset.</p>
+            </div>
+          )}
+          {viewDimension === '3d' && model3d.members.length > 0 && (
             <div className="demo3d-note" role="note">
-              3D workplane editor — Extrude/Replicate to go spatial; Deck paints a traffic polyline; Wind dial for lateral stories.
+              Extrude/Replicate to go spatial · Deck paints a traffic polyline · Wind dial for lateral stories
             </div>
           )}
           {viewDimension === '3d' && (
@@ -815,9 +840,14 @@ export function EditorApp(): React.JSX.Element {
                     </select>
                   </label>
                   <p className="rail-hint">
-                    Horizontal pressure along the dial. Try the slender-mast demo for lateral resonance.
+                    Horizontal pressure along the dial. Slender mast → lateral resonance; slender deck → open Modal f₂ for St. Venant torsion.
                     {windFrame3d ? ` · t = ${windFrame3d.t.toFixed(2)} s` : ''}
                   </p>
+                  {model3d.name === 'Slender deck' && (
+                    <p className="honesty-note">
+                      Tacoma Narrows failed in torsional aeroelastic flutter. Modal f₂ here is the linear St. Venant torsion cousin — not flutter, and not warping / member-level LTB.
+                    </p>
+                  )}
                 </>
               )}
               {model3d.story?.kind === 'traffic' && (
@@ -888,6 +918,8 @@ export function EditorApp(): React.JSX.Element {
           {viewDimension === '2d' && movingMassFrame?.movingMass && <div className="dynamic-badge">Moving-mass Newmark — amp ×{movingMassFrame.movingMass.amplification.toFixed(2)} vs static at this station · vehicle mass lumped at axle contacts</div>}
           {viewDimension === '2d' && failurePhase !== undefined && <div className="failure-cinematic-badge">failure animation ×{reducedMotion ? 'static' : formatScale(0.25 + failurePhase * 0.75)} — illustrative, computed onset and mechanism</div>}
           {viewDimension === '2d' && model.members.length >= MEMBER_SOFT_LIMIT && <div className="member-limit-badge">{model.members.length}/{MEMBER_HARD_LIMIT} members — performance warning at {MEMBER_SOFT_LIMIT}; hard cap {MEMBER_HARD_LIMIT}</div>}
+          {viewDimension === '3d' && model3d.members.length >= MEMBER_SOFT_LIMIT && <div className="member-limit-badge">{model3d.members.length}/{MEMBER_HARD_LIMIT} members — line LOD forced above 64; eigen skipped above ~1.5k DOF</div>}
+          {viewDimension === '3d' && analysis3d.kind === 'stable' && analysis3d.mesh.ndof > 1500 && <div className="member-limit-badge">Modal/buckling deferred — {analysis3d.mesh.ndof} DOF (cap 1500 for live Build)</div>}
           {(viewDimension === '3d' ? analysis3d.kind === 'stable' : analysis.kind === 'stable') && <div className="eigen-panel" aria-live="polite">
             <span>Modal + Buckling{viewDimension === '3d' ? ' (3D)' : ''}</span>
             {viewDimension === '2d' && eigen.kind === 'loading' && <p>Solving in worker…</p>}
@@ -903,6 +935,9 @@ export function EditorApp(): React.JSX.Element {
               <p>{modeFamily === 'modal'
                 ? `mode shape normalized — ${reducedMotion ? 'static (reduced motion)' : `animating at ${(animationHz ?? 0).toFixed(2)} Hz${nativeAnimationHz && nativeAnimationHz > 2 ? ' (display slowed ×4)' : ''}`}`
                 : `buckling mode normalized — ${reducedMotion ? 'static (reduced motion)' : 'illustrative animation, not displacement'}`}</p>
+              {viewDimension === '3d' && model3d.name === 'Slender deck' && modeFamily === 'modal' && selectedMode === 1 && (
+                <p className="honesty-note">f₂ is St. Venant torsion (girders out of phase) — not aeroelastic flutter; warping torsion out of scope.</p>
+              )}
               <p>{(viewDimension === '3d' ? eigen3d?.buckling.values[0] : eigen.kind === 'ready' ? eigen.buckling.values[0] : undefined)
                 ? `λcr ${(viewDimension === '3d' ? eigen3d!.buckling.values[0]! : (eigen as { kind: 'ready'; buckling: EigenResult }).buckling.values[0]!).toFixed(2)} × reference load`
                 : 'No buckling under this load direction.'}</p>

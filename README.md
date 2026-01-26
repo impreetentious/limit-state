@@ -47,7 +47,7 @@ Next.js (static export) · React 19 · TypeScript (strict) · Zustand · Canvas2
 
 ## Status & plan
 
-This repo ships the Phase 1 2D core, Phase 2 depth, and Phase 3 core (space-frame solver, WebGL editor, extrude, 3D wind/traffic). **V1 is not final** until closeout **3P–3Z** (3D share, story parity, custom workplanes, skyline/perf, landing, screenshots) is complete.
+This repo ships the Phase 1 2D core, Phase 2 depth, and Phase 3 through closeout **3P–3T** (spatial presets, landing, skyline+RCM, custom workplanes). **V1 is not final** until closeout **3U–3Z** (3D share, story parity, cables, moving-mass, screenshots) is complete.
 
 ## License
 
@@ -62,4 +62,4 @@ This IST timestamp rule is permanent for all future workflows, commits, and AI a
 Follow this format for version control:
 
 * **Base Format Version:** 0.0.0 — the version of the version-block schema itself (the shape of these lines).
-* **Product Version:** `v0.4.11_2026-01-26_23:44:14` (IST)
+* **Product Version:** `v0.4.12_2026-01-27_00:23:57` (IST)

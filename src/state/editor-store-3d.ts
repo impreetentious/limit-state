@@ -1,5 +1,5 @@
 /**
- * Phase 3 workplane editor store — ground / elevation draw into EditorModel3d.
+ * Phase 3 workplane editor store — ground / elevation / custom draw into EditorModel3d.
  * Schema v2 only; 2D store stays untouched.
  */
 import { create } from 'zustand';
@@ -10,27 +10,42 @@ import {
   type StorySpec3d,
   type SupportKind3d,
 } from '../fem/space';
-import { spacePortalDemo } from '../presets/scenes3d';
+import { blankSpace3d } from '../presets/scenes3d';
 import {
   extrudeModel3d,
   replicateModel3d,
   scaleVec,
-  workplaneExtrudeAxis,
   type Vec3,
 } from './ops3d';
+import {
+  frameExtrudeAxis,
+  frameFromThreePoints,
+  projectPointToFrame,
+  resolveWorkplaneFrame,
+  type WorkplaneKind,
+  type WorkplaneSpec,
+} from './workplane';
 
-export type Workplane = 'ground' | 'xz' | 'yz';
-export type EditorTool3d = 'select' | 'node' | 'member' | 'support' | 'load' | 'deck' | 'delete';
+/** @deprecated Prefer WorkplaneKind — kept for existing imports. */
+export type Workplane = WorkplaneKind;
+export type EditorTool3d = 'select' | 'node' | 'member' | 'support' | 'load' | 'deck' | 'delete' | 'workplane';
 
 export type Selection3d =
   | { kind: 'none' }
   | { kind: 'node'; id: number }
   | { kind: 'member'; id: number };
 
+/** Three-click custom workplane definition in progress. */
+export type WorkplanePick =
+  | { step: 0 }
+  | { step: 1; origin: Vec3 }
+  | { step: 2; origin: Vec3; alongU: Vec3 };
+
 interface EditorState3d {
   model: EditorModel3d;
   tool: EditorTool3d;
-  workplane: Workplane;
+  workplane: WorkplaneSpec;
+  workplanePick: WorkplanePick;
   gridSnap: boolean;
   selection: Selection3d;
   memberStart: number | null;
@@ -40,7 +55,9 @@ interface EditorState3d {
   /** Number of copies for extrude / replicate. */
   extrudeCount: number;
   setTool: (tool: EditorTool3d) => void;
-  setWorkplane: (plane: Workplane) => void;
+  setWorkplanePreset: (plane: 'ground' | 'xz' | 'yz') => void;
+  beginCustomWorkplane: () => void;
+  pickCustomWorkplanePoint: (point: Vec3) => void;
   setGridSnap: (snap: boolean) => void;
   setSelection: (selection: Selection3d) => void;
   setNotice: (notice: string | null) => void;
@@ -84,18 +101,63 @@ function snapValue(value: number, enabled: boolean): number {
 let nextId = 100;
 
 export const useEditorStore3d = create<EditorState3d>((set, get) => ({
-  model: spacePortalDemo(),
+  model: blankSpace3d(),
   tool: 'select',
-  workplane: 'ground',
+  workplane: { kind: 'ground' },
+  workplanePick: { step: 0 },
   gridSnap: true,
   selection: { kind: 'none' },
   memberStart: null,
-  notice: null,
+  notice: 'Blank space — draw on the ground workplane, or open a 3D preset.',
   extrudeDistance: 5,
   extrudeCount: 1,
 
   setTool: (tool) => set({ tool, memberStart: null }),
-  setWorkplane: (workplane) => set({ workplane }),
+  setWorkplanePreset: (plane) =>
+    set({
+      workplane: { kind: plane },
+      workplanePick: { step: 0 },
+      notice: `Workplane ${plane === 'ground' ? 'Ground XY' : plane === 'xz' ? 'Elevation XZ' : 'Elevation YZ'}`,
+    }),
+  beginCustomWorkplane: () =>
+    set({
+      tool: 'workplane',
+      workplanePick: { step: 0 },
+      notice: 'Custom workplane — click origin, then a second point along u, then a third to set the plane.',
+    }),
+  pickCustomWorkplanePoint: (point) => {
+    const { workplanePick, gridSnap } = get();
+    const snap = (p: Vec3): Vec3 =>
+      gridSnap
+        ? { x: snapValue(p.x, true), y: snapValue(p.y, true), z: snapValue(p.z, true) }
+        : p;
+    const p = snap(point);
+    if (workplanePick.step === 0) {
+      set({
+        workplanePick: { step: 1, origin: p },
+        notice: 'Custom workplane — click a second point to set the u axis.',
+      });
+      return;
+    }
+    if (workplanePick.step === 1) {
+      set({
+        workplanePick: { step: 2, origin: workplanePick.origin, alongU: p },
+        notice: 'Custom workplane — click a third point off the u axis to finish.',
+      });
+      return;
+    }
+    const frame = frameFromThreePoints(workplanePick.origin, workplanePick.alongU, p);
+    if (!frame) {
+      set({ notice: 'Custom workplane — points were collinear; try again.', workplanePick: { step: 0 } });
+      return;
+    }
+    set({
+      workplane: { kind: 'custom', frame },
+      workplanePick: { step: 0 },
+      tool: 'select',
+      notice: 'Custom workplane set — draw on it; Extrude follows its normal.',
+    });
+  },
   setGridSnap: (gridSnap) => set({ gridSnap }),
   setSelection: (selection) => set({ selection }),
   setNotice: (notice) => set({ notice }),
@@ -109,7 +171,15 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
     set({ model, selection: { kind: 'none' }, memberStart: null, notice: null });
   },
 
-  reset: () => set({ model: blankModel(), selection: { kind: 'none' }, memberStart: null, notice: 'Blank space — draw on the ground workplane.' }),
+  reset: () =>
+    set({
+      model: blankModel(),
+      selection: { kind: 'none' },
+      memberStart: null,
+      workplane: { kind: 'ground' },
+      workplanePick: { step: 0 },
+      notice: 'Blank space — draw on the ground workplane, or open a 3D preset.',
+    }),
 
   addNodeAt: (x, y, z) => {
     const { gridSnap, model } = get();
@@ -220,7 +290,7 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
       set({ notice: 'Nothing to extrude — place nodes first.' });
       return;
     }
-    const offset = customOffset ?? scaleVec(workplaneExtrudeAxis(workplane), extrudeDistance);
+    const offset = customOffset ?? scaleVec(frameExtrudeAxis(resolveWorkplaneFrame(workplane)), extrudeDistance);
     const result = extrudeModel3d(model, {
       offset,
       count: extrudeCount,
@@ -243,7 +313,7 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
       set({ notice: 'Nothing to replicate — place nodes first.' });
       return;
     }
-    const offset = customOffset ?? scaleVec(workplaneExtrudeAxis(workplane), extrudeDistance);
+    const offset = customOffset ?? scaleVec(frameExtrudeAxis(resolveWorkplaneFrame(workplane)), extrudeDistance);
     const result = replicateModel3d(model, {
       offset,
       count: extrudeCount,
@@ -350,17 +420,11 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
   },
 }));
 
-/** Project a world hit onto the active workplane (Z-up). */
+/** Project a world hit onto the active workplane. */
 export function projectToWorkplane(
   point: { x: number; y: number; z: number },
-  plane: Workplane,
+  plane: WorkplaneSpec | WorkplaneKind,
 ): { x: number; y: number; z: number } {
-  switch (plane) {
-    case 'ground':
-      return { x: point.x, y: point.y, z: 0 };
-    case 'xz':
-      return { x: point.x, y: 0, z: point.z };
-    case 'yz':
-      return { x: 0, y: point.y, z: point.z };
-  }
+  const spec: WorkplaneSpec = typeof plane === 'string' ? { kind: plane === 'custom' ? 'ground' : plane } : plane;
+  return projectPointToFrame(point, resolveWorkplaneFrame(spec));
 }

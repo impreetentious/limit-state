@@ -1,6 +1,6 @@
 /**
- * Phase 3 WebGL structure viewer. Orbit/pan, member LOD (lines ↔ cylinders),
- * stress color/width, deformed shape, mode ghosts.
+ * Phase 3 WebGL structure viewer. Orbit/pan, member LOD (lines ↔ cylinders with
+ * hysteresis), stress color/width, deformed shape, mode ghosts.
  */
 'use client';
 
@@ -15,11 +15,18 @@ import {
   type SupportKind3d,
 } from '../fem/space';
 import type { EigenResult } from '../fem/types';
+import { projectPointToFrame, resolveWorkplaneFrame, type WorkplaneSpec } from '../state/workplane';
 
 const PAPER = 0xf4f1ea;
 const INK = 0x1a1d21;
 const BLUE = 0x2456a4;
-const LOD_DISTANCE = 35;
+/** LOD hysteresis. Far → lines; near → extruded cylinders. */
+const LOD_ENTER_LINES = 42;
+const LOD_EXIT_LINES = 28;
+/** Force line LOD above this member count (rebuild cost + fill rate). */
+const FORCE_LINES_AT_MEMBERS = 64;
+/** Shared unit cylinder (scale radius/length per member). */
+const UNIT_CYLINDER = new THREE.CylinderGeometry(1, 1, 1, 6, 1);
 
 export interface StructureCanvas3dProps {
   model: EditorModel3d;
@@ -31,7 +38,7 @@ export interface StructureCanvas3dProps {
   /** Traffic axle markers along the deck polyline. */
   trafficAxles?: Array<{ x: number; y: number; z: number }>;
   /** When set, left-click raycasts to the workplane and reports the hit. */
-  workplane?: 'ground' | 'xz' | 'yz';
+  workplane?: import('../state/workplane').WorkplaneSpec | 'ground' | 'xz' | 'yz';
   onWorkplaneClick?: (
     point: { x: number; y: number; z: number },
     hitNodeId: number | null,
@@ -118,8 +125,11 @@ export function StructureCanvas3d({
     scene.add(structure, ghostGroup);
 
     let lastSignature = '';
-    let lastLodLines = camera.position.distanceTo(controls.target) > LOD_DISTANCE;
+    let lastLodLines = camera.position.distanceTo(controls.target) > LOD_ENTER_LINES;
+    let lastGhostKey = '';
     let frame = 0;
+    const emptyGhost = buildEmptyGhost();
+    scene.add(emptyGhost);
 
     const resize = () => {
       const w = host.clientWidth || 1;
@@ -175,17 +185,16 @@ export function StructureCanvas3d({
         }
       }
 
-      const plane = props.workplane ?? 'ground';
-      if (plane === 'xz') {
-        workplaneMesh.rotation.set(0, 0, 0);
-        workplaneMesh.rotation.x = Math.PI / 2; // XZ → rotate from XY about X? 
-        // XY plane default; for XZ (y=0) rotate -90° about X so normal is +Y.
-        workplaneMesh.rotation.set(-Math.PI / 2, 0, 0);
-      } else if (plane === 'yz') {
-        workplaneMesh.rotation.set(0, Math.PI / 2, 0);
-      } else {
-        workplaneMesh.rotation.set(0, 0, 0);
-      }
+      const planeSpec: WorkplaneSpec =
+        typeof props.workplane === 'string' || !props.workplane
+          ? { kind: (props.workplane as 'ground' | 'xz' | 'yz' | undefined) ?? 'ground' }
+          : props.workplane;
+      const frame = resolveWorkplaneFrame(planeSpec);
+      workplaneMesh.position.set(frame.origin.x, frame.origin.y, frame.origin.z);
+      const xAxis = new THREE.Vector3(frame.u.x, frame.u.y, frame.u.z);
+      const yAxis = new THREE.Vector3(frame.v.x, frame.v.y, frame.v.z);
+      const zAxis = new THREE.Vector3(frame.n.x, frame.n.y, frame.n.z);
+      workplaneMesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis));
       workplaneMesh.updateMatrixWorld(true);
       const hits = raycaster.intersectObject(workplaneMesh);
       const hit = hits[0];
@@ -200,26 +209,34 @@ export function StructureCanvas3d({
               const b = props.model.nodes.find((n) => n.id === m.b)!;
               return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
             })();
-      // Project onto workplane axes.
-      let projected = { ...point };
-      if (plane === 'ground') projected = { x: point.x, y: point.y, z: 0 };
-      if (plane === 'xz') projected = { x: point.x, y: 0, z: point.z };
-      if (plane === 'yz') projected = { x: 0, y: point.y, z: point.z };
-      handler(projected, hitNode, hitMember);
+      handler(projectPointToFrame(point, frame), hitNode, hitMember);
     };
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
 
     const tick = () => {
       frame = requestAnimationFrame(tick);
       const props = propsRef.current;
-      const lodLines = camera.position.distanceTo(controls.target) > LOD_DISTANCE;
+      const dist = camera.position.distanceTo(controls.target);
+      const forceLines = props.model.members.length >= FORCE_LINES_AT_MEMBERS;
+      // Hysteresis: once in line mode, stay until closer than EXIT; once extruded, stay until farther than ENTER.
+      let lodLines = lastLodLines;
+      if (forceLines) lodLines = true;
+      else if (lastLodLines && dist < LOD_EXIT_LINES) lodLines = false;
+      else if (!lastLodLines && dist > LOD_ENTER_LINES) lodLines = true;
       const signature = sceneSignature(props);
       if (signature !== lastSignature || lodLines !== lastLodLines) {
         lastSignature = signature;
         lastLodLines = lodLines;
         rebuildStructure(structure, props, lodLines);
       }
-      rebuildGhost(ghostGroup, props);
+      emptyGhost.visible = props.model.members.length === 0;
+      const ghostKey = ghostTopologyKey(props);
+      if (ghostKey !== lastGhostKey) {
+        lastGhostKey = ghostKey;
+        rebuildGhost(ghostGroup, props);
+      } else {
+        updateGhostPhase(ghostGroup, props);
+      }
       controls.update();
       renderer.render(scene, camera);
     };
@@ -232,6 +249,8 @@ export function StructureCanvas3d({
       controls.dispose();
       disposeObject(structure);
       disposeObject(ghostGroup);
+      scene.remove(emptyGhost);
+      disposeObject(emptyGhost);
       workplaneMesh.geometry.dispose();
       (workplaneMesh.material as THREE.Material).dispose();
       renderer.dispose();
@@ -240,6 +259,31 @@ export function StructureCanvas3d({
   }, []);
 
   return <div ref={hostRef} className="structure-canvas-3d-host" aria-label="3D structure viewport" />;
+}
+
+/** Faint space-portal sketch for empty 3D canvas. */
+function buildEmptyGhost(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.LineDashedMaterial({ color: INK, dashSize: 0.35, gapSize: 0.25, transparent: true, opacity: 0.28 });
+  const pts: Array<[number, number, number]> = [
+    [0, 0, 0], [8, 0, 0], [0, 0, 6], [8, 0, 6],
+  ];
+  const segs: Array<[number, number]> = [[0, 2], [1, 3], [2, 3]];
+  for (const [i, j] of segs) {
+    const a = new THREE.Vector3(...pts[i]!);
+    const b = new THREE.Vector3(...pts[j]!);
+    const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
+    const line = new THREE.Line(geo, mat.clone());
+    line.computeLineDistances();
+    g.add(line);
+  }
+  return g;
+}
+
+function ghostTopologyKey(props: StructureCanvas3dProps): string {
+  const { analysis, modeGhost } = props;
+  if (!modeGhost || analysis.kind !== 'stable') return 'none';
+  return `${analysis.mesh.elements.length}|${modeGhost.mode}|${modeGhost.result.values.length}|${modeGhost.result.iterations}`;
 }
 
 function sceneSignature(props: StructureCanvas3dProps): string {
@@ -270,7 +314,7 @@ function rebuildStructure(root: THREE.Group, props: StructureCanvas3dProps, useL
   for (const node of model.nodes) {
     const selected = selectedNodeId === node.id;
     const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(selected ? 0.16 : 0.12, 12, 10),
+      new THREE.SphereGeometry(selected ? 0.16 : 0.12, 8, 6),
       new THREE.MeshStandardMaterial({ color: selected ? BLUE : INK, roughness: 0.7 }),
     );
     mesh.position.set(node.x, node.y, node.z);
@@ -339,10 +383,34 @@ function rebuildGhost(root: THREE.Group, props: StructureCanvas3dProps): void {
   if (!(mode >= 0 && mode < nModes)) return;
   const amp = 1.2;
   const ndof = analysis.mesh.ndof;
-  for (const element of analysis.mesh.elements) {
-    const pa = modePoint(analysis.mesh.coords, result.vectors, ndof, nModes, element.na, mode, phase, amp);
-    const pb = modePoint(analysis.mesh.coords, result.vectors, ndof, nModes, element.nb, mode, phase, amp);
-    root.add(memberVisual(pa, pb, 0x7c3f9c, 0.03, true, 0.65, true));
+  const maxComp = modeMaxComponent(result.vectors, ndof, nModes, mode);
+  const inv = maxComp > 0 ? amp / maxComp : 0;
+  for (let ei = 0; ei < analysis.mesh.elements.length; ei++) {
+    const element = analysis.mesh.elements[ei]!;
+    const pa = modePoint(analysis.mesh.coords, result.vectors, nModes, element.na, mode, phase * inv);
+    const pb = modePoint(analysis.mesh.coords, result.vectors, nModes, element.nb, mode, phase * inv);
+    const line = memberVisual(pa, pb, 0x7c3f9c, 0.03, true, 0.65, true);
+    line.userData = { na: element.na, nb: element.nb, inv };
+    root.add(line);
+  }
+}
+
+/** Update ghost line endpoints for the current phase without reallocating. */
+function updateGhostPhase(root: THREE.Group, props: StructureCanvas3dProps): void {
+  const { analysis, modeGhost } = props;
+  if (!modeGhost || analysis.kind !== 'stable' || root.children.length === 0) return;
+  const { result, mode, phase } = modeGhost;
+  const nModes = result.values.length;
+  for (const child of root.children) {
+    const { na, nb, inv } = child.userData as { na: number; nb: number; inv: number };
+    const pa = modePoint(analysis.mesh.coords, result.vectors, nModes, na, mode, phase * inv);
+    const pb = modePoint(analysis.mesh.coords, result.vectors, nModes, nb, mode, phase * inv);
+    const line = child as THREE.Line;
+    const pos = line.geometry.getAttribute('position') as THREE.BufferAttribute;
+    pos.setXYZ(0, pa.x, pa.y, pa.z);
+    pos.setXYZ(1, pb.x, pb.y, pb.z);
+    pos.needsUpdate = true;
+    if (line.computeLineDistances) line.computeLineDistances();
   }
 }
 
@@ -364,24 +432,24 @@ function deformedPoint(coords: Float64Array, u: Float64Array, node: number, scal
   );
 }
 
+function modeMaxComponent(vectors: Float64Array, ndof: number, nModes: number, mode: number): number {
+  let maxComp = 0;
+  for (let i = 0; i < ndof; i++) maxComp = Math.max(maxComp, Math.abs(vectors[i * nModes + mode]!));
+  return maxComp;
+}
+
 function modePoint(
   coords: Float64Array,
   vectors: Float64Array,
-  ndof: number,
   nModes: number,
   node: number,
   mode: number,
-  phase: number,
-  amp: number,
+  scale: number,
 ): THREE.Vector3 {
-  let maxComp = 0;
-  for (let i = 0; i < ndof; i++) maxComp = Math.max(maxComp, Math.abs(vectors[i * nModes + mode]!));
-  const inv = maxComp > 0 ? amp / maxComp : 0;
-  const s = phase * inv;
   return new THREE.Vector3(
-    coords[3 * node]! + s * vectors[6 * node * nModes + mode]!,
-    coords[3 * node + 1]! + s * vectors[(6 * node + 1) * nModes + mode]!,
-    coords[3 * node + 2]! + s * vectors[(6 * node + 2) * nModes + mode]!,
+    coords[3 * node]! + scale * vectors[6 * node * nModes + mode]!,
+    coords[3 * node + 1]! + scale * vectors[(6 * node + 1) * nModes + mode]!,
+    coords[3 * node + 2]! + scale * vectors[(6 * node + 2) * nModes + mode]!,
   );
 }
 
@@ -407,11 +475,14 @@ function memberVisual(
   const len = dir.length();
   if (!(len > 0)) return new THREE.Group();
   const cyl = new THREE.Mesh(
-    new THREE.CylinderGeometry(radius, radius, len, 8, 1, false),
+    UNIT_CYLINDER,
     new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05, transparent: opacity < 1, opacity }),
   );
+  cyl.scale.set(radius, len, radius);
   cyl.position.copy(a).add(b).multiplyScalar(0.5);
   cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  // Shared geometry — do not dispose on rebuild.
+  cyl.userData.sharedGeometry = true;
   return cyl;
 }
 
@@ -465,7 +536,7 @@ function stressColorHex(utilization: number): number {
 function disposeObject(object: THREE.Object3D): void {
   object.traverse((child) => {
     const mesh = child as THREE.Mesh;
-    if (mesh.geometry) mesh.geometry.dispose();
+    if (mesh.geometry && !mesh.userData.sharedGeometry) mesh.geometry.dispose();
     const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
     if (!mat) return;
     if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
