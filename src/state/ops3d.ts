@@ -141,6 +141,7 @@ export function extrudeModel3d(model: EditorModel3d, options: ExtrudeOptions): E
           releaseA: { ...template.releaseA },
           releaseB: { ...template.releaseB },
           roll: 0,
+          cableOnly: false,
         });
         addedMembers++;
       }

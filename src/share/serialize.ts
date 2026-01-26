@@ -234,6 +234,7 @@ export function migrateV1toV2(model: EditorModel): EditorModel3d {
       releaseA: boolReleaseTo3d(member.releaseA || member.cableOnly),
       releaseB: boolReleaseTo3d(member.releaseB || member.cableOnly),
       roll: 0,
+      cableOnly: member.cableOnly,
     })),
     supports: valid.supports.map((support) => ({
       node: support.node,
@@ -248,11 +249,36 @@ export function migrateV1toV2(model: EditorModel): EditorModel3d {
         fz: 0,
       })),
     },
+    deck: [...valid.deck],
+    story: migrateStoryTo3d(valid.story),
   };
 }
 
+/** Map a v1 story into the 3D story union (wind gains directionDeg = 0). */
+export function migrateStoryTo3d(story: StorySpec): NonNullable<EditorModel3d['story']> {
+  if (story.kind === 'traffic') {
+    return { kind: 'traffic', weightkN: story.weightkN, speed: story.speed, movingMass: story.movingMass };
+  }
+  if (story.kind === 'wind') {
+    return {
+      kind: 'wind',
+      pattern: story.pattern,
+      amplitudekNm: story.amplitudekNm,
+      freqHz: story.freqHz,
+      zeta: story.zeta,
+      directionDeg: 0,
+    };
+  }
+  if (story.kind === 'earthquake') {
+    return { kind: 'earthquake', record: story.record, scale: story.scale, zeta: story.zeta };
+  }
+  if (story.kind === 'pushover') return { kind: 'pushover' };
+  return { kind: 'ramp' };
+}
+
 function boolReleaseTo3d(released: boolean): EndReleases3d {
-  return released ? { tx: true, ty: true, tz: true } : { ...NO_RELEASES };
+  // Moment release → θy+θz; keep torsion for nonsingular condensation.
+  return released ? { tx: false, ty: true, tz: true } : { ...NO_RELEASES };
 }
 
 function migrateSupportKind(kind: 'pin' | 'roller' | 'fixed'): SupportKind3d {
@@ -297,6 +323,31 @@ export async function decodeModel3d(hash: string): Promise<EditorModel3d> {
   }
 }
 
+/**
+ * Peek schema version from a share fragment without full validate.
+ * Boot loads v2 into 3D, v1 into 2D.
+ */
+export async function peekShareSchemaVersion(hash: string): Promise<1 | 2> {
+  const fragment = hash.startsWith('#') ? hash : new URL(hash, 'https://limit-state.local').hash;
+  const match = /^#(m|mu)=([A-Za-z0-9_-]+)$/.exec(fragment);
+  if (!match) throw new Error('Share URL must contain a #m= or #mu= model fragment.');
+  const encoded = base64urlDecode(match[2]!);
+  let bytes = encoded;
+  if (match[1] === 'm') {
+    if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot decompress #m share URLs.');
+    try {
+      bytes = await streamBytes(blobFromBytes(encoded).stream().pipeThrough(new DecompressionStream('deflate-raw')));
+    } catch {
+      throw new Error('Shared model compression data is invalid.');
+    }
+  }
+  const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+  if (!isRecord(parsed) || (parsed.v !== 1 && parsed.v !== 2)) {
+    throw new Error('Shared model does not declare schema v1 or v2.');
+  }
+  return parsed.v;
+}
+
 function validateModel3d(value: unknown): EditorModel3d {
   if (!isRecord(value) || value.v !== 2 || typeof value.name !== 'string' || !finiteInteger(value.seed)) {
     throw new Error('Shared model does not match Limit State schema v2.');
@@ -307,6 +358,14 @@ function validateModel3d(value: unknown): EditorModel3d {
   if (!isRecord(value.loads) || typeof value.loads.gravity !== 'boolean' || !Array.isArray(value.loads.points)) {
     throw new Error('Shared model has malformed loads.');
   }
+  const deck = value.deck === undefined
+    ? undefined
+    : Array.isArray(value.deck)
+      ? value.deck.map((id) => {
+        if (!finiteInteger(id)) throw new Error('Deck ids must be finite integers.');
+        return id;
+      })
+      : (() => { throw new Error('Shared model has malformed deck.'); })();
   const model: EditorModel3d = {
     v: 2,
     name: value.name,
@@ -315,6 +374,8 @@ function validateModel3d(value: unknown): EditorModel3d {
     members: value.members.map(parseMember3d),
     supports: value.supports.map(parseSupport3d),
     loads: { gravity: value.loads.gravity, points: value.loads.points.map(parsePoint3d) },
+    ...(deck !== undefined ? { deck } : {}),
+    story: value.story === undefined ? undefined : parseStory3d(value.story),
   };
   buildMesh3d(model);
   return model;
@@ -338,15 +399,26 @@ function parseMember3d(value: unknown): EditorModel3d['members'][number] {
   ) {
     throw new Error('Shared model has an invalid 3D member.');
   }
+  const cableOnly = value.cableOnly === undefined ? false : value.cableOnly === true;
+  if (value.cableOnly !== undefined && typeof value.cableOnly !== 'boolean') {
+    throw new Error('Shared model has an invalid 3D member.');
+  }
+  const releaseA = cableOnly
+    ? { tx: false, ty: true, tz: true }
+    : parseReleases(value.releaseA);
+  const releaseB = cableOnly
+    ? { tx: false, ty: true, tz: true }
+    : parseReleases(value.releaseB);
   return {
     id: value.id,
     a: value.a,
     b: value.b,
     material: value.material,
     section: parseSection(value.section),
-    releaseA: parseReleases(value.releaseA),
-    releaseB: parseReleases(value.releaseB),
+    releaseA,
+    releaseB,
     roll: value.roll,
+    cableOnly,
   };
 }
 
@@ -388,4 +460,43 @@ function parsePoint3d(value: unknown): EditorModel3d['loads']['points'][number] 
     point.mz = value.mz;
   }
   return point;
+}
+
+function parseStory3d(value: unknown): NonNullable<EditorModel3d['story']> {
+  if (!isRecord(value) || typeof value.kind !== 'string') throw new Error('Shared model has an invalid 3D story.');
+  if (value.kind === 'ramp') return { kind: 'ramp' };
+  if (value.kind === 'pushover') return { kind: 'pushover' };
+  if (value.kind === 'traffic' && finitePositive(value.weightkN) && finitePositive(value.speed)) {
+    const movingMass = value.movingMass === undefined ? false : value.movingMass === true;
+    if (value.movingMass !== undefined && typeof value.movingMass !== 'boolean') {
+      throw new Error('Shared model has invalid 3D story settings.');
+    }
+    return { kind: 'traffic', weightkN: value.weightkN, speed: value.speed, movingMass };
+  }
+  if (
+    value.kind === 'wind'
+    && (value.pattern === 'steady' || value.pattern === 'sine' || value.pattern === 'gusts')
+    && finitePositive(value.amplitudekNm)
+    && finitePositive(value.freqHz)
+    && finitePositive(value.zeta)
+    && finite(value.directionDeg)
+  ) {
+    return {
+      kind: 'wind',
+      pattern: value.pattern,
+      amplitudekNm: value.amplitudekNm,
+      freqHz: value.freqHz,
+      zeta: value.zeta,
+      directionDeg: value.directionDeg,
+    };
+  }
+  if (
+    value.kind === 'earthquake'
+    && (value.record === 'pulse' || value.record === 'chirp' || value.record === 'elcentro-scaled')
+    && finitePositive(value.scale)
+    && finitePositive(value.zeta)
+  ) {
+    return { kind: 'earthquake', record: value.record, scale: value.scale, zeta: value.zeta };
+  }
+  throw new Error('Shared model has invalid 3D story settings.');
 }

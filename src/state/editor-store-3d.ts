@@ -80,6 +80,9 @@ interface EditorState3d {
   setWindDirectionDeg: (directionDeg: number) => void;
   setWindStory: (partial: Partial<Extract<StorySpec3d, { kind: 'wind' }>>) => void;
   setTrafficStory: (partial?: Partial<Extract<StorySpec3d, { kind: 'traffic' }>>) => void;
+  setRampStory: () => void;
+  setPushoverStory: () => void;
+  setEarthquakeStory: (partial?: Partial<Extract<StorySpec3d, { kind: 'earthquake' }>>) => void;
   toggleDeckMember: (memberId: number) => void;
 }
 
@@ -220,6 +223,7 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
             releaseA: NO_RELEASES,
             releaseB: NO_RELEASES,
             roll: 0,
+          cableOnly: false,
           },
         ],
       },
@@ -359,12 +363,45 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
       kind: 'traffic',
       weightkN: 250,
       speed: 12,
+      movingMass: false,
     };
     const current = model.story?.kind === 'traffic' ? model.story : defaults;
     const story = { ...current, ...partial, kind: 'traffic' as const };
     set({
       model: { ...model, story },
-      notice: `Traffic · ${story.weightkN} kN · ${story.speed} m/s — paint a contiguous deck path`,
+      notice: `Traffic · ${story.weightkN} kN · ${story.speed} m/s${story.movingMass ? ' · moving mass' : ''} — paint a contiguous deck path`,
+    });
+  },
+
+  setRampStory: () => {
+    const { model } = get();
+    set({
+      model: { ...model, story: { kind: 'ramp' } },
+      notice: 'Load ramp — proportional factor on reference loads to first limit.',
+    });
+  },
+
+  setPushoverStory: () => {
+    const { model } = get();
+    set({
+      model: { ...model, story: { kind: 'pushover' } },
+      notice: 'Plastic pushover — hinges when |M| reaches M_p.',
+    });
+  },
+
+  setEarthquakeStory: (partial = {}) => {
+    const { model } = get();
+    const defaults: Extract<StorySpec3d, { kind: 'earthquake' }> = {
+      kind: 'earthquake',
+      record: 'pulse',
+      scale: 1,
+      zeta: 0.05,
+    };
+    const current = model.story?.kind === 'earthquake' ? model.story : defaults;
+    const story = { ...current, ...partial, kind: 'earthquake' as const };
+    set({
+      model: { ...model, story },
+      notice: `Earthquake · ${story.record} · scale ${story.scale} · ζ ${(story.zeta * 100).toFixed(0)}%`,
     });
   },
 
@@ -389,7 +426,7 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
     if (!candidate) return;
     if (deck.length === 0) {
       set({
-        model: { ...model, deck: [memberId], story: model.story?.kind === 'traffic' ? model.story : { kind: 'traffic', weightkN: 250, speed: 12 } },
+        model: { ...model, deck: [memberId], story: model.story?.kind === 'traffic' ? model.story : { kind: 'traffic', weightkN: 250, speed: 12, movingMass: false } },
         selection: { kind: 'member', id: memberId },
         notice: 'Deck path started — extend from either end.',
       });

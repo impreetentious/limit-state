@@ -63,15 +63,19 @@ export function buildMesh3d(model: EditorModel3d): AnalysisMesh3d {
       R,
     };
 
-    const truss = isFullRelease(member.releaseA) && isFullRelease(member.releaseB);
+    const truss = member.cableOnly || (isFullRelease(member.releaseA) && isFullRelease(member.releaseB));
     if (truss) {
+      // Cables / axial bars: release bending; keep torsion unless both ends fully released.
+      const releases = member.cableOnly
+        ? { tx: false, ty: true, tz: true }
+        : TRUSS_RELEASES;
       elements.push({
         ...common,
         na: a.index,
         nb: b.index,
         L: memberLength,
-        releaseA: TRUSS_RELEASES,
-        releaseB: TRUSS_RELEASES,
+        releaseA: releases,
+        releaseB: releases,
       });
       continue;
     }
@@ -216,6 +220,7 @@ export function planarCantileverModel(opts?: {
         releaseA: NO_RELEASES,
         releaseB: NO_RELEASES,
         roll: 0,
+        cableOnly: false,
       },
     ],
     supports: [{ node: 1, kind: 'fixed' }],

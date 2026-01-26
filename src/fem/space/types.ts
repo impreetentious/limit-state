@@ -34,6 +34,8 @@ export interface MemberSpec3d {
   releaseB: EndReleases3d;
   /** Roll angle (rad) about local x after the default triad. */
   roll: number;
+  /** Tension-only cable — slack iteration in `cables3d`. */
+  cableOnly?: boolean;
 }
 
 export interface PointLoad3d {
@@ -78,6 +80,16 @@ export type StorySpec3d =
       kind: 'traffic';
       weightkN: number;
       speed: number;
+      /** Optional moving-mass Newmark (2H cousin). */
+      movingMass?: boolean;
+    }
+  | { kind: 'ramp' }
+  | { kind: 'pushover' }
+  | {
+      kind: 'earthquake';
+      record: import('../types').EarthquakeRecordId;
+      scale: number;
+      zeta: number;
     };
 
 export interface Element3d {
