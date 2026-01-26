@@ -2,6 +2,7 @@
  * 12-DOF space-frame element matrices and assembly.
  * Local DOF order: [u, v, w, θx, θy, θz] × 2.
  */
+import { createSkyline, profileFromDofGroups, skylineAdd, skylineToDense, type SkylineMatrix } from '../skyline';
 import type { AnalysisMesh3d, Element3d, EndReleases3d } from './types';
 
 const N = 12;
@@ -239,14 +240,20 @@ export function elementLocalStiffness3d(element: Element3d): Float64Array {
   return condenseWithElementReleases(elastic, element);
 }
 
-/** Assemble global K (dense ndof×ndof). */
-export function assembleK3d(mesh: AnalysisMesh3d): Float64Array {
-  const K = new Float64Array(mesh.ndof * mesh.ndof);
+/** Assemble global K (symmetric skyline). */
+export function assembleK3d(mesh: AnalysisMesh3d): SkylineMatrix {
+  const groups = mesh.elements.map((element) => [...elementDofs3d(element)]);
+  const K = createSkyline(profileFromDofGroups(mesh.ndof, groups));
   for (const element of mesh.elements) {
     const local = elementLocalStiffness3d(element);
-    addElementMatrix3d(K, mesh.ndof, transformToGlobal3d(local, element.R), element);
+    addElementMatrixSkyline3d(K, transformToGlobal3d(local, element.R), element);
   }
   return K;
+}
+
+/** Dense K for eigen / Newmark bridges that still expect Float64Array. */
+export function assembleK3dDense(mesh: AnalysisMesh3d): Float64Array {
+  return skylineToDense(assembleK3d(mesh));
 }
 
 /** Assemble global consistent M. */
@@ -390,6 +397,18 @@ function addElementMatrix3d(global: Float64Array, ndof: number, local: Float64Ar
     for (let j = 0; j < N; j++) {
       const index = row * ndof + dofs[j]!;
       global[index] = global[index]! + local[i * N + j]!;
+    }
+  }
+}
+
+/** Scatter a 12×12 into the symmetric skyline (lower triangle only). */
+function addElementMatrixSkyline3d(global: SkylineMatrix, local: Float64Array, element: Element3d): void {
+  const dofs = elementDofs3d(element);
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j <= i; j++) {
+      // Average the symmetric pair to guard tiny antisymmetry from transforms.
+      const v = 0.5 * (local[i * N + j]! + local[j * N + i]!);
+      if (v !== 0) skylineAdd(global, dofs[i]!, dofs[j]!, v);
     }
   }
 }

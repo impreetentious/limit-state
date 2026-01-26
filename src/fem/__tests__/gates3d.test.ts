@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { sectionProps } from '../materials';
+import { skylineToDense } from '../skyline';
 import { analyzeStaticModel } from '../statics';
 import type { EditorModel } from '../types';
 import {
@@ -225,8 +226,9 @@ describe('Phase 3 — G24 space corner frame', () => {
 
     const mesh = buildMesh3d(model);
     const K = assembleK3d(mesh);
+    const dense = skylineToDense(K);
     for (let i = 0; i < mesh.ndof; i++)
-      for (let j = 0; j < mesh.ndof; j++) expect(K[i * mesh.ndof + j]).toBeCloseTo(K[j * mesh.ndof + i]!, 9);
+      for (let j = 0; j < mesh.ndof; j++) expect(dense[i * mesh.ndof + j]).toBeCloseTo(dense[j * mesh.ndof + i]!, 9);
 
     const analysis = analyzeStaticModel3d(model);
     if (analysis.kind !== 'stable') throw new Error(analysis.message);

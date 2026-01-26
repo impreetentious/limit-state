@@ -6,6 +6,7 @@ export {
   memberTriad,
   transformToGlobal3d,
   assembleK3d,
+  assembleK3dDense,
   assembleKg3d,
   assembleM3d,
   assembleF3d,

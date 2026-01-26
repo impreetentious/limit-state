@@ -1,8 +1,15 @@
 /**
- * 3D static solve: assemble → LDLᵀ free partition → expand.
- * Reuses the dimension-agnostic factor/solve from fem/solve.ts.
+ * 3D static solve: assemble skyline K → free LDLᵀ → expand.
  */
-import { expandFreeVector, factorLDLT, freeMatrix, freeVector, solveFactored, type Factor } from '../solve';
+import {
+  factorSkylineLDLT,
+  freeSkyline,
+  matvecSkyline,
+  solveSkylineFactored,
+  type SkylineFactor,
+  type SkylineMatrix,
+} from '../skyline';
+import { expandFreeVector, freeVector } from '../solve';
 import { assembleF3d, assembleK3d, elementLocalStiffness3d } from './assemble';
 import { buildMesh3d } from './mesh';
 import type { AnalysisMesh3d, EditorModel3d, StaticResult3d } from './types';
@@ -13,15 +20,21 @@ export type StaticAnalysis3d =
   | { kind: 'invalid'; message: string };
 
 export type StaticSystem3d =
-  | { ndof: number; K: Float64Array; factor: Factor }
-  | { ndof: number; K: Float64Array; mechanismFreeDof: number };
+  | { ndof: number; K: SkylineMatrix; factor: SkylineFactor; freePerm: Int32Array }
+  | { ndof: number; K: SkylineMatrix; mechanismFreeDof: number };
 
-/** Assemble and factor once. */
+/** Assemble and factor once (skyline free partition + RCM). */
 export function prepareStaticSystem3d(mesh: AnalysisMesh3d): StaticSystem3d {
   const K = assembleK3d(mesh);
-  const result = factorLDLT(freeMatrix(K, mesh.ndof, mesh.freeDofs), mesh.freeDofs.length);
+  const groups = mesh.elements.map((element) => {
+    const a = 6 * element.na;
+    const b = 6 * element.nb;
+    return [a, a + 1, a + 2, a + 3, a + 4, a + 5, b, b + 1, b + 2, b + 3, b + 4, b + 5];
+  });
+  const { Kff, perm } = freeSkyline(K, mesh.freeDofs, groups);
+  const result = factorSkylineLDLT(Kff);
   return result.ok
-    ? { ndof: mesh.ndof, K, factor: result.factor }
+    ? { ndof: mesh.ndof, K, factor: result.factor, freePerm: perm }
     : { ndof: mesh.ndof, K, mechanismFreeDof: result.mechanism.freeDofIndex };
 }
 
@@ -40,7 +53,14 @@ export function solveStatic3d(
       message: `Free DOF ${system.mechanismFreeDof} indicates a mechanism.`,
     };
   }
-  const u = expandFreeVector(mesh.ndof, mesh.freeDofs, solveFactored(system.factor, freeVector(F, mesh.freeDofs)));
+  const Ff = freeVector(F, mesh.freeDofs);
+  const n = Ff.length;
+  const Fr = new Float64Array(n);
+  for (let i = 0; i < n; i++) Fr[i] = Ff[system.freePerm[i]!]!;
+  const ur = solveSkylineFactored(system.factor, Fr);
+  const uf = new Float64Array(n);
+  for (let i = 0; i < n; i++) uf[system.freePerm[i]!] = ur[i]!;
+  const u = expandFreeVector(mesh.ndof, mesh.freeDofs, uf);
   const elementForces = recoverElementForces3d(mesh, u);
   return {
     kind: 'stable',
@@ -194,44 +214,43 @@ export function deformationDisplay3d(
 
 function recoverReactions3d(
   mesh: AnalysisMesh3d,
-  K: Float64Array,
+  K: SkylineMatrix,
   u: Float64Array,
   F: Float64Array,
 ): Map<number, { fx: number; fy: number; fz: number; mx: number; my: number; mz: number }> {
+  const Ku = matvecSkyline(K, u);
   const reactions = new Map<number, { fx: number; fy: number; fz: number; mx: number; my: number; mz: number }>();
   for (let node = 0; node < mesh.editorNode.length; node++) {
     const editorId = mesh.editorNode[node]!;
     if (editorId < 0) continue;
     const base = 6 * node;
-    const r = { fx: 0, fy: 0, fz: 0, mx: 0, my: 0, mz: 0 };
-    let any = false;
-    for (let c = 0; c < 6; c++) {
-      const dof = base + c;
-      // Reaction = (Ku − F) on constrained DOFs; free DOFs should be ~0.
-      let ku = 0;
-      for (let j = 0; j < mesh.ndof; j++) ku += K[dof * mesh.ndof + j]! * u[j]!;
-      const value = ku - F[dof]!;
-      if (Math.abs(value) > 1e-14) any = true;
-      if (c === 0) r.fx = value;
-      if (c === 1) r.fy = value;
-      if (c === 2) r.fz = value;
-      if (c === 3) r.mx = value;
-      if (c === 4) r.my = value;
-      if (c === 5) r.mz = value;
+    const r = {
+      fx: Ku[base]! - F[base]!,
+      fy: Ku[base + 1]! - F[base + 1]!,
+      fz: Ku[base + 2]! - F[base + 2]!,
+      mx: Ku[base + 3]! - F[base + 3]!,
+      my: Ku[base + 4]! - F[base + 4]!,
+      mz: Ku[base + 5]! - F[base + 5]!,
+    };
+    if (
+      Math.abs(r.fx) > 1e-14 ||
+      Math.abs(r.fy) > 1e-14 ||
+      Math.abs(r.fz) > 1e-14 ||
+      Math.abs(r.mx) > 1e-14 ||
+      Math.abs(r.my) > 1e-14 ||
+      Math.abs(r.mz) > 1e-14
+    ) {
+      reactions.set(editorId, r);
     }
-    if (any) reactions.set(editorId, r);
   }
   return reactions;
 }
 
 /** Strain energy ½ uᵀ K u. Gate G24. */
-export function strainEnergy3d(K: Float64Array, u: Float64Array, ndof: number): number {
+export function strainEnergy3d(K: SkylineMatrix, u: Float64Array, _ndof?: number): number {
+  const Ku = matvecSkyline(K, u);
   let energy = 0;
-  for (let i = 0; i < ndof; i++) {
-    let ku = 0;
-    for (let j = 0; j < ndof; j++) ku += K[i * ndof + j]! * u[j]!;
-    energy += u[i]! * ku;
-  }
+  for (let i = 0; i < u.length; i++) energy += u[i]! * Ku[i]!;
   return 0.5 * energy;
 }
 

@@ -21,6 +21,7 @@ import {
   type StaticAnalysis3d,
   type StorySpec3d,
 } from '../fem/space';
+import { matvecSkyline, skylineToDense } from '../fem/skyline';
 import type { EigenResult } from '../fem/types';
 
 export interface WindScenario3d {
@@ -40,23 +41,18 @@ export function prepareWind3d(model: EditorModel3d): WindScenario3d | undefined 
     const baseAnalysis = analyzeStaticModel3d(model);
     if (baseAnalysis.kind !== 'stable') return undefined;
     const { mesh } = baseAnalysis;
-    const K = assembleK3d(mesh);
+    const Ksky = assembleK3d(mesh);
     const mass = assembleM3d(mesh);
     // Recover the static load that produced the base equilibrium by K·u
     // (point loads + any gravity already baked into the solved state).
-    const baseLoad = new Float64Array(mesh.ndof);
-    for (let row = 0; row < mesh.ndof; row++) {
-      let value = 0;
-      for (let col = 0; col < mesh.ndof; col++) value += K[row * mesh.ndof + col]! * baseAnalysis.result.u[col]!;
-      baseLoad[row] = value;
-    }
+    const baseLoad = matvecSkyline(Ksky, baseAnalysis.result.u);
     return {
       mesh,
       baseAnalysis,
       baseLoad,
       dt: 1 / 240,
       mass,
-      K,
+      K: skylineToDense(Ksky),
       model: model.story,
       seed: model.seed,
     };
