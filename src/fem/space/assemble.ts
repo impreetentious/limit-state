@@ -298,18 +298,34 @@ export function assembleF3d(
 }
 
 /**
- * Nodal + in-element (Hermite) loads for 3D traffic.
- * `inElement` forces are global (fx,fy,fz); typically (0,0,−axleWeight) for gravity.
+ * Nodal + in-element (Hermite) loads for 3D traffic / statics.
+ * Optional self-weight along global −Z.
+ * `inElement` forces are global (fx,fy,fz); typically (0,0,−axleWeight) for traffic.
  */
 export function assembleLoadCase3d(
   mesh: AnalysisMesh3d,
   opts: {
+    gravity?: boolean;
     points?: { meshNode: number; fx: number; fy: number; fz: number; mx?: number; my?: number; mz?: number }[];
     inElement?: { element: number; xi: number; fx: number; fy: number; fz: number }[];
   },
 ): LoadAssembly3d {
   const F = new Float64Array(mesh.ndof);
   const elementFixedEnd = new Float64Array(mesh.elements.length * 12);
+
+  if (opts.gravity) {
+    const g = 9.80665;
+    for (let index = 0; index < mesh.elements.length; index++) {
+      const element = mesh.elements[index]!;
+      const w = element.rho * element.A * g; // N/m downward (−Z)
+      const R = element.R;
+      // local = R · global(0,0,−w)
+      const wx = R[2]! * -w;
+      const wy = R[5]! * -w;
+      const wz = R[8]! * -w;
+      addEquivalentLocalLoad3d(F, mesh, index, uniformFixedEnd3d(wx, wy, wz, element.L), elementFixedEnd);
+    }
+  }
 
   for (const point of opts.points ?? []) {
     if (!Number.isInteger(point.meshNode) || point.meshNode < 0 || point.meshNode * 6 >= mesh.ndof) {
@@ -337,6 +353,25 @@ export function assembleLoadCase3d(
   }
 
   return { F, elementFixedEnd };
+}
+
+/**
+ * Uniform local distributed load (wx, wy, wz) N/m → 12 local fixed-end forces.
+ * Axial lumps half; bending blocks match §4.2 / §4.9 RH signs.
+ */
+export function uniformFixedEnd3d(wx: number, wy: number, wz: number, L: number): Float64Array {
+  const f = new Float64Array(12);
+  f[0] = -wx * L / 2;
+  f[6] = -wx * L / 2;
+  f[1] = -wy * L / 2;
+  f[5] = -wy * L * L / 12;
+  f[7] = -wy * L / 2;
+  f[11] = wy * L * L / 12;
+  f[2] = -wz * L / 2;
+  f[4] = wz * L * L / 12; // RH flip vs θz
+  f[8] = -wz * L / 2;
+  f[10] = -wz * L * L / 12;
+  return f;
 }
 
 /**

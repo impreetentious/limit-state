@@ -10,18 +10,18 @@ import {
   type SkylineMatrix,
 } from '../skyline';
 import { expandFreeVector, freeVector } from '../solve';
-import { assembleF3d, assembleK3d, elementLocalStiffness3d } from './assemble';
+import { assembleK3d, assembleLoadCase3d, elementLocalStiffness3d } from './assemble';
 import { buildMesh3d } from './mesh';
 import type { AnalysisMesh3d, EditorModel3d, StaticResult3d } from './types';
 
 export type StaticAnalysis3d =
   | { kind: 'stable'; mesh: AnalysisMesh3d; result: StaticResult3d }
-  | { kind: 'mechanism'; freeDofIndex: number; message: string }
+  | { kind: 'mechanism'; freeDofIndex: number; nodeId: number; message: string }
   | { kind: 'invalid'; message: string };
 
 export type StaticSystem3d =
   | { ndof: number; K: SkylineMatrix; factor: SkylineFactor; freePerm: Int32Array }
-  | { ndof: number; K: SkylineMatrix; mechanismFreeDof: number };
+  | { ndof: number; K: SkylineMatrix; mechanismFreeDof: number; freePerm: Int32Array };
 
 /** Assemble and factor once (skyline free partition + RCM). */
 export function prepareStaticSystem3d(mesh: AnalysisMesh3d): StaticSystem3d {
@@ -35,7 +35,7 @@ export function prepareStaticSystem3d(mesh: AnalysisMesh3d): StaticSystem3d {
   const result = factorSkylineLDLT(Kff);
   return result.ok
     ? { ndof: mesh.ndof, K, factor: result.factor, freePerm: perm }
-    : { ndof: mesh.ndof, K, mechanismFreeDof: result.mechanism.freeDofIndex };
+    : { ndof: mesh.ndof, K, mechanismFreeDof: result.mechanism.freeDofIndex, freePerm: perm };
 }
 
 /** Solve one 3D static load case. */
@@ -43,14 +43,17 @@ export function solveStatic3d(
   mesh: AnalysisMesh3d,
   F: Float64Array,
   cachedSystem?: StaticSystem3d,
+  elementFixedEnd?: Float64Array,
 ): StaticAnalysis3d {
   const system = cachedSystem ?? prepareStaticSystem3d(mesh);
   if (system.ndof !== mesh.ndof) return { kind: 'invalid', message: 'Static system does not match this analysis mesh.' };
   if ('mechanismFreeDof' in system) {
+    const nodeId = mechanismEditorNode3d(mesh, system.mechanismFreeDof, system.freePerm);
     return {
       kind: 'mechanism',
       freeDofIndex: system.mechanismFreeDof,
-      message: `Free DOF ${system.mechanismFreeDof} indicates a mechanism.`,
+      nodeId,
+      message: `Node ${nodeId} can move freely — add a support or member.`,
     };
   }
   const Ff = freeVector(F, mesh.freeDofs);
@@ -61,7 +64,7 @@ export function solveStatic3d(
   const uf = new Float64Array(n);
   for (let i = 0; i < n; i++) uf[system.freePerm[i]!] = ur[i]!;
   const u = expandFreeVector(mesh.ndof, mesh.freeDofs, uf);
-  const elementForces = recoverElementForces3d(mesh, u);
+  const elementForces = recoverElementForces3d(mesh, u, elementFixedEnd);
   return {
     kind: 'stable',
     mesh,
@@ -91,7 +94,7 @@ export function utilizationAtDisplacement3d(
   return recoverUtilization3d(mesh, recoverElementForces3d(mesh, u, elementFixedEnd));
 }
 
-/** Build mesh + solve the model's nodal load case. */
+/** Build mesh + solve the model's nodal load case (optional gravity −Z). */
 export function analyzeStaticModel3d(model: EditorModel3d): StaticAnalysis3d {
   try {
     const mesh = buildMesh3d(model);
@@ -106,8 +109,8 @@ export function analyzeStaticModel3d(model: EditorModel3d): StaticAnalysis3d {
         ? []
         : [{ meshNode, fx: point.fx, fy: point.fy, fz: point.fz, mx: point.mx, my: point.my, mz: point.mz }];
     });
-    const { F } = assembleF3d(mesh, points);
-    return solveStatic3d(mesh, F);
+    const loads = assembleLoadCase3d(mesh, { gravity: model.loads.gravity, points });
+    return solveStatic3d(mesh, loads.F, undefined, loads.elementFixedEnd);
   } catch (error) {
     return { kind: 'invalid', message: error instanceof Error ? error.message : '3D static analysis could not run.' };
   }
@@ -259,4 +262,26 @@ export function externalWork3d(u: Float64Array, F: Float64Array): number {
   let work = 0;
   for (let i = 0; i < u.length; i++) work += u[i]! * F[i]!;
   return 0.5 * work;
+}
+
+/** Map a singular free-partition pivot (RCM order) back to an editor node. */
+export function mechanismEditorNode3d(mesh: AnalysisMesh3d, freeDofIndex: number, freePerm: Int32Array): number {
+  const unordered = freePerm[freeDofIndex];
+  if (unordered === undefined) return freeDofIndex;
+  const fullDof = mesh.freeDofs[unordered];
+  if (fullDof === undefined) return freeDofIndex;
+  const meshNode = Math.floor(fullDof / 6);
+  const direct = mesh.editorNode[meshNode];
+  if (direct !== undefined && direct >= 0) return direct;
+  for (const element of mesh.elements) {
+    if (element.na === meshNode) {
+      const id = mesh.editorNode[element.nb];
+      if (id !== undefined && id >= 0) return id;
+    }
+    if (element.nb === meshNode) {
+      const id = mesh.editorNode[element.na];
+      if (id !== undefined && id >= 0) return id;
+    }
+  }
+  return freeDofIndex;
 }
