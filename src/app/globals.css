@@ -269,6 +269,55 @@ kbd {
   font-size: 0.78rem;
 }
 
+.snap-toggle input[type='number'] {
+  display: block;
+  margin-top: 0.25rem;
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.35rem;
+}
+
+.extrude-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(26, 29, 33, 0.12);
+}
+
+.extrude-panel .history-button {
+  width: 100%;
+}
+
+.wind3d-panel {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 2;
+  width: min(16rem, calc(100% - 1.5rem));
+  padding: 0.65rem 0.75rem;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  border: 1px solid rgba(26, 29, 33, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.wind3d-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.wind3d-panel input[type='range'] {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
 .structure-canvas.tool-member,
 .structure-canvas.tool-node,
 .structure-canvas.tool-support,

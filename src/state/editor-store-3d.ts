@@ -7,12 +7,20 @@ import { DEFAULT_SECTION } from '../fem/materials';
 import {
   NO_RELEASES,
   type EditorModel3d,
+  type StorySpec3d,
   type SupportKind3d,
 } from '../fem/space';
 import { spacePortalDemo } from '../presets/scenes3d';
+import {
+  extrudeModel3d,
+  replicateModel3d,
+  scaleVec,
+  workplaneExtrudeAxis,
+  type Vec3,
+} from './ops3d';
 
 export type Workplane = 'ground' | 'xz' | 'yz';
-export type EditorTool3d = 'select' | 'node' | 'member' | 'support' | 'load' | 'delete';
+export type EditorTool3d = 'select' | 'node' | 'member' | 'support' | 'load' | 'deck' | 'delete';
 
 export type Selection3d =
   | { kind: 'none' }
@@ -27,11 +35,17 @@ interface EditorState3d {
   selection: Selection3d;
   memberStart: number | null;
   notice: string | null;
+  /** Extrude / replicate distance along the workplane normal (m). */
+  extrudeDistance: number;
+  /** Number of copies for extrude / replicate. */
+  extrudeCount: number;
   setTool: (tool: EditorTool3d) => void;
   setWorkplane: (plane: Workplane) => void;
   setGridSnap: (snap: boolean) => void;
   setSelection: (selection: Selection3d) => void;
   setNotice: (notice: string | null) => void;
+  setExtrudeDistance: (distance: number) => void;
+  setExtrudeCount: (count: number) => void;
   loadModel: (model: EditorModel3d) => void;
   reset: () => void;
   addNodeAt: (x: number, y: number, z: number) => number;
@@ -41,6 +55,15 @@ interface EditorState3d {
   deleteSelection: () => void;
   setMemberStart: (id: number | null) => void;
   setModelName: (name: string) => void;
+  /** Extrude along workplane normal (or custom offset). */
+  extrude: (offset?: Vec3) => void;
+  /** Replicate along workplane normal without connecting struts. */
+  replicate: (offset?: Vec3) => void;
+  /** Set horizontal wind azimuth (degrees). Ensures a wind story exists. */
+  setWindDirectionDeg: (directionDeg: number) => void;
+  setWindStory: (partial: Partial<Extract<StorySpec3d, { kind: 'wind' }>>) => void;
+  setTrafficStory: (partial?: Partial<Extract<StorySpec3d, { kind: 'traffic' }>>) => void;
+  toggleDeckMember: (memberId: number) => void;
 }
 
 const blankModel = (): EditorModel3d => ({
@@ -51,6 +74,7 @@ const blankModel = (): EditorModel3d => ({
   members: [],
   supports: [],
   loads: { gravity: false, points: [] },
+  deck: [],
 });
 
 function snapValue(value: number, enabled: boolean): number {
@@ -67,12 +91,16 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
   selection: { kind: 'none' },
   memberStart: null,
   notice: null,
+  extrudeDistance: 5,
+  extrudeCount: 1,
 
   setTool: (tool) => set({ tool, memberStart: null }),
   setWorkplane: (workplane) => set({ workplane }),
   setGridSnap: (gridSnap) => set({ gridSnap }),
   setSelection: (selection) => set({ selection }),
   setNotice: (notice) => set({ notice }),
+  setExtrudeDistance: (extrudeDistance) => set({ extrudeDistance: Math.max(0.1, extrudeDistance) }),
+  setExtrudeCount: (extrudeCount) => set({ extrudeCount: Math.max(1, Math.floor(extrudeCount)) }),
   setMemberStart: (memberStart) => set({ memberStart }),
   setModelName: (name) => set((state) => ({ model: { ...state.model, name } })),
 
@@ -158,6 +186,9 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
     const { selection, model } = get();
     if (selection.kind === 'node') {
       const id = selection.id;
+      const removedMembers = new Set(
+        model.members.filter((m) => m.a === id || m.b === id).map((m) => m.id),
+      );
       set({
         model: {
           ...model,
@@ -165,17 +196,157 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
           members: model.members.filter((m) => m.a !== id && m.b !== id),
           supports: model.supports.filter((s) => s.node !== id),
           loads: { ...model.loads, points: model.loads.points.filter((p) => p.node !== id) },
+          deck: (model.deck ?? []).filter((memberId) => !removedMembers.has(memberId)),
         },
         selection: { kind: 'none' },
         notice: `Deleted node ${id}`,
       });
     } else if (selection.kind === 'member') {
       set({
-        model: { ...model, members: model.members.filter((m) => m.id !== selection.id) },
+        model: {
+          ...model,
+          members: model.members.filter((m) => m.id !== selection.id),
+          deck: (model.deck ?? []).filter((memberId) => memberId !== selection.id),
+        },
         selection: { kind: 'none' },
         notice: `Deleted member ${selection.id}`,
       });
     }
+  },
+
+  extrude: (customOffset) => {
+    const { model, workplane, extrudeDistance, extrudeCount } = get();
+    if (model.nodes.length === 0) {
+      set({ notice: 'Nothing to extrude — place nodes first.' });
+      return;
+    }
+    const offset = customOffset ?? scaleVec(workplaneExtrudeAxis(workplane), extrudeDistance);
+    const result = extrudeModel3d(model, {
+      offset,
+      count: extrudeCount,
+      allocId: () => nextId++,
+    });
+    if (result.addedNodes === 0) {
+      set({ notice: 'Extrude added nothing — check distance.' });
+      return;
+    }
+    set({
+      model: result.model,
+      selection: { kind: 'none' },
+      notice: `Extruded ${result.addedNodes} nodes / ${result.addedMembers} members (${extrudeCount}× along workplane normal).`,
+    });
+  },
+
+  replicate: (customOffset) => {
+    const { model, workplane, extrudeDistance, extrudeCount } = get();
+    if (model.nodes.length === 0) {
+      set({ notice: 'Nothing to replicate — place nodes first.' });
+      return;
+    }
+    const offset = customOffset ?? scaleVec(workplaneExtrudeAxis(workplane), extrudeDistance);
+    const result = replicateModel3d(model, {
+      offset,
+      count: extrudeCount,
+      allocId: () => nextId++,
+    });
+    if (result.addedNodes === 0) {
+      set({ notice: 'Replicate added nothing — check distance.' });
+      return;
+    }
+    set({
+      model: result.model,
+      selection: { kind: 'none' },
+      notice: `Replicated ${result.addedNodes} nodes / ${result.addedMembers} members (${extrudeCount}×, no struts).`,
+    });
+  },
+
+  setWindDirectionDeg: (directionDeg) => {
+    const deg = ((directionDeg % 360) + 360) % 360;
+    get().setWindStory({ directionDeg: deg });
+  },
+
+  setWindStory: (partial) => {
+    const { model } = get();
+    const defaults: Extract<StorySpec3d, { kind: 'wind' }> = {
+      kind: 'wind',
+      pattern: 'sine',
+      amplitudekNm: 3,
+      freqHz: 0.5,
+      zeta: 0.02,
+      directionDeg: 0,
+    };
+    const current = model.story?.kind === 'wind' ? model.story : defaults;
+    const story = { ...current, ...partial, kind: 'wind' as const };
+    set({
+      model: { ...model, story },
+      notice: `Wind ${story.pattern} · ${story.directionDeg.toFixed(0)}° from +X · ${story.amplitudekNm} kN/m · ${story.freqHz} Hz`,
+    });
+  },
+
+  setTrafficStory: (partial = {}) => {
+    const { model } = get();
+    const defaults: Extract<StorySpec3d, { kind: 'traffic' }> = {
+      kind: 'traffic',
+      weightkN: 250,
+      speed: 12,
+    };
+    const current = model.story?.kind === 'traffic' ? model.story : defaults;
+    const story = { ...current, ...partial, kind: 'traffic' as const };
+    set({
+      model: { ...model, story },
+      notice: `Traffic · ${story.weightkN} kN · ${story.speed} m/s — paint a contiguous deck path`,
+    });
+  },
+
+  toggleDeckMember: (memberId) => {
+    const { model } = get();
+    const deck = [...(model.deck ?? [])];
+    const index = deck.indexOf(memberId);
+    if (index >= 0) {
+      if (index !== 0 && index !== deck.length - 1) {
+        set({ notice: 'Remove deck members from either end to keep the path contiguous.' });
+        return;
+      }
+      deck.splice(index, 1);
+      set({
+        model: { ...model, deck },
+        selection: { kind: 'member', id: memberId },
+        notice: `Deck path: ${deck.length} member${deck.length === 1 ? '' : 's'}`,
+      });
+      return;
+    }
+    const candidate = model.members.find((m) => m.id === memberId);
+    if (!candidate) return;
+    if (deck.length === 0) {
+      set({
+        model: { ...model, deck: [memberId], story: model.story?.kind === 'traffic' ? model.story : { kind: 'traffic', weightkN: 250, speed: 12 } },
+        selection: { kind: 'member', id: memberId },
+        notice: 'Deck path started — extend from either end.',
+      });
+      return;
+    }
+    const first = model.members.find((m) => m.id === deck[0]!);
+    const last = model.members.find((m) => m.id === deck[deck.length - 1]!);
+    if (!first || !last) return;
+    const shares = (a: { a: number; b: number }, b: { a: number; b: number }) =>
+      a.a === b.a || a.a === b.b || a.b === b.a || a.b === b.b;
+    if (shares(candidate, last)) {
+      set({
+        model: { ...model, deck: [...deck, memberId] },
+        selection: { kind: 'member', id: memberId },
+        notice: `Deck path: ${deck.length + 1} members`,
+      });
+      return;
+    }
+    if (shares(candidate, first)) {
+      set({
+        model: { ...model, deck: [memberId, ...deck] },
+        selection: { kind: 'member', id: memberId },
+        notice: `Deck path: ${deck.length + 1} members`,
+      });
+      return;
+    }
+    set({ notice: 'Deck members must form one contiguous path.' });
   },
 }));
 

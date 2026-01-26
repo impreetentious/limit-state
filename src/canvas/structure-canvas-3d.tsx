@@ -26,9 +26,17 @@ export interface StructureCanvas3dProps {
   analysis: StaticAnalysis3d;
   showDeformed: boolean;
   modeGhost?: { result: EigenResult; mode: number; phase: number };
+  /** Live Newmark / traffic displacement (6 DOF/node). */
+  dynamicDisplacement?: Float64Array;
+  /** Traffic axle markers along the deck polyline. */
+  trafficAxles?: Array<{ x: number; y: number; z: number }>;
   /** When set, left-click raycasts to the workplane and reports the hit. */
   workplane?: 'ground' | 'xz' | 'yz';
-  onWorkplaneClick?: (point: { x: number; y: number; z: number }, hitNodeId: number | null) => void;
+  onWorkplaneClick?: (
+    point: { x: number; y: number; z: number },
+    hitNodeId: number | null,
+    hitMemberId: number | null,
+  ) => void;
   selectedNodeId?: number | null;
   selectedMemberId?: number | null;
 }
@@ -38,6 +46,8 @@ export function StructureCanvas3d({
   analysis,
   showDeformed,
   modeGhost,
+  dynamicDisplacement,
+  trafficAxles,
   workplane = 'ground',
   onWorkplaneClick,
   selectedNodeId,
@@ -49,6 +59,8 @@ export function StructureCanvas3d({
     analysis,
     showDeformed,
     modeGhost,
+    dynamicDisplacement,
+    trafficAxles,
     workplane,
     onWorkplaneClick,
     selectedNodeId,
@@ -59,6 +71,8 @@ export function StructureCanvas3d({
     analysis,
     showDeformed,
     modeGhost,
+    dynamicDisplacement,
+    trafficAxles,
     workplane,
     onWorkplaneClick,
     selectedNodeId,
@@ -147,6 +161,20 @@ export function StructureCanvas3d({
         }
       }
 
+      let hitMember: number | null = null;
+      let bestMember = 0.55;
+      const nodePos = new Map(props.model.nodes.map((n) => [n.id, new THREE.Vector3(n.x, n.y, n.z)]));
+      for (const member of props.model.members) {
+        const a = nodePos.get(member.a);
+        const b = nodePos.get(member.b);
+        if (!a || !b) continue;
+        const dist = distanceRayToSegment(raycaster.ray, a, b);
+        if (dist < bestMember) {
+          bestMember = dist;
+          hitMember = member.id;
+        }
+      }
+
       const plane = props.workplane ?? 'ground';
       if (plane === 'xz') {
         workplaneMesh.rotation.set(0, 0, 0);
@@ -161,16 +189,23 @@ export function StructureCanvas3d({
       workplaneMesh.updateMatrixWorld(true);
       const hits = raycaster.intersectObject(workplaneMesh);
       const hit = hits[0];
-      if (!hit && hitNode === null) return;
+      if (!hit && hitNode === null && hitMember === null) return;
       const point = hit
         ? { x: hit.point.x, y: hit.point.y, z: hit.point.z }
-        : props.model.nodes.find((n) => n.id === hitNode)!;
+        : hitNode !== null
+          ? props.model.nodes.find((n) => n.id === hitNode)!
+          : (() => {
+              const m = props.model.members.find((member) => member.id === hitMember)!;
+              const a = props.model.nodes.find((n) => n.id === m.a)!;
+              const b = props.model.nodes.find((n) => n.id === m.b)!;
+              return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+            })();
       // Project onto workplane axes.
       let projected = { ...point };
       if (plane === 'ground') projected = { x: point.x, y: point.y, z: 0 };
       if (plane === 'xz') projected = { x: point.x, y: 0, z: point.z };
       if (plane === 'yz') projected = { x: 0, y: point.y, z: point.z };
-      handler(projected, hitNode);
+      handler(projected, hitNode, hitMember);
     };
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
 
@@ -208,10 +243,16 @@ export function StructureCanvas3d({
 }
 
 function sceneSignature(props: StructureCanvas3dProps): string {
-  const { model, analysis, showDeformed, selectedNodeId, selectedMemberId } = props;
+  const { model, analysis, showDeformed, selectedNodeId, selectedMemberId, dynamicDisplacement, trafficAxles } = props;
   const uMax = analysis.kind === 'stable' ? analysis.result.utilization.size : -1;
   const kind = analysis.kind;
-  return `${model.name}|${model.members.length}|${model.nodes.length}|${model.supports.length}|${model.loads.points.length}|${kind}|${uMax}|${showDeformed}|${selectedNodeId}|${selectedMemberId}`;
+  const dyn = dynamicDisplacement
+    ? `${dynamicDisplacement.length}:${dynamicDisplacement[0]?.toFixed(6)}:${dynamicDisplacement[Math.floor(dynamicDisplacement.length / 2)]?.toFixed(6)}`
+    : 'none';
+  const story = model.story?.kind ?? 'nostory';
+  const deck = (model.deck ?? []).join(',');
+  const axles = trafficAxles?.map((a) => `${a.x.toFixed(2)},${a.z.toFixed(2)}`).join(';') ?? '';
+  return `${model.name}|${model.members.length}|${model.nodes.length}|${model.supports.length}|${model.loads.points.length}|${kind}|${uMax}|${showDeformed}|${selectedNodeId}|${selectedMemberId}|${dyn}|${story}|${deck}|${axles}`;
 }
 
 function rebuildStructure(root: THREE.Group, props: StructureCanvas3dProps, useLines: boolean): void {
@@ -257,18 +298,31 @@ function rebuildStructure(root: THREE.Group, props: StructureCanvas3dProps, useL
     const a = nodePos.get(member.a);
     const b = nodePos.get(member.b);
     if (!a || !b) continue;
-    const color = stressColorHex(utilization?.get(member.id) ?? 0);
+    const onDeck = (model.deck ?? []).includes(member.id);
+    const color = onDeck ? BLUE : stressColorHex(utilization?.get(member.id) ?? 0);
     const axial = memberAxial(member.id, mesh3, elementForces);
-    const width = 0.04 + 0.1 * Math.min(1, Math.abs(axial) / maxAxial);
+    const width = (onDeck ? 0.07 : 0.04) + 0.1 * Math.min(1, Math.abs(axial) / maxAxial);
     root.add(memberVisual(a, b, color, width, useLines));
   }
 
+  for (const axle of props.trafficAxles ?? []) {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 14, 12),
+      new THREE.MeshStandardMaterial({ color: BLUE, roughness: 0.45, metalness: 0.1 }),
+    );
+    mesh.position.set(axle.x, axle.y, axle.z + 0.35);
+    root.add(mesh);
+  }
+
   if (showDeformed && analysis.kind === 'stable') {
-    const display = deformationDisplay3d(analysis.mesh, analysis.result.u, 44);
+    const u = props.dynamicDisplacement && props.dynamicDisplacement.length === analysis.mesh.ndof
+      ? props.dynamicDisplacement
+      : analysis.result.u;
+    const display = deformationDisplay3d(analysis.mesh, u, 44);
     if (display.maxMeters > 0) {
       for (const element of analysis.mesh.elements) {
-        const pa = deformedPoint(analysis.mesh.coords, analysis.result.u, element.na, display.scale);
-        const pb = deformedPoint(analysis.mesh.coords, analysis.result.u, element.nb, display.scale);
+        const pa = deformedPoint(analysis.mesh.coords, u, element.na, display.scale);
+        const pb = deformedPoint(analysis.mesh.coords, u, element.nb, display.scale);
         root.add(memberVisual(pa, pb, BLUE, 0.035, true, 0.75, true));
       }
     }
@@ -417,4 +471,26 @@ function disposeObject(object: THREE.Object3D): void {
     if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
     else mat.dispose();
   });
+}
+
+/** Closest distance from a ray to a finite segment AB. */
+function distanceRayToSegment(ray: THREE.Ray, a: THREE.Vector3, b: THREE.Vector3): number {
+  const dir = new THREE.Vector3().subVectors(b, a);
+  const len = dir.length();
+  if (!(len > 1e-12)) return ray.distanceToPoint(a);
+  dir.multiplyScalar(1 / len);
+  // Closest points between skew lines (ray infinite, then clamp to segment).
+  const cross = new THREE.Vector3().crossVectors(ray.direction, dir);
+  const denom = cross.lengthSq();
+  if (denom < 1e-14) {
+    // Nearly parallel — sample segment endpoints + projection of origin.
+    return Math.min(ray.distanceToPoint(a), ray.distanceToPoint(b));
+  }
+  const diff = new THREE.Vector3().subVectors(a, ray.origin);
+  const t = new THREE.Vector3().crossVectors(diff, dir).dot(cross) / denom;
+  const s = new THREE.Vector3().crossVectors(diff, ray.direction).dot(cross) / denom;
+  const clampedS = Math.max(0, Math.min(len, s));
+  const pointOnRay = ray.origin.clone().addScaledVector(ray.direction, Math.max(0, t));
+  const pointOnSeg = a.clone().addScaledVector(dir, clampedS);
+  return pointOnRay.distanceTo(pointOnSeg);
 }

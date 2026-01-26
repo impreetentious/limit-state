@@ -37,6 +37,13 @@ import {
   type WindScenario,
 } from '../stories/wind';
 import type { EigenWorkerResponse } from '../workers/eigen.worker';
+import {
+  initialWindState3d,
+  prepareWind3d,
+  stepWind3d,
+  type WindScenario3d,
+} from '../stories/wind3d';
+import { analyzeTrafficAt3d, prepareTraffic3d, type TrafficFrame3d } from '../stories/traffic3d';
 import { ChallengePanel } from './challenge-panel';
 import { Inspector } from './inspector';
 import { TestConsole } from './test-console';
@@ -58,6 +65,7 @@ const TOOLS_3D: Array<{ id: EditorTool3d; label: string; key: string }> = [
   { id: 'member', label: 'Member', key: 'M' },
   { id: 'support', label: 'Support', key: 'S' },
   { id: 'load', label: 'Load', key: 'L' },
+  { id: 'deck', label: 'Deck', key: 'D' },
   { id: 'delete', label: 'Delete', key: '⌫' },
 ];
 
@@ -102,11 +110,15 @@ export function EditorApp(): React.JSX.Element {
   const [envelopeEnabled, setEnvelopeEnabled] = useState(false);
   const [influenceEnvelope, setInfluenceEnvelope] = useState(false);
   const [windFrame, setWindFrame] = useState<WindFrame>();
+  const [windFrame3d, setWindFrame3d] = useState<WindFrame3d>();
+  const [trafficFrame3d, setTrafficFrame3d] = useState<TrafficFrame3d>();
   const [earthquakeFrame, setEarthquakeFrame] = useState<EarthquakeFrame>();
   const [movingMassFrame, setMovingMassFrame] = useState<TrafficFrame>();
   const [failureReplay, setFailureReplay] = useState(0);
   const [failurePhase, setFailurePhase] = useState<number>();
   const [viewDimension, setViewDimension] = useState<'2d' | '3d'>('2d');
+  const [storyPlaying3d, setStoryPlaying3d] = useState(false);
+  const [storyTime3d, setStoryTime3d] = useState(0);
   const reducedMotion = usePrefersReducedMotion();
 
   const model3d = useEditorStore3d((s) => s.model);
@@ -115,8 +127,18 @@ export function EditorApp(): React.JSX.Element {
   const selection3d = useEditorStore3d((s) => s.selection);
   const memberStart = useEditorStore3d((s) => s.memberStart);
   const notice3d = useEditorStore3d((s) => s.notice);
+  const extrudeDistance = useEditorStore3d((s) => s.extrudeDistance);
+  const extrudeCount = useEditorStore3d((s) => s.extrudeCount);
   const setTool3d = useEditorStore3d((s) => s.setTool);
   const setWorkplane = useEditorStore3d((s) => s.setWorkplane);
+  const setExtrudeDistance = useEditorStore3d((s) => s.setExtrudeDistance);
+  const setExtrudeCount = useEditorStore3d((s) => s.setExtrudeCount);
+  const extrude3d = useEditorStore3d((s) => s.extrude);
+  const replicate3d = useEditorStore3d((s) => s.replicate);
+  const setWindDirectionDeg = useEditorStore3d((s) => s.setWindDirectionDeg);
+  const setWindStory = useEditorStore3d((s) => s.setWindStory);
+  const setTrafficStory = useEditorStore3d((s) => s.setTrafficStory);
+  const toggleDeckMember = useEditorStore3d((s) => s.toggleDeckMember);
   const loadModel3d = useEditorStore3d((s) => s.loadModel);
   const reset3d = useEditorStore3d((s) => s.reset);
   const addNodeAt = useEditorStore3d((s) => s.addNodeAt);
@@ -146,6 +168,83 @@ export function EditorApp(): React.JSX.Element {
       return undefined;
     }
   }, [analysis3d]);
+  const windScenario3d = useMemo(
+    () => (viewDimension === '3d' && model3d.story?.kind === 'wind' ? prepareWind3d(model3d) : undefined),
+    [model3d, viewDimension],
+  );
+  const trafficScenario3d = useMemo(() => {
+    if (viewDimension !== '3d' || model3d.story?.kind !== 'traffic' || !(model3d.deck?.length)) return undefined;
+    try {
+      return prepareTraffic3d(model3d);
+    } catch {
+      return undefined;
+    }
+  }, [model3d, viewDimension]);
+
+  useEffect(() => {
+    if (viewDimension !== '3d' || !storyPlaying3d || !windScenario3d || !eigen3d) return;
+    const initial = initialWindState3d(windScenario3d, eigen3d.modal);
+    if (!initial) return;
+    let current = initial;
+    let frame = 0;
+    const tick = () => {
+      current = stepWind3d(windScenario3d, current);
+      setWindFrame3d({ scenario: windScenario3d, t: current.t, u: current.u });
+      frame = window.requestAnimationFrame(tick);
+    };
+    setWindFrame3d({ scenario: windScenario3d, t: initial.t, u: initial.u });
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [eigen3d, storyPlaying3d, viewDimension, windScenario3d]);
+
+  useEffect(() => {
+    if (viewDimension !== '3d' || !trafficScenario3d || model3d.story?.kind !== 'traffic') {
+      setTrafficFrame3d(undefined);
+      return;
+    }
+    if (storyPlaying3d) return;
+    setTrafficFrame3d(analyzeTrafficAt3d(trafficScenario3d, storyTime3d * model3d.story.speed));
+  }, [model3d.story, storyPlaying3d, storyTime3d, trafficScenario3d, viewDimension]);
+
+  useEffect(() => {
+    if (viewDimension !== '3d' || !storyPlaying3d || !trafficScenario3d || model3d.story?.kind !== 'traffic') return;
+    const speed = Math.max(0.1, model3d.story.speed);
+    const duration = (trafficScenario3d.length + 4) / speed;
+    let frame = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      setStoryTime3d((current) => {
+        const next = current + dt;
+        if (next >= duration) {
+          setStoryPlaying3d(false);
+          return 0;
+        }
+        setTrafficFrame3d(analyzeTrafficAt3d(trafficScenario3d, next * speed));
+        return next;
+      });
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [model3d.story, storyPlaying3d, trafficScenario3d, viewDimension]);
+
+  useEffect(() => {
+    if (viewDimension !== '3d') {
+      setStoryPlaying3d(false);
+      setWindFrame3d(undefined);
+      setTrafficFrame3d(undefined);
+      setStoryTime3d(0);
+    }
+  }, [viewDimension]);
+
+  useEffect(() => {
+    setStoryPlaying3d(false);
+    setWindFrame3d(undefined);
+    setTrafficFrame3d(undefined);
+    setStoryTime3d(0);
+  }, [model3d.story, model3d.nodes, model3d.members, model3d.deck]);
 
   useEffect(() => {
     if (baseAnalysis.kind !== 'stable') {
@@ -536,7 +635,35 @@ export function EditorApp(): React.JSX.Element {
                     <option value="yz">Elevation YZ</option>
                   </select>
                 </label>
-                <p className="rail-hint">Click the plane to place. Orbit with drag; member tool: node → node.</p>
+                <div className="extrude-panel" aria-label="Extrude and replicate">
+                  <label className="snap-toggle">Distance (m)
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.5}
+                      value={extrudeDistance}
+                      onChange={(e) => setExtrudeDistance(Number(e.target.value) || 0.1)}
+                      aria-label="Extrude distance"
+                    />
+                  </label>
+                  <label className="snap-toggle">Copies
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={extrudeCount}
+                      onChange={(e) => setExtrudeCount(Number(e.target.value) || 1)}
+                      aria-label="Extrude copies"
+                    />
+                  </label>
+                  <button type="button" className="history-button" onClick={() => extrude3d()} title="Copy along workplane normal and add connecting struts">
+                    Extrude
+                  </button>
+                  <button type="button" className="history-button" onClick={() => replicate3d()} title="Array-copy along workplane normal without struts">
+                    Replicate
+                  </button>
+                </div>
+                <p className="rail-hint">Draw on a plane, then Extrude along its normal (Ground → +Z) to go spatial. Replicate arrays bays without connectors.</p>
               </div>
             </>
           ) : (
@@ -555,13 +682,22 @@ export function EditorApp(): React.JSX.Element {
           {viewDimension === '3d' ? (
             <StructureCanvas3d
               model={model3d}
-              analysis={analysis3d}
-              showDeformed={showDeformed}
+              analysis={trafficFrame3d?.analysis.kind === 'stable' ? trafficFrame3d.analysis : analysis3d}
+              showDeformed={showDeformed || Boolean(windFrame3d) || Boolean(trafficFrame3d?.analysis.kind === 'stable')}
               modeGhost={modeGhost3d}
+              dynamicDisplacement={
+                windFrame3d?.u
+                ?? (trafficFrame3d?.analysis.kind === 'stable' ? trafficFrame3d.analysis.result.u : undefined)
+              }
+              trafficAxles={trafficFrame3d?.axles}
               workplane={workplane}
               selectedNodeId={selection3d.kind === 'node' ? selection3d.id : null}
               selectedMemberId={selection3d.kind === 'member' ? selection3d.id : null}
-              onWorkplaneClick={(point, hitNodeId) => {
+              onWorkplaneClick={(point, hitNodeId, hitMemberId) => {
+                if (tool3d === 'deck') {
+                  if (hitMemberId !== null) toggleDeckMember(hitMemberId);
+                  return;
+                }
                 if (tool3d === 'node') {
                   addNodeAt(point.x, point.y, point.z);
                   return;
@@ -587,10 +723,12 @@ export function EditorApp(): React.JSX.Element {
                 }
                 if (tool3d === 'delete') {
                   if (hitNodeId !== null) setSelection3d({ kind: 'node', id: hitNodeId });
+                  else if (hitMemberId !== null) setSelection3d({ kind: 'member', id: hitMemberId });
                   deleteSelection3d();
                   return;
                 }
                 if (hitNodeId !== null) setSelection3d({ kind: 'node', id: hitNodeId });
+                else if (hitMemberId !== null) setSelection3d({ kind: 'member', id: hitMemberId });
               }}
             />
           ) : (
@@ -609,10 +747,120 @@ export function EditorApp(): React.JSX.Element {
           )}
           {viewDimension === '3d' && (
             <div className="demo3d-note" role="note">
-              3D workplane editor — draw on Ground/XZ/YZ; orbit to inspect. Stress colors + deformed + mode ghosts from the space-frame solver. Extrude/replicate still ahead.
+              3D workplane editor — Extrude/Replicate to go spatial; Deck paints a traffic polyline; Wind dial for lateral stories.
             </div>
           )}
+          {viewDimension === '3d' && (
+            <aside className="wind3d-panel" aria-label="3D story controls">
+              <div className="wind3d-header">
+                <strong>Stories (3D)</strong>
+                <button
+                  type="button"
+                  className="play-button"
+                  onClick={() => {
+                    if (model3d.story?.kind === 'traffic') {
+                      if (!(model3d.deck?.length)) {
+                        setTrafficStory({});
+                        return;
+                      }
+                      setStoryPlaying3d((playing) => !playing);
+                      return;
+                    }
+                    if (!model3d.story || model3d.story.kind !== 'wind') setWindStory({});
+                    setStoryPlaying3d((playing) => !playing);
+                  }}
+                >
+                  {storyPlaying3d ? 'Pause' : 'Play'}
+                </button>
+              </div>
+              <div className="mode-family" aria-label="3D story kind">
+                <button
+                  type="button"
+                  className={model3d.story?.kind === 'wind' || !model3d.story ? 'active' : ''}
+                  onClick={() => { setStoryPlaying3d(false); setWindStory({}); }}
+                >
+                  Wind
+                </button>
+                <button
+                  type="button"
+                  className={model3d.story?.kind === 'traffic' ? 'active' : ''}
+                  onClick={() => { setStoryPlaying3d(false); setTrafficStory({}); }}
+                >
+                  Traffic
+                </button>
+              </div>
+              {(model3d.story?.kind === 'wind' || !model3d.story) && (
+                <>
+                  <label className="snap-toggle">Direction
+                    <input
+                      type="range"
+                      min={0}
+                      max={360}
+                      step={5}
+                      value={model3d.story?.kind === 'wind' ? model3d.story.directionDeg : 0}
+                      onChange={(e) => setWindDirectionDeg(Number(e.target.value))}
+                      aria-label="Wind direction degrees from +X"
+                    />
+                    <span>{(model3d.story?.kind === 'wind' ? model3d.story.directionDeg : 0).toFixed(0)}° from +X</span>
+                  </label>
+                  <label className="snap-toggle">Pattern
+                    <select
+                      value={model3d.story?.kind === 'wind' ? model3d.story.pattern : 'sine'}
+                      onChange={(e) => setWindStory({ pattern: e.target.value as 'steady' | 'sine' | 'gusts' })}
+                      aria-label="Wind pattern"
+                    >
+                      <option value="steady">Steady</option>
+                      <option value="sine">Sine</option>
+                      <option value="gusts">Gusts</option>
+                    </select>
+                  </label>
+                  <p className="rail-hint">
+                    Horizontal pressure along the dial. Try the slender-mast demo for lateral resonance.
+                    {windFrame3d ? ` · t = ${windFrame3d.t.toFixed(2)} s` : ''}
+                  </p>
+                </>
+              )}
+              {model3d.story?.kind === 'traffic' && (
+                <>
+                  <label className="snap-toggle">Weight (kN)
+                    <input
+                      type="number"
+                      min={10}
+                      step={10}
+                      value={model3d.story.weightkN}
+                      onChange={(e) => setTrafficStory({ weightkN: Number(e.target.value) || 10 })}
+                      aria-label="Traffic weight kilonewtons"
+                    />
+                  </label>
+                  <label className="snap-toggle">Speed (m/s)
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={model3d.story.speed}
+                      onChange={(e) => setTrafficStory({ speed: Number(e.target.value) || 1 })}
+                      aria-label="Traffic speed metres per second"
+                    />
+                  </label>
+                  <p className="rail-hint">
+                    Paint a contiguous deck with the Deck tool, then Play. Two axles, 4 m apart, weight along −Z.
+                    {trafficFrame3d ? ` · deck ${trafficFrame3d.length.toFixed(1)} m · t = ${storyTime3d.toFixed(2)} s` : (model3d.deck?.length ? '' : ' · no deck yet')}
+                  </p>
+                </>
+              )}
+            </aside>
+          )}
           {viewDimension === '3d' && notice3d && <div className="canvas-notice" role="status">{notice3d}</div>}
+          {viewDimension === '3d' && windFrame3d && analysis3d.kind === 'stable' && (
+            <div className="dynamic-badge">
+              3D Newmark wind — display scale ×{formatScale(deformationDisplay3d(analysis3d.mesh, windFrame3d.u, 44).scale)} · direction {(model3d.story?.kind === 'wind' ? model3d.story.directionDeg : 0).toFixed(0)}° · warping torsion still out of scope
+            </div>
+          )}
+          {viewDimension === '3d' && trafficFrame3d?.analysis.kind === 'stable' && (
+            <div className="dynamic-badge">
+              3D traffic (quasi-static) — display scale ×{formatScale(deformationDisplay3d(trafficFrame3d.analysis.mesh, trafficFrame3d.analysis.result.u, 44).scale)} · two-axle polyline sweep · Hermite axle loads
+            </div>
+          )}
           {viewDimension === '2d' && <div className={`lint-badge lint-${stability.kind}`}>{stability.message}</div>}
           {notice && viewDimension === '2d' && <div className="canvas-notice" role="status">{notice}</div>}
           {viewDimension === '2d' && activeChallengeId && (
@@ -731,6 +979,12 @@ interface WindFrame {
   daf?: { mode: number; ratio: number };
   resonanceMode?: number;
   yieldMember?: number;
+}
+
+interface WindFrame3d {
+  scenario: WindScenario3d;
+  t: number;
+  u: Float64Array;
 }
 
 interface EarthquakeFrame {
