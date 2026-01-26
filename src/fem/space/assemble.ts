@@ -278,6 +278,8 @@ export function assembleKg3d(mesh: AnalysisMesh3d, elementN: Float64Array): Floa
 
 export interface LoadAssembly3d {
   F: Float64Array;
+  /** Local fixed-end forces, 12 per element — subtracted in stress recovery. */
+  elementFixedEnd: Float64Array;
 }
 
 /** Nodal point loads (forces + optional moments) into the global vector. */
@@ -285,8 +287,24 @@ export function assembleF3d(
   mesh: AnalysisMesh3d,
   points: { meshNode: number; fx: number; fy: number; fz: number; mx?: number; my?: number; mz?: number }[],
 ): LoadAssembly3d {
+  return assembleLoadCase3d(mesh, { points });
+}
+
+/**
+ * Nodal + in-element (Hermite) loads for 3D traffic.
+ * `inElement` forces are global (fx,fy,fz); typically (0,0,−axleWeight) for gravity.
+ */
+export function assembleLoadCase3d(
+  mesh: AnalysisMesh3d,
+  opts: {
+    points?: { meshNode: number; fx: number; fy: number; fz: number; mx?: number; my?: number; mz?: number }[];
+    inElement?: { element: number; xi: number; fx: number; fy: number; fz: number }[];
+  },
+): LoadAssembly3d {
   const F = new Float64Array(mesh.ndof);
-  for (const point of points) {
+  const elementFixedEnd = new Float64Array(mesh.elements.length * 12);
+
+  for (const point of opts.points ?? []) {
     if (!Number.isInteger(point.meshNode) || point.meshNode < 0 || point.meshNode * 6 >= mesh.ndof) {
       throw new Error(`Point load references missing mesh node ${point.meshNode}.`);
     }
@@ -298,7 +316,71 @@ export function assembleF3d(
     if (point.my) F[base + 4] = F[base + 4]! + point.my;
     if (point.mz) F[base + 5] = F[base + 5]! + point.mz;
   }
-  return { F };
+
+  for (const axle of opts.inElement ?? []) {
+    const element = mesh.elements[axle.element];
+    if (!element) throw new Error(`In-element load references missing element ${axle.element}.`);
+    if (!(axle.xi >= 0 && axle.xi <= 1)) throw new Error('In-element load position xi must be within [0, 1].');
+    const R = element.R;
+    // local = R · global
+    const px = R[0]! * axle.fx + R[1]! * axle.fy + R[2]! * axle.fz;
+    const py = R[3]! * axle.fx + R[4]! * axle.fy + R[5]! * axle.fz;
+    const pz = R[6]! * axle.fx + R[7]! * axle.fy + R[8]! * axle.fz;
+    addEquivalentLocalLoad3d(F, mesh, axle.element, pointFixedEnd3d(px, py, pz, axle.xi, element.L), elementFixedEnd);
+  }
+
+  return { F, elementFixedEnd };
+}
+
+/**
+ * Hermite fixed-end for a local point force at ξ.
+ * v/θz block matches 2D; w/θy uses the RH moment sign flip of k_y.
+ */
+export function pointFixedEnd3d(px: number, py: number, pz: number, xi: number, L: number): Float64Array {
+  const oneMinusXi = 1 - xi;
+  const n1 = 1 - 3 * xi ** 2 + 2 * xi ** 3;
+  const n2 = xi - 2 * xi ** 2 + xi ** 3;
+  const n3 = 3 * xi ** 2 - 2 * xi ** 3;
+  const n4 = -(xi ** 2) + xi ** 3;
+  const f = new Float64Array(12);
+  f[0] = -px * oneMinusXi;
+  f[6] = -px * xi;
+  f[1] = -py * n1;
+  f[5] = -py * L * n2;
+  f[7] = -py * n3;
+  f[11] = -py * L * n4;
+  f[2] = -pz * n1;
+  f[4] = pz * L * n2; // RH flip vs θz
+  f[8] = -pz * n3;
+  f[10] = pz * L * n4;
+  return f;
+}
+
+function addEquivalentLocalLoad3d(
+  global: Float64Array,
+  mesh: AnalysisMesh3d,
+  elementIndex: number,
+  fixedEnd: Float64Array,
+  fixedEndByElement: Float64Array,
+): void {
+  const element = mesh.elements[elementIndex]!;
+  for (let i = 0; i < 12; i++) {
+    const offset = elementIndex * 12 + i;
+    fixedEndByElement[offset] = fixedEndByElement[offset]! + fixedEnd[i]!;
+  }
+  // Applied nodal loads = −Tᵀ f_fixed (T = blkdiag(R,…)).
+  const R = element.R;
+  const dofs = elementDofs3d(element);
+  for (let blk = 0; blk < 4; blk++) {
+    const o = blk * 3;
+    const lx = -fixedEnd[o]!;
+    const ly = -fixedEnd[o + 1]!;
+    const lz = -fixedEnd[o + 2]!;
+    // global = Rᵀ · local
+    global[dofs[o]!] = global[dofs[o]!]! + R[0]! * lx + R[3]! * ly + R[6]! * lz;
+    global[dofs[o + 1]!] = global[dofs[o + 1]!]! + R[1]! * lx + R[4]! * ly + R[7]! * lz;
+    global[dofs[o + 2]!] = global[dofs[o + 2]!]! + R[2]! * lx + R[5]! * ly + R[8]! * lz;
+  }
 }
 
 function addElementMatrix3d(global: Float64Array, ndof: number, local: Float64Array, element: Element3d): void {

@@ -9,6 +9,8 @@ export {
   assembleKg3d,
   assembleM3d,
   assembleF3d,
+  assembleLoadCase3d,
+  pointFixedEnd3d,
   elementLocalStiffness3d,
 } from './assemble';
 export { buildMesh3d, planarCantileverModel } from './mesh';
@@ -19,9 +21,18 @@ export {
   strainEnergy3d,
   externalWork3d,
   deformationDisplay3d,
+  elementForcesAtDisplacement3d,
+  utilizationAtDisplacement3d,
 } from './statics';
 export { buckling3d, modal3d } from './eigen';
+export {
+  buildDeckRoute3d,
+  mapDeckStation3d,
+  editorNodeIndex3d,
+  deckLength3d,
+} from './deck';
 export type { StaticAnalysis3d, StaticSystem3d } from './statics';
+export type { DeckSegment3d, DeckStationHit3d } from './deck';
 export type {
   AnalysisMesh3d,
   EditorModel3d,

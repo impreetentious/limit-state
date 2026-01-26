@@ -54,6 +54,23 @@ export function solveStatic3d(
   };
 }
 
+/** Recover local end forces; subtract Hermite fixed-ends when present (traffic). */
+export function elementForcesAtDisplacement3d(
+  mesh: AnalysisMesh3d,
+  u: Float64Array,
+  elementFixedEnd?: Float64Array,
+): Float64Array {
+  return recoverElementForces3d(mesh, u, elementFixedEnd);
+}
+
+export function utilizationAtDisplacement3d(
+  mesh: AnalysisMesh3d,
+  u: Float64Array,
+  elementFixedEnd?: Float64Array,
+): Map<number, number> {
+  return recoverUtilization3d(mesh, recoverElementForces3d(mesh, u, elementFixedEnd));
+}
+
 /** Build mesh + solve the model's nodal load case. */
 export function analyzeStaticModel3d(model: EditorModel3d): StaticAnalysis3d {
   try {
@@ -76,7 +93,11 @@ export function analyzeStaticModel3d(model: EditorModel3d): StaticAnalysis3d {
   }
 }
 
-function recoverElementForces3d(mesh: AnalysisMesh3d, u: Float64Array): Float64Array {
+function recoverElementForces3d(
+  mesh: AnalysisMesh3d,
+  u: Float64Array,
+  elementFixedEnd?: Float64Array,
+): Float64Array {
   const out = new Float64Array(mesh.elements.length * 12);
   for (let index = 0; index < mesh.elements.length; index++) {
     const element = mesh.elements[index]!;
@@ -103,7 +124,8 @@ function recoverElementForces3d(mesh: AnalysisMesh3d, u: Float64Array): Float64A
     for (let i = 0; i < 12; i++) {
       let force = 0;
       for (let j = 0; j < 12; j++) force += k[i * 12 + j]! * ul[j]!;
-      out[index * 12 + i] = force;
+      const fixed = elementFixedEnd?.[index * 12 + i] ?? 0;
+      out[index * 12 + i] = force - fixed;
     }
   }
   return out;
