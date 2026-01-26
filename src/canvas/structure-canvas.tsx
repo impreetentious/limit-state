@@ -376,7 +376,15 @@ function drawEmptyState(context: CanvasRenderingContext2D, size: CanvasSize): vo
   context.strokeStyle = 'rgba(26, 29, 33, 0.22)'; context.lineWidth = 1.5; context.setLineDash([4, 5]);
   const cx = size.width / 2; const cy = size.height / 2;
   context.beginPath(); context.moveTo(cx - 100, cy + 45); context.lineTo(cx, cy - 40); context.lineTo(cx + 100, cy + 45); context.moveTo(cx - 55, cy + 45); context.lineTo(cx, cy); context.lineTo(cx + 55, cy + 45); context.stroke();
-  context.setLineDash([]); context.fillStyle = 'rgba(26, 29, 33, 0.48)'; context.font = '14px IBM Plex Sans, sans-serif'; context.textAlign = 'center'; context.fillText('Draw a member to begin.', cx, cy + 82); context.restore();
+  context.setLineDash([]);
+  context.fillStyle = 'rgba(26, 29, 33, 0.55)';
+  context.font = '600 15px IBM Plex Sans, sans-serif';
+  context.textAlign = 'center';
+  context.fillText('Limit State', cx, cy + 72);
+  context.fillStyle = 'rgba(26, 29, 33, 0.48)';
+  context.font = '13px IBM Plex Sans, sans-serif';
+  context.fillText('Draw a member — or open a preset.', cx, cy + 94);
+  context.restore();
 }
 
 function drawDeformedShape(context: CanvasRenderingContext2D, size: CanvasSize, analysis: Extract<StaticAnalysis, { kind: 'stable' }>): void {

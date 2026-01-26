@@ -306,6 +306,51 @@ kbd {
   gap: 0.4rem;
 }
 
+.landing-invite {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  text-align: center;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.landing-invite-brand {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: clamp(1.35rem, 2.4vw, 1.85rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.landing-invite-line {
+  margin: 0;
+  font-size: 0.92rem;
+  color: color-mix(in srgb, var(--ink) 58%, transparent);
+}
+
+.demo3d-note {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  max-width: min(36rem, calc(100% - 2rem));
+  padding: 0.28rem 0.55rem;
+  border: 1px solid rgba(26, 29, 33, 0.12);
+  background: color-mix(in srgb, var(--paper) 90%, transparent);
+  font-size: 0.68rem;
+  color: color-mix(in srgb, var(--ink) 62%, transparent);
+  text-align: center;
+  pointer-events: none;
+}
+
 .wind3d-header {
   display: flex;
   align-items: center;
@@ -631,10 +676,17 @@ kbd {
   display: block;
 }
 
-.story-fields .honesty-note {
+.honesty-note {
   padding-left: 0.45rem;
   border-left: 2px solid rgba(124, 63, 156, 0.48);
   color: #63307f;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  margin: 0.35rem 0 0;
+}
+
+.story-fields .honesty-note {
+  font-size: inherit;
 }
 
 .capacity-panel {

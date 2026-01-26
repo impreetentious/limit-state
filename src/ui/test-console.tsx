@@ -160,7 +160,7 @@ export function TestConsole({
       <datalist id="wind-frequency-marks">{windMarks.filter((mark) => mark.value >= 0.05 && mark.value <= 5).map((mark) => <option key={mark.label} value={mark.value.toFixed(2)} label={`${mark.label} ${mark.value.toFixed(2)} Hz`} />)}</datalist>
       <label>Damping {(story.zeta * 100).toFixed(1)}%<input type="range" min="0.005" max="0.1" step="0.005" value={story.zeta} onChange={(event) => setStory({ ...story, zeta: Number(event.target.value) })} /></label>
       <p>Simplified uniform wind field (member-normal 2D pressure){wind?.daf ? ` · measured DAF ${wind.daf.ratio.toFixed(2)} at q${wind.daf.mode + 1}` : ''}.</p>
-      {model.name === 'Slender deck' && <p className="honesty-note">Tacoma Narrows is an inspiration only: this is a linear in-plane beam model, not an aeroelastic flutter simulation.</p>}
+      {model.name === 'Slender deck' && <p className="honesty-note">Tacoma Narrows failed in torsional aeroelastic flutter — a 3D phenomenon. This 2D preset shows the in-plane bending-resonance cousin only; switch to 3D → preset 5 for the St. Venant torsion mode (still not flutter / warping).</p>}
       {wind?.resonanceMode !== undefined && <div className="resonance-panel" role="status">{wind.yieldMember !== undefined ? `Resonance → yield at member ${wind.yieldMember}` : `Resonance with mode ${wind.resonanceMode + 1} (${(modal?.values[wind.resonanceMode]! / (Math.PI * 2)).toFixed(2)} Hz)`}</div>}
       {wind && <ModeBars coordinates={wind.coordinates} modal={modal} />}
     </div>}

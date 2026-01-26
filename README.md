@@ -17,7 +17,7 @@ Construction games fake physics with springs. Real finite-element analysis lives
 
 ## Honesty, stated plainly
 
-Every number is computed by the real method; every flourish is labeled. Deformed shapes carry their exaggeration factor ("×120 — true max 3.2 mm"). The collapse animation is labeled quasi-static. And the slender-deck preset tells you that the real Tacoma Narrows failed in *torsional* aeroelastic flutter — a 3D phenomenon this 2D model deliberately does not fake; it shows you the bending-resonance cousin instead.
+Every number is computed by the real method; every flourish is labeled. Deformed shapes carry their exaggeration factor ("×120 — true max 3.2 mm"). The collapse animation is labeled quasi-static. The 2D slender-deck preset shows bending resonance only; its 3D twin-girder cousin exposes a real St. Venant torsional mode — and still says plainly that Tacoma Narrows was aeroelastic flutter with warping, which this sandbox does not fake.
 
 The solver is verified against closed-form solutions in CI — cantilever deflection to 1e−10, Euler buckling to 0.8%, beam frequencies to 0.5%.
 
@@ -47,7 +47,7 @@ Next.js (static export) · React 19 · TypeScript (strict) · Zustand · Canvas2
 
 ## Status & plan
 
-This repo ships the Phase 1 2D core and Phase 2 depth (Timoshenko, P-Δ, earthquake, influence lines, cables, pushover, challenges/gallery, moving-mass traffic). **Phase 3** (remaining) goes 3D — space frames, torsion, WebGL — under the same honesty contract.
+This repo ships the Phase 1 2D core, Phase 2 depth, and Phase 3 core (space-frame solver, WebGL editor, extrude, 3D wind/traffic). **V1 is not final** until closeout **3P–3Z** (3D share, story parity, custom workplanes, skyline/perf, landing, screenshots) is complete.
 
 ## License
 
@@ -62,4 +62,4 @@ This IST timestamp rule is permanent for all future workflows, commits, and AI a
 Follow this format for version control:
 
 * **Base Format Version:** 0.0.0 — the version of the version-block schema itself (the shape of these lines).
-* **Product Version:** `v0.4.8_2026-01-26_22:01:43` (IST)
+* **Product Version:** `v0.4.9_2026-01-26_22:23:15` (IST)
