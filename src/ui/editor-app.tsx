@@ -11,13 +11,15 @@ import type { EditorModel, EigenResult } from '../fem/types';
 import { PRESETS } from '../presets/scenes';
 import { PRESETS_3D } from '../presets/scenes3d';
 import { useEditorStore3d, type EditorTool3d } from '../state/editor-store-3d';
-import { decodeModel, encodeModel } from '../share/serialize';
+import { decodeModel, decodeModel3d, encodeModel, encodeModel3d, peekShareSchemaVersion } from '../share/serialize';
 import { inspectStability } from '../state/stability';
 import { MEMBER_HARD_LIMIT, MEMBER_SOFT_LIMIT, type EditorTool, useEditorStore } from '../state/editor-store';
 import { analyzeRamp, rampCapacity } from '../stories/ramp';
+import { analyzeRamp3d, rampCapacity3d } from '../stories/ramp3d';
 import { analyzeTrafficAt, initialMovingMassState, mergeMomentEnvelope, prepareTraffic, stepMovingMassTraffic, trafficYieldWeightAt, type TrafficFrame } from '../stories/traffic';
 import { memberMomentEnvelopeFromInfluence } from '../fem/influence';
 import { runPushover } from '../fem/pushover';
+import { runPushover3d } from '../fem/space/pushover';
 import {
   earthquakeUtilization,
   initialEarthquakeState,
@@ -25,6 +27,13 @@ import {
   stepEarthquake,
   type EarthquakeScenario,
 } from '../stories/earthquake';
+import {
+  earthquakeUtilization3d,
+  initialEarthquakeState3d,
+  prepareEarthquake3d,
+  stepEarthquake3d,
+  type EarthquakeScenario3d,
+} from '../stories/earthquake3d';
 import {
   detectResonance,
   initialWindState,
@@ -43,11 +52,20 @@ import {
   stepWind3d,
   type WindScenario3d,
 } from '../stories/wind3d';
-import { analyzeTrafficAt3d, prepareTraffic3d, type TrafficFrame3d } from '../stories/traffic3d';
+import {
+  analyzeTrafficAt3d,
+  initialMovingMassState3d,
+  prepareTraffic3d,
+  stepMovingMassTraffic3d,
+  type TrafficFrame3d,
+} from '../stories/traffic3d';
 import { ChallengePanel } from './challenge-panel';
 import { Inspector } from './inspector';
 import { TestConsole } from './test-console';
+import { TestConsole3d } from './test-console-3d';
 import Link from 'next/link';
+import type { StorySpec3d } from '../fem/space';
+import type { NewmarkState } from '../fem/dynamics';
 
 const TOOLS: Array<{ id: EditorTool; label: string; key: string; description: string }> = [
   { id: 'select', label: 'Select', key: 'V', description: 'Inspect a node or member' },
@@ -113,10 +131,14 @@ export function EditorApp(): React.JSX.Element {
   const [windFrame, setWindFrame] = useState<WindFrame>();
   const [windFrame3d, setWindFrame3d] = useState<WindFrame3d>();
   const [trafficFrame3d, setTrafficFrame3d] = useState<TrafficFrame3d>();
+  const [movingMassFrame3d, setMovingMassFrame3d] = useState<TrafficFrame3d>();
   const [earthquakeFrame, setEarthquakeFrame] = useState<EarthquakeFrame>();
+  const [earthquakeFrame3d, setEarthquakeFrame3d] = useState<EarthquakeFrame3d>();
   const [movingMassFrame, setMovingMassFrame] = useState<TrafficFrame>();
   const [failureReplay, setFailureReplay] = useState(0);
   const [failurePhase, setFailurePhase] = useState<number>();
+  const [failureReplay3d, setFailureReplay3d] = useState(0);
+  const [failurePhase3d, setFailurePhase3d] = useState<number>();
   const [viewDimension, setViewDimension] = useState<'2d' | '3d'>('2d');
   const [storyPlaying3d, setStoryPlaying3d] = useState(false);
   const [storyTime3d, setStoryTime3d] = useState(0);
@@ -138,9 +160,11 @@ export function EditorApp(): React.JSX.Element {
   const setExtrudeCount = useEditorStore3d((s) => s.setExtrudeCount);
   const extrude3d = useEditorStore3d((s) => s.extrude);
   const replicate3d = useEditorStore3d((s) => s.replicate);
-  const setWindDirectionDeg = useEditorStore3d((s) => s.setWindDirectionDeg);
   const setWindStory = useEditorStore3d((s) => s.setWindStory);
   const setTrafficStory = useEditorStore3d((s) => s.setTrafficStory);
+  const setRampStory = useEditorStore3d((s) => s.setRampStory);
+  const setPushoverStory = useEditorStore3d((s) => s.setPushoverStory);
+  const setEarthquakeStory = useEditorStore3d((s) => s.setEarthquakeStory);
   const toggleDeckMember = useEditorStore3d((s) => s.toggleDeckMember);
   const loadModel3d = useEditorStore3d((s) => s.loadModel);
   const reset3d = useEditorStore3d((s) => s.reset);
@@ -152,6 +176,7 @@ export function EditorApp(): React.JSX.Element {
   const setMemberStart = useEditorStore3d((s) => s.setMemberStart);
   const setSelection3d = useEditorStore3d((s) => s.setSelection);
   const setModelName3d = useEditorStore3d((s) => s.setModelName);
+  const setNotice3d = useEditorStore3d((s) => s.setNotice);
 
   const analysis3d = useMemo(() => analyzeStaticModel3d(model3d), [model3d]);
   const eigen3d = useMemo(() => {
@@ -186,6 +211,26 @@ export function EditorApp(): React.JSX.Element {
       return undefined;
     }
   }, [model3d, viewDimension]);
+  const earthquakeScenario3d = useMemo(
+    () => (viewDimension === '3d' && model3d.story?.kind === 'earthquake' ? prepareEarthquake3d(model3d) : undefined),
+    [model3d, viewDimension],
+  );
+  const capacity3d = useMemo(
+    () => (model3d.story?.kind === 'ramp' ? rampCapacity3d(model3d) : undefined),
+    [model3d],
+  );
+  const rampFactor3d = model3d.story?.kind === 'ramp' && capacity3d !== undefined
+    ? Math.min(capacity3d, Math.max(0.001, storyTime3d * capacity3d / 8))
+    : 0.001;
+  const rampFrame3d = useMemo(
+    () => (model3d.story?.kind === 'ramp' && viewDimension === '3d' ? analyzeRamp3d(model3d, rampFactor3d, storyTime3d >= 8) : undefined),
+    [model3d, rampFactor3d, storyTime3d, viewDimension],
+  );
+  const pushover3d = useMemo(
+    () => (model3d.story?.kind === 'pushover' && viewDimension === '3d' ? runPushover3d(model3d) : undefined),
+    [model3d, viewDimension],
+  );
+  const trafficFrame3dActive = movingMassFrame3d ?? trafficFrame3d;
 
   useEffect(() => {
     if (viewDimension !== '3d' || !storyPlaying3d || !windScenario3d || !eigen3d) return;
@@ -196,6 +241,7 @@ export function EditorApp(): React.JSX.Element {
     const tick = () => {
       current = stepWind3d(windScenario3d, current);
       setWindFrame3d({ scenario: windScenario3d, t: current.t, u: current.u });
+      setStoryTime3d(current.t);
       frame = window.requestAnimationFrame(tick);
     };
     setWindFrame3d({ scenario: windScenario3d, t: initial.t, u: initial.u });
@@ -213,7 +259,13 @@ export function EditorApp(): React.JSX.Element {
   }, [model3d.story, storyPlaying3d, storyTime3d, trafficScenario3d, viewDimension]);
 
   useEffect(() => {
-    if (viewDimension !== '3d' || !storyPlaying3d || !trafficScenario3d || model3d.story?.kind !== 'traffic') return;
+    if (
+      viewDimension !== '3d'
+      || !storyPlaying3d
+      || !trafficScenario3d
+      || model3d.story?.kind !== 'traffic'
+      || model3d.story.movingMass
+    ) return;
     const speed = Math.max(0.1, model3d.story.speed);
     const duration = (trafficScenario3d.length + 4) / speed;
     let frame = 0;
@@ -237,10 +289,87 @@ export function EditorApp(): React.JSX.Element {
   }, [model3d.story, storyPlaying3d, trafficScenario3d, viewDimension]);
 
   useEffect(() => {
+    if (
+      viewDimension !== '3d'
+      || !storyPlaying3d
+      || !trafficScenario3d
+      || model3d.story?.kind !== 'traffic'
+      || !model3d.story.movingMass
+    ) {
+      if (!(model3d.story?.kind === 'traffic' && model3d.story.movingMass && storyPlaying3d)) {
+        setMovingMassFrame3d(undefined);
+      }
+      return;
+    }
+    const speed = Math.max(0.1, model3d.story.speed);
+    const duration = (trafficScenario3d.length + 4) / speed;
+    let current: NewmarkState = initialMovingMassState3d(trafficScenario3d, 0);
+    let frame = 0;
+    const tick = () => {
+      const stepped = stepMovingMassTraffic3d(trafficScenario3d, current);
+      current = stepped.state;
+      setMovingMassFrame3d(stepped.frame);
+      setStoryTime3d(current.t);
+      if (current.t >= duration) {
+        setStoryPlaying3d(false);
+        return;
+      }
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [model3d.story, storyPlaying3d, trafficScenario3d, viewDimension]);
+
+  useEffect(() => {
+    if (viewDimension !== '3d' || !storyPlaying3d || !earthquakeScenario3d || !eigen3d) return;
+    const initial = initialEarthquakeState3d(earthquakeScenario3d, eigen3d.modal);
+    if (!initial) return;
+    let current = initial;
+    let frame = 0;
+    const tick = () => {
+      current = stepEarthquake3d(earthquakeScenario3d, current);
+      const yieldMember = governingYieldMember(earthquakeUtilization3d(earthquakeScenario3d, current.u));
+      setEarthquakeFrame3d({ scenario: earthquakeScenario3d, t: current.t, u: current.u, yieldMember });
+      setStoryTime3d(current.t);
+      if (current.t >= earthquakeScenario3d.duration) {
+        setStoryPlaying3d(false);
+        return;
+      }
+      frame = window.requestAnimationFrame(tick);
+    };
+    setEarthquakeFrame3d({ scenario: earthquakeScenario3d, t: initial.t, u: initial.u });
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [earthquakeScenario3d, eigen3d, storyPlaying3d, viewDimension]);
+
+  useEffect(() => {
+    if (viewDimension !== '3d' || !storyPlaying3d || model3d.story?.kind !== 'ramp') return;
+    let frame = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      setStoryTime3d((current) => {
+        const next = current + dt;
+        if (capacity3d !== undefined && next >= 8) {
+          setStoryPlaying3d(false);
+          return 8;
+        }
+        return next;
+      });
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [capacity3d, model3d.story, storyPlaying3d, viewDimension]);
+
+  useEffect(() => {
     if (viewDimension !== '3d') {
       setStoryPlaying3d(false);
       setWindFrame3d(undefined);
       setTrafficFrame3d(undefined);
+      setMovingMassFrame3d(undefined);
+      setEarthquakeFrame3d(undefined);
       setStoryTime3d(0);
     }
   }, [viewDimension]);
@@ -249,8 +378,32 @@ export function EditorApp(): React.JSX.Element {
     setStoryPlaying3d(false);
     setWindFrame3d(undefined);
     setTrafficFrame3d(undefined);
+    setMovingMassFrame3d(undefined);
+    setEarthquakeFrame3d(undefined);
     setStoryTime3d(0);
   }, [model3d.story, model3d.nodes, model3d.members, model3d.deck]);
+
+  const failureReport3d = rampFrame3d?.report && rampFrame3d.report.kind !== 'stable' ? rampFrame3d.report : undefined;
+  const failureKey3d = failureReport3d ? `${failureReport3d.kind}-${rampFrame3d?.factor ?? 0}` : undefined;
+  useEffect(() => {
+    if (!failureKey3d) {
+      setFailurePhase3d(undefined);
+      return;
+    }
+    if (reducedMotion) {
+      setFailurePhase3d(1);
+      return;
+    }
+    let frame = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / 2400);
+      setFailurePhase3d(t);
+      if (t < 1) frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [failureKey3d, failureReplay3d, reducedMotion]);
 
   useEffect(() => {
     if (baseAnalysis.kind !== 'stable') {
@@ -513,13 +666,28 @@ export function EditorApp(): React.JSX.Element {
     let cancelled = false;
     const hash = window.location.hash;
     if (!hash.startsWith('#m=') && !hash.startsWith('#mu=')) return;
-    void decodeModel(hash).then((shared) => {
-      if (!cancelled) loadModel(shared);
-    }).catch(() => {
-      if (!cancelled) setNotice('This share URL could not be decoded.');
-    });
+    void (async () => {
+      try {
+        const version = await peekShareSchemaVersion(hash);
+        if (cancelled) return;
+        if (version === 2) {
+          const shared = await decodeModel3d(hash);
+          if (cancelled) return;
+          loadModel3d(shared);
+          setViewDimension('3d');
+          setNotice3d('Loaded shared 3D model from URL.');
+          return;
+        }
+        const shared = await decodeModel(hash);
+        if (cancelled) return;
+        loadModel(shared);
+        setViewDimension('2d');
+      } catch {
+        if (!cancelled) setNotice('This share URL could not be decoded.');
+      }
+    })();
     return () => { cancelled = true; };
-  }, [loadModel, setNotice]);
+  }, [loadModel, loadModel3d, setNotice, setNotice3d]);
 
   useEffect(() => {
     const hash = window.location.hash;
@@ -535,10 +703,13 @@ export function EditorApp(): React.JSX.Element {
 
   const shareModel = async () => {
     try {
-      const hash = await encodeModel(model);
+      const hash = viewDimension === '3d' ? await encodeModel3d(model3d) : await encodeModel(model);
       window.history.replaceState(null, '', hash);
       await navigator.clipboard?.writeText(window.location.href);
-      setNotice('Share link copied — the model stays entirely in the URL.');
+      setNotice(viewDimension === '3d'
+        ? '3D share link copied — the model stays entirely in the URL.'
+        : 'Share link copied — the model stays entirely in the URL.');
+      if (viewDimension === '3d') setNotice3d('3D share link copied — schema v2 in the URL hash.');
     } catch {
       setNotice('Share link could not be encoded.');
     }
@@ -697,14 +868,29 @@ export function EditorApp(): React.JSX.Element {
           {viewDimension === '3d' ? (
             <StructureCanvas3d
               model={model3d}
-              analysis={trafficFrame3d?.analysis.kind === 'stable' ? trafficFrame3d.analysis : analysis3d}
-              showDeformed={showDeformed || Boolean(windFrame3d) || Boolean(trafficFrame3d?.analysis.kind === 'stable')}
+              analysis={
+                rampFrame3d?.analysis.kind === 'stable'
+                  ? rampFrame3d.analysis
+                  : trafficFrame3dActive?.analysis.kind === 'stable'
+                    ? trafficFrame3dActive.analysis
+                    : analysis3d
+              }
+              showDeformed={showDeformed
+                || Boolean(windFrame3d)
+                || Boolean(earthquakeFrame3d)
+                || Boolean(trafficFrame3dActive?.analysis.kind === 'stable')
+                || Boolean(rampFrame3d?.analysis.kind === 'stable')}
               modeGhost={modeGhost3d}
               dynamicDisplacement={
                 windFrame3d?.u
-                ?? (trafficFrame3d?.analysis.kind === 'stable' ? trafficFrame3d.analysis.result.u : undefined)
+                ?? earthquakeFrame3d?.u
+                ?? (failurePhase3d !== undefined && rampFrame3d?.analysis.kind === 'stable'
+                  ? scaleDisplacement3d(rampFrame3d.analysis.result.u, 0.25 + failurePhase3d * 0.75)
+                  : undefined)
+                ?? (trafficFrame3dActive?.analysis.kind === 'stable' ? trafficFrame3dActive.analysis.result.u : undefined)
+                ?? (rampFrame3d?.analysis.kind === 'stable' ? rampFrame3d.analysis.result.u : undefined)
               }
-              trafficAxles={trafficFrame3d?.axles}
+              trafficAxles={trafficFrame3dActive?.axles}
               workplane={workplane}
               selectedNodeId={selection3d.kind === 'node' ? selection3d.id : null}
               selectedMemberId={selection3d.kind === 'member' ? selection3d.id : null}
@@ -772,113 +958,51 @@ export function EditorApp(): React.JSX.Element {
           )}
           {viewDimension === '3d' && model3d.members.length > 0 && (
             <div className="demo3d-note" role="note">
-              Extrude/Replicate to go spatial · Deck paints a traffic polyline · Wind dial for lateral stories
+              Extrude/Replicate to go spatial · Deck paints a traffic polyline · Stories: wind / traffic / EQ / ramp / pushover
             </div>
           )}
           {viewDimension === '3d' && (
-            <aside className="wind3d-panel" aria-label="3D story controls">
-              <div className="wind3d-header">
-                <strong>Stories (3D)</strong>
-                <button
-                  type="button"
-                  className="play-button"
-                  onClick={() => {
-                    if (model3d.story?.kind === 'traffic') {
-                      if (!(model3d.deck?.length)) {
-                        setTrafficStory({});
-                        return;
-                      }
-                      setStoryPlaying3d((playing) => !playing);
-                      return;
-                    }
-                    if (!model3d.story || model3d.story.kind !== 'wind') setWindStory({});
-                    setStoryPlaying3d((playing) => !playing);
-                  }}
-                >
-                  {storyPlaying3d ? 'Pause' : 'Play'}
-                </button>
-              </div>
-              <div className="mode-family" aria-label="3D story kind">
-                <button
-                  type="button"
-                  className={model3d.story?.kind === 'wind' || !model3d.story ? 'active' : ''}
-                  onClick={() => { setStoryPlaying3d(false); setWindStory({}); }}
-                >
-                  Wind
-                </button>
-                <button
-                  type="button"
-                  className={model3d.story?.kind === 'traffic' ? 'active' : ''}
-                  onClick={() => { setStoryPlaying3d(false); setTrafficStory({}); }}
-                >
-                  Traffic
-                </button>
-              </div>
-              {(model3d.story?.kind === 'wind' || !model3d.story) && (
-                <>
-                  <label className="snap-toggle">Direction
-                    <input
-                      type="range"
-                      min={0}
-                      max={360}
-                      step={5}
-                      value={model3d.story?.kind === 'wind' ? model3d.story.directionDeg : 0}
-                      onChange={(e) => setWindDirectionDeg(Number(e.target.value))}
-                      aria-label="Wind direction degrees from +X"
-                    />
-                    <span>{(model3d.story?.kind === 'wind' ? model3d.story.directionDeg : 0).toFixed(0)}° from +X</span>
-                  </label>
-                  <label className="snap-toggle">Pattern
-                    <select
-                      value={model3d.story?.kind === 'wind' ? model3d.story.pattern : 'sine'}
-                      onChange={(e) => setWindStory({ pattern: e.target.value as 'steady' | 'sine' | 'gusts' })}
-                      aria-label="Wind pattern"
-                    >
-                      <option value="steady">Steady</option>
-                      <option value="sine">Sine</option>
-                      <option value="gusts">Gusts</option>
-                    </select>
-                  </label>
-                  <p className="rail-hint">
-                    Horizontal pressure along the dial. Slender mast → lateral resonance; slender deck → open Modal f₂ for St. Venant torsion.
-                    {windFrame3d ? ` · t = ${windFrame3d.t.toFixed(2)} s` : ''}
-                  </p>
-                  {model3d.name === 'Slender deck' && (
-                    <p className="honesty-note">
-                      Tacoma Narrows failed in torsional aeroelastic flutter. Modal f₂ here is the linear St. Venant torsion cousin — not flutter, and not warping / member-level LTB.
-                    </p>
-                  )}
-                </>
-              )}
-              {model3d.story?.kind === 'traffic' && (
-                <>
-                  <label className="snap-toggle">Weight (kN)
-                    <input
-                      type="number"
-                      min={10}
-                      step={10}
-                      value={model3d.story.weightkN}
-                      onChange={(e) => setTrafficStory({ weightkN: Number(e.target.value) || 10 })}
-                      aria-label="Traffic weight kilonewtons"
-                    />
-                  </label>
-                  <label className="snap-toggle">Speed (m/s)
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={model3d.story.speed}
-                      onChange={(e) => setTrafficStory({ speed: Number(e.target.value) || 1 })}
-                      aria-label="Traffic speed metres per second"
-                    />
-                  </label>
-                  <p className="rail-hint">
-                    Paint a contiguous deck with the Deck tool, then Play. Two axles, 4 m apart, weight along −Z.
-                    {trafficFrame3d ? ` · deck ${trafficFrame3d.length.toFixed(1)} m · t = ${storyTime3d.toFixed(2)} s` : (model3d.deck?.length ? '' : ' · no deck yet')}
-                  </p>
-                </>
-              )}
-            </aside>
+            <TestConsole3d
+              model={model3d}
+              modalFreqHz={eigen3d?.modal.values[0] !== undefined ? eigen3d.modal.values[0]! / (Math.PI * 2) : undefined}
+              bucklingLambda={eigen3d?.buckling.values[0]}
+              playing={storyPlaying3d}
+              storyTime={storyTime3d}
+              traffic={trafficFrame3dActive}
+              ramp={rampFrame3d}
+              rampCapacity={capacity3d}
+              pushover={pushover3d}
+              earthquake={earthquakeFrame3d}
+              onTogglePlayback={() => {
+                if (model3d.story?.kind === 'traffic' && !(model3d.deck?.length)) {
+                  setTrafficStory({});
+                  return;
+                }
+                if (model3d.story?.kind === 'pushover') return;
+                setStoryPlaying3d((playing) => !playing);
+              }}
+              onRestart={() => {
+                setStoryPlaying3d(false);
+                setStoryTime3d(0);
+                setWindFrame3d(undefined);
+                setTrafficFrame3d(undefined);
+                setMovingMassFrame3d(undefined);
+                setEarthquakeFrame3d(undefined);
+              }}
+              onSetStory={(kind: StorySpec3d['kind']) => {
+                setStoryPlaying3d(false);
+                setStoryTime3d(0);
+                if (kind === 'wind') setWindStory({});
+                else if (kind === 'traffic') setTrafficStory({});
+                else if (kind === 'earthquake') setEarthquakeStory({});
+                else if (kind === 'ramp') setRampStory();
+                else setPushoverStory();
+              }}
+              onPatchTraffic={(partial) => setTrafficStory(partial)}
+              onPatchWind={(partial) => setWindStory(partial)}
+              onPatchEarthquake={(partial) => setEarthquakeStory(partial)}
+              onReplayFailure={() => setFailureReplay3d((n) => n + 1)}
+            />
           )}
           {viewDimension === '3d' && notice3d && <div className="canvas-notice" role="status">{notice3d}</div>}
           {viewDimension === '3d' && windFrame3d && analysis3d.kind === 'stable' && (
@@ -886,9 +1010,21 @@ export function EditorApp(): React.JSX.Element {
               3D Newmark wind — display scale ×{formatScale(deformationDisplay3d(analysis3d.mesh, windFrame3d.u, 44).scale)} · direction {(model3d.story?.kind === 'wind' ? model3d.story.directionDeg : 0).toFixed(0)}° · warping torsion still out of scope
             </div>
           )}
-          {viewDimension === '3d' && trafficFrame3d?.analysis.kind === 'stable' && (
+          {viewDimension === '3d' && earthquakeFrame3d && analysis3d.kind === 'stable' && (
             <div className="dynamic-badge">
-              3D traffic (quasi-static) — display scale ×{formatScale(deformationDisplay3d(trafficFrame3d.analysis.mesh, trafficFrame3d.analysis.result.u, 44).scale)} · two-axle polyline sweep · Hermite axle loads
+              3D Newmark earthquake — display scale ×{formatScale(deformationDisplay3d(analysis3d.mesh, earthquakeFrame3d.u, 44).scale)} · horizontal base excitation −M·ι·ü_g
+            </div>
+          )}
+          {viewDimension === '3d' && trafficFrame3dActive?.analysis.kind === 'stable' && (
+            <div className="dynamic-badge">
+              {trafficFrame3dActive.movingMass
+                ? `3D moving-mass Newmark — amp ×${trafficFrame3dActive.movingMass.amplification.toFixed(2)} vs static · vehicle mass lumped at axle contacts`
+                : `3D traffic (quasi-static) — display scale ×${formatScale(deformationDisplay3d(trafficFrame3dActive.analysis.mesh, trafficFrame3dActive.analysis.result.u, 44).scale)} · two-axle polyline sweep`}
+            </div>
+          )}
+          {viewDimension === '3d' && failurePhase3d !== undefined && (
+            <div className="failure-cinematic-badge">
+              failure animation ×{reducedMotion ? 'static' : formatScale(0.25 + failurePhase3d * 0.75)} — illustrative, computed onset and mechanism · quasi-static sequence — inertia not modeled
             </div>
           )}
           {viewDimension === '2d' && <div className={`lint-badge lint-${stability.kind}`}>{stability.message}</div>}
@@ -1020,6 +1156,19 @@ interface WindFrame3d {
   scenario: WindScenario3d;
   t: number;
   u: Float64Array;
+}
+
+interface EarthquakeFrame3d {
+  scenario: EarthquakeScenario3d;
+  t: number;
+  u: Float64Array;
+  yieldMember?: number;
+}
+
+function scaleDisplacement3d(u: Float64Array, scale: number): Float64Array {
+  const out = new Float64Array(u.length);
+  for (let i = 0; i < u.length; i++) out[i] = u[i]! * scale;
+  return out;
 }
 
 interface EarthquakeFrame {

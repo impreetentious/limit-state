@@ -26,13 +26,29 @@ function frame(
   section: SectionSpec = BOX,
   material: MaterialId = STEEL,
 ): MemberSpec3d {
-  return { id, a, b, material, section: { ...section }, releaseA: NO_RELEASES, releaseB: NO_RELEASES, roll: 0 };
+  return { id, a, b, material, section: { ...section }, releaseA: NO_RELEASES, releaseB: NO_RELEASES, roll: 0, cableOnly: false };
 }
 
 function truss(id: number, a: number, b: number, section: SectionSpec = TRUSS_BAR): MemberSpec3d {
   // Release bending (θy, θz); keep torsion so condensation stays nonsingular on open sections.
   const bendingOnly: EndReleases3d = { tx: false, ty: true, tz: true };
-  return { id, a, b, material: STEEL, section: { ...section }, releaseA: bendingOnly, releaseB: bendingOnly, roll: 0 };
+  return { id, a, b, material: STEEL, section: { ...section }, releaseA: bendingOnly, releaseB: bendingOnly, roll: 0, cableOnly: false };
+}
+
+function cable(id: number, a: number, b: number, section: SectionSpec = { kind: 'rect', b: 0.02, h: 0.02 }): MemberSpec3d {
+  // Keep St. Venant torsion (tx) so condensation stays nonsingular at pin anchors.
+  const bendingOnly: EndReleases3d = { tx: false, ty: true, tz: true };
+  return {
+    id,
+    a,
+    b,
+    material: STEEL,
+    section: { ...section },
+    releaseA: bendingOnly,
+    releaseB: bendingOnly,
+    roll: 0,
+    cableOnly: true,
+  };
 }
 
 /** Fixed-base space portal: two columns + beam, lateral tip load. */
@@ -168,7 +184,7 @@ export function spaceDeckDemo(): EditorModel3d {
     ],
     loads: { gravity: false, points: [] },
     deck: [3, 4],
-    story: { kind: 'traffic', weightkN: 250, speed: 12 },
+    story: { kind: 'traffic', weightkN: 250, speed: 12, movingMass: false },
   };
 }
 
@@ -190,7 +206,7 @@ export function simpleBeam3d(): EditorModel3d {
     ],
     loads: { gravity: true, points: [] },
     deck: [1],
-    story: { kind: 'traffic', weightkN: 300, speed: 12 },
+    story: { kind: 'traffic', weightkN: 300, speed: 12, movingMass: false },
   };
 }
 
@@ -246,7 +262,7 @@ export function prattTruss3d(): EditorModel3d {
     ],
     loads: { gravity: true, points: [] },
     deck: [1, 2, 3],
-    story: { kind: 'traffic', weightkN: 300, speed: 12 },
+    story: { kind: 'traffic', weightkN: 300, speed: 12, movingMass: false },
   };
 }
 
@@ -287,7 +303,7 @@ export function cantileverBridge3d(): EditorModel3d {
     ],
     loads: { gravity: true, points: [] },
     deck: [1, 3, 5],
-    story: { kind: 'traffic', weightkN: 200, speed: 10 },
+    story: { kind: 'traffic', weightkN: 200, speed: 10, movingMass: false },
   };
 }
 
@@ -311,14 +327,7 @@ export function radioMast3d(): EditorModel3d {
       gravity: false,
       points: [{ node: 3, fx: 5e3, fy: 0, fz: 0 }],
     },
-    story: {
-      kind: 'wind',
-      pattern: 'steady',
-      amplitudekNm: 1.5,
-      freqHz: 0.5,
-      zeta: 0.02,
-      directionDeg: 0,
-    },
+    story: { kind: 'ramp' },
   };
 }
 
@@ -393,6 +402,132 @@ export function blankSpace3d(): EditorModel3d {
   };
 }
 
+/**
+ * Spatial guyed mast — column + four tension-only guys.
+ * Honesty: guys are straight chords (no sag/catenary); St. Venant torsion only.
+ */
+export function guyedMast3d(): EditorModel3d {
+  const H = 20;
+  const R = 12;
+  return {
+    v: 2,
+    name: 'Guyed mast',
+    seed: 42,
+    nodes: [
+      { id: 1, x: 0, y: 0, z: 0 },
+      { id: 2, x: 0, y: 0, z: H },
+      { id: 3, x: -R, y: 0, z: 0 },
+      { id: 4, x: R, y: 0, z: 0 },
+      { id: 5, x: 0, y: -R, z: 0 },
+      { id: 6, x: 0, y: R, z: 0 },
+    ],
+    members: [
+      frame(1, 1, 2, { kind: 'tube', d: 0.2, t: 0.01 }),
+      cable(2, 3, 2),
+      cable(3, 4, 2),
+      cable(4, 5, 2),
+      cable(5, 6, 2),
+    ],
+    supports: [
+      { node: 1, kind: 'fixed' },
+      // Fixed anchors — pin would leave free θy/θz next to bending-released cables.
+      { node: 3, kind: 'fixed' },
+      { node: 4, kind: 'fixed' },
+      { node: 5, kind: 'fixed' },
+      { node: 6, kind: 'fixed' },
+    ],
+    loads: { gravity: false, points: [{ node: 2, fx: 50e3, fy: 0, fz: 0 }] },
+    story: { kind: 'ramp' },
+  };
+}
+
+/** Fixed-base portal for plastic pushover (3D cousin of G19). */
+export function portalPushover3d(): EditorModel3d {
+  const h = 4;
+  const b = 8;
+  const section: SectionSpec = { kind: 'rect', b: 0.2, h: 0.3 };
+  return {
+    v: 2,
+    name: 'Portal pushover',
+    seed: 42,
+    nodes: [
+      { id: 1, x: 0, y: 0, z: 0 },
+      { id: 2, x: b, y: 0, z: 0 },
+      { id: 3, x: 0, y: 0, z: h },
+      { id: 4, x: b, y: 0, z: h },
+    ],
+    members: [frame(1, 1, 3, section), frame(2, 2, 4, section), frame(3, 3, 4, section)],
+    supports: [
+      { node: 1, kind: 'fixed' },
+      { node: 2, kind: 'fixed' },
+    ],
+    loads: { gravity: false, points: [{ node: 3, fx: 1e3, fy: 0, fz: 0 }] },
+    story: { kind: 'pushover' },
+  };
+}
+
+/**
+ * Simple suspension teaching span — deck + two hanging cables to towers.
+ * Geometry is simplified (straight cable chords, no main-cable sag iteration).
+ */
+export function suspensionSpan3d(): EditorModel3d {
+  const L = 40;
+  const W = 4;
+  const towerH = 12;
+  const deckZ = 4;
+  return {
+    v: 2,
+    name: 'Suspension span',
+    seed: 11,
+    nodes: [
+      { id: 1, x: -L / 2, y: -W / 2, z: 0 },
+      { id: 2, x: -L / 2, y: W / 2, z: 0 },
+      { id: 3, x: L / 2, y: -W / 2, z: 0 },
+      { id: 4, x: L / 2, y: W / 2, z: 0 },
+      { id: 5, x: -L / 2, y: -W / 2, z: towerH },
+      { id: 6, x: -L / 2, y: W / 2, z: towerH },
+      { id: 7, x: L / 2, y: -W / 2, z: towerH },
+      { id: 8, x: L / 2, y: W / 2, z: towerH },
+      { id: 9, x: -L / 4, y: -W / 2, z: deckZ },
+      { id: 10, x: -L / 4, y: W / 2, z: deckZ },
+      { id: 11, x: L / 4, y: -W / 2, z: deckZ },
+      { id: 12, x: L / 4, y: W / 2, z: deckZ },
+      { id: 13, x: 0, y: -W / 2, z: deckZ },
+      { id: 14, x: 0, y: W / 2, z: deckZ },
+    ],
+    members: [
+      frame(1, 1, 5, { kind: 'box', b: 0.3, h: 0.3, t: 0.02 }),
+      frame(2, 2, 6, { kind: 'box', b: 0.3, h: 0.3, t: 0.02 }),
+      frame(3, 3, 7, { kind: 'box', b: 0.3, h: 0.3, t: 0.02 }),
+      frame(4, 4, 8, { kind: 'box', b: 0.3, h: 0.3, t: 0.02 }),
+      frame(5, 9, 13, GIRDER),
+      frame(6, 13, 11, GIRDER),
+      frame(7, 10, 14, GIRDER),
+      frame(8, 14, 12, GIRDER),
+      frame(9, 9, 10, CROSS_BEAM),
+      frame(10, 13, 14, CROSS_BEAM),
+      frame(11, 11, 12, CROSS_BEAM),
+      cable(12, 5, 9),
+      cable(13, 6, 10),
+      cable(14, 7, 11),
+      cable(15, 8, 12),
+      cable(16, 5, 13),
+      cable(17, 6, 14),
+      cable(18, 7, 13),
+      cable(19, 8, 14),
+    ],
+    supports: [
+      { node: 1, kind: 'fixed' },
+      { node: 2, kind: 'fixed' },
+      { node: 3, kind: 'fixed' },
+      { node: 4, kind: 'fixed' },
+    ],
+    loads: { gravity: true, points: [] },
+    deck: [5, 6],
+    story: { kind: 'traffic', weightkN: 150, speed: 8, movingMass: false },
+  };
+}
+
 /** Teaching presets menu — spatial cousins of §7, then Phase 3 demos. */
 export const PRESETS_3D: PresetScene3d[] = [
   { id: 'simple-beam', label: '1 · Simple beam', build: simpleBeam3d },
@@ -405,6 +540,9 @@ export const PRESETS_3D: PresetScene3d[] = [
   { id: 'frame', label: '8 · Space frame', build: spaceFrameDemo },
   { id: 'mast', label: '9 · Slender mast (wind)', build: slenderMastDemo },
   { id: 'deck', label: '10 · Space deck (traffic)', build: spaceDeckDemo },
+  { id: 'guyed-mast', label: '11 · Guyed mast (cables)', build: guyedMast3d },
+  { id: 'portal-pushover', label: '12 · Portal pushover', build: portalPushover3d },
+  { id: 'suspension', label: '13 · Suspension span', build: suspensionSpan3d },
 ];
 
 /** @deprecated Prefer PRESETS_3D — kept for existing imports. */

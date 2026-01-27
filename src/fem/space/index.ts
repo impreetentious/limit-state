@@ -32,8 +32,26 @@ export {
   editorNodeIndex3d,
   deckLength3d,
 } from './deck';
+export {
+  evaluateFailure3d,
+  collapseCascade3d,
+  analyzeAtFactor3d,
+} from './failure';
+export {
+  modelHasCables3d,
+  solveTensionOnly3d,
+  normalizeCableMember3d,
+} from './cables';
+export { runPushover3d } from './pushover';
+export {
+  assembleMassWithVehicle3d,
+  vehicleMassKg,
+  lumpedVehicleTranslationalTrace3d,
+} from './moving-mass';
 export type { StaticAnalysis3d, StaticSystem3d } from './statics';
 export type { DeckSegment3d, DeckStationHit3d } from './deck';
+export type { CableSolveResult3d } from './cables';
+export type { PushoverResult3d, PushoverPoint3d, PushoverHinge3d } from './pushover';
 export type {
   AnalysisMesh3d,
   EditorModel3d,

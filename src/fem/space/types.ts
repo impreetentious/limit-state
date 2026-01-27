@@ -81,7 +81,7 @@ export type StorySpec3d =
       weightkN: number;
       speed: number;
       /** Optional moving-mass Newmark (2H cousin). */
-      movingMass?: boolean;
+      movingMass: boolean;
     }
   | { kind: 'ramp' }
   | { kind: 'pushover' }
