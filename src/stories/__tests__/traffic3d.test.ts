@@ -36,7 +36,7 @@ function deckBeam(): EditorModel3d {
     ],
     loads: { gravity: false, points: [] },
     deck: [1],
-    story: { kind: 'traffic', weightkN: 200, speed: 10 },
+    story: { kind: 'traffic', weightkN: 200, speed: 10, movingMass: false },
   };
 }
 
@@ -91,7 +91,8 @@ describe('3D traffic polyline (Phase 3)', () => {
       inElement: [{ element: hit!.element, xi: hit!.xi, fx: 0, fy: 0, fz: -100_000 }],
     });
     let sumFz = 0;
-    for (let node = 0; mesh.ndof > node * 6; node++) sumFz += F[6 * node + 2]!;
+    const nodeCount = mesh.ndof / 6;
+    for (let node = 0; node < nodeCount; node++) sumFz += F[6 * node + 2]!;
     expect(sumFz).toBeCloseTo(-100_000, 6);
   });
 });
