@@ -10,10 +10,18 @@ Construction games fake physics with springs. Real finite-element analysis lives
 
 ## What you can do
 
-- **Build** — nodes, members, pins, rollers, hinges; steel, aluminum, timber, or spaghetti; real sections (box, I-beam, tube).
-- **Test** — three load stories: drive **traffic** across your deck (with a live bending-moment envelope), dial up **wind** (steady, sinusoidal, or gusts — with a damping slider and a dynamic-amplification meter), or **ramp** the load until something gives.
-- **Break** — and get a straight answer. A collapse timeline shows load redistributing after the first member goes: *member 7 buckled → member 8 overstressed → hinge → mechanism.*
-- **Share** — the whole model lives in the URL. No accounts, no server, no data leaves your machine.
+- **Build (2D + 3D)** — nodes, members, pins, rollers, hinges; steel, aluminum, timber, or spaghetti; real sections (box, I-beam, tube). In 3D: workplanes (ground / elevation / custom), extrude & replicate, deck polylines, and spatial presets from Pratt to twin-girder slender deck.
+- **Test** — load stories in both dimensions: **traffic** across a deck (2D moment envelope + influence lines; 3D quasi-static or moving-mass Newmark), **wind** (steady / sine / gusts — 3D gains a direction dial), **earthquake** base excitation, **ramp** to first limit, and **pushover** with plastic hinges.
+- **Break** — and get a straight answer. A collapse timeline shows load redistributing after the first member goes: *member 7 buckled → member 8 overstressed → hinge → mechanism.* Capacity-to-weight stays on the panel.
+- **Share** — the whole model lives in the URL (schema v1 → 2D, v2 → 3D). No accounts, no server, no data leaves your machine.
+
+![2D Build — Pratt truss](docs/build-2d.png)
+
+![2D Test — traffic story](docs/test-2d.png)
+
+![3D Build — slender deck](docs/build-3d.png)
+
+![3D Test — Newmark wind](docs/test-3d.png)
 
 ## Honesty, stated plainly
 
@@ -32,6 +40,8 @@ npm run build      # static export in out/
 
 Requires Node 22+.
 
+To refresh README stills after a UI change: `npm run build && npx serve out -l 4173` then `npm run screenshots`.
+
 ## Deploy
 
 Static, client-side, no backend. Both pipelines are committed:
@@ -43,11 +53,11 @@ Both set `BASE_PATH` for project-site subpaths; for a custom domain or root site
 
 ## Stack
 
-Next.js (static export) · React 19 · TypeScript (strict) · Zustand · Canvas2D. The FEM kernel (`src/fem/`) is hand-rolled on `Float64Array` with **zero numerics dependencies** — Euler–Bernoulli frame elements, LDLᵀ solves, subspace-iteration eigenanalysis, Newmark-β dynamics. Eigen solves run in a Web Worker; traffic re-solves are single back-substitutions, which is why it holds 60 fps.
+Next.js (static export) · React 19 · TypeScript (strict) · Zustand · Canvas2D + three.js (3D). The FEM kernel (`src/fem/`) is hand-rolled on `Float64Array` with **zero numerics dependencies** — Euler–Bernoulli frame elements (2D + 12-DOF space frame), LDLᵀ / skyline+RCM free solves, subspace-iteration eigenanalysis, Newmark-β dynamics. Eigen solves run in a Web Worker; traffic re-solves are single back-substitutions, which is why it holds 60 fps.
 
 ## Status & plan
 
-This repo ships the Phase 1 2D core, Phase 2 depth, and Phase 3 through closeout **3P–3T** (spatial presets, landing, skyline+RCM, custom workplanes). **V1 is not final** until closeout **3U–3Z** (3D share, story parity, cables, moving-mass, screenshots) is complete.
+Phase 1–2 and Phase 3 through closeout **3P–3Z** are shipped (spatial FEM, Stories parity, cables, share URLs, README stills). Physics ceilings (flutter, warping/LTB) stay labeled honesty — not fakeable.
 
 ## License
 
@@ -62,4 +72,4 @@ This IST timestamp rule is permanent for all future workflows, commits, and AI a
 Follow this format for version control:
 
 * **Base Format Version:** 0.0.0 — the version of the version-block schema itself (the shape of these lines).
-* **Product Version:** `v0.5.3_2026-01-27_22:49:34` (IST)
+* **Product Version:** `v0.5.4_2026-01-27_23:10:12` (IST)
