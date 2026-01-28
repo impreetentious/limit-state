@@ -4,11 +4,11 @@
  */
 import { MATERIALS, sectionProps } from '../materials';
 import { memberTriad } from './assemble';
-import type { AnalysisMesh3d, EditorModel3d, Element3d, EndReleases3d, MemberSpec3d, SupportSpec3d } from './types';
+import type { AnalysisMesh3d, AnalysisOptions3d, EditorModel3d, Element3d, EndReleases3d, MemberSpec3d, SupportSpec3d } from './types';
 import { NO_RELEASES, TRUSS_RELEASES } from './types';
 
 /** Build the 3D analysis mesh. */
-export function buildMesh3d(model: EditorModel3d): AnalysisMesh3d {
+export function buildMesh3d(model: EditorModel3d, options: AnalysisOptions3d = {}): AnalysisMesh3d {
   const nodeById = new Map<number, { index: number; x: number; y: number; z: number }>();
   const coords: number[] = [];
   const editorNode: number[] = [];
@@ -61,6 +61,7 @@ export function buildMesh3d(model: EditorModel3d): AnalysisMesh3d {
       fy: material.fy,
       rho: material.rho,
       R,
+      As: props.As,
     };
 
     const truss = member.cableOnly || (isFullRelease(member.releaseA) && isFullRelease(member.releaseB));
@@ -132,6 +133,7 @@ export function buildMesh3d(model: EditorModel3d): AnalysisMesh3d {
     editorNode: Int32Array.from(editorNode),
     freeDofs: Int32Array.from(freeDofs),
     ndof,
+    shearFlexible: options.shearFlexible === true,
   };
 }
 

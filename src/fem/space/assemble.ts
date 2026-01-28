@@ -10,13 +10,22 @@ const N = 12;
 /**
  * Local space-frame stiffness.
  * Axial EA/L, torsion GJ/L, bending about z (I_z) and about y (I_y with RH sign flip).
+ * Optional shear areas `AsY`/`AsZ` engage the Timoshenko block per plane
+ * (φ = 12EI/(G·As·L²)).
  */
-export function kLocal3d(E: number, G: number, A: number, Iy: number, Iz: number, J: number, L: number): Float64Array {
+export function kLocal3d(
+  E: number,
+  G: number,
+  A: number,
+  Iy: number,
+  Iz: number,
+  J: number,
+  L: number,
+  shear?: { AsY?: number; AsZ?: number },
+): Float64Array {
   const k = new Float64Array(N * N);
   const a = (E * A) / L;
   const t = (G * J) / L;
-  const by = (E * Iy) / (L * L * L);
-  const bz = (E * Iz) / (L * L * L);
   const set = (i: number, j: number, v: number) => {
     k[i * N + j] = v;
     if (i !== j) k[j * N + i] = v;
@@ -32,29 +41,33 @@ export function kLocal3d(E: number, G: number, A: number, Iy: number, Iz: number
   set(9, 9, t);
   set(3, 9, -t);
 
-  // Bending about z — [v1, θz1, v2, θz2] = [1, 5, 7, 11].
-  set(1, 1, 12 * bz);
-  set(7, 7, 12 * bz);
-  set(1, 7, -12 * bz);
-  set(1, 5, 6 * bz * L);
-  set(1, 11, 6 * bz * L);
-  set(5, 7, -6 * bz * L);
-  set(7, 11, -6 * bz * L);
-  set(5, 5, 4 * bz * L * L);
-  set(11, 11, 4 * bz * L * L);
-  set(5, 11, 2 * bz * L * L);
+  // Bending about z — shear along local y with shear area AsY.
+  const phiZ = shear?.AsY && shear.AsY > 0 ? (12 * E * Iz) / (G * shear.AsY * L * L) : 0;
+  const bzs = (E * Iz) / (L * L * L * (1 + phiZ));
+  set(1, 1, 12 * bzs);
+  set(7, 7, 12 * bzs);
+  set(1, 7, -12 * bzs);
+  set(1, 5, 6 * bzs * L);
+  set(1, 11, 6 * bzs * L);
+  set(5, 7, -6 * bzs * L);
+  set(7, 11, -6 * bzs * L);
+  set(5, 5, (4 + phiZ) * bzs * L * L);
+  set(11, 11, (4 + phiZ) * bzs * L * L);
+  set(5, 11, (2 - phiZ) * bzs * L * L);
 
-  // Bending about y — [w1, θy1, w2, θy2] = [2, 4, 8, 10], RH sign flip.
-  set(2, 2, 12 * by);
-  set(8, 8, 12 * by);
-  set(2, 8, -12 * by);
-  set(2, 4, -6 * by * L);
-  set(2, 10, -6 * by * L);
-  set(4, 8, 6 * by * L);
-  set(8, 10, 6 * by * L);
-  set(4, 4, 4 * by * L * L);
-  set(10, 10, 4 * by * L * L);
-  set(4, 10, 2 * by * L * L);
+  // Bending about y — shear along local z with shear area AsZ. RH sign flip.
+  const phiY = shear?.AsZ && shear.AsZ > 0 ? (12 * E * Iy) / (G * shear.AsZ * L * L) : 0;
+  const bys = (E * Iy) / (L * L * L * (1 + phiY));
+  set(2, 2, 12 * bys);
+  set(8, 8, 12 * bys);
+  set(2, 8, -12 * bys);
+  set(2, 4, -6 * bys * L);
+  set(2, 10, -6 * bys * L);
+  set(4, 8, 6 * bys * L);
+  set(8, 10, 6 * bys * L);
+  set(4, 4, (4 + phiY) * bys * L * L);
+  set(10, 10, (4 + phiY) * bys * L * L);
+  set(4, 10, (2 - phiY) * bys * L * L);
 
   return k;
 }
@@ -235,17 +248,21 @@ export function transformToGlobal3d(kLoc: Float64Array, R: Float64Array): Float6
 }
 
 /** Local element stiffness after rotational end-release condensation. */
-export function elementLocalStiffness3d(element: Element3d): Float64Array {
-  const elastic = kLocal3d(element.E, element.G, element.A, element.Iy, element.Iz, element.J, element.L);
-  return condenseWithElementReleases(elastic, element);
+export function elementLocalStiffness3d(element: Element3d, shearFlexible = false): Float64Array {
+  const shear = shearFlexible && element.As !== undefined && element.As > 0
+    ? { AsY: element.As, AsZ: element.As }
+    : undefined;
+  const elastic = kLocal3d(element.E, element.G, element.A, element.Iy, element.Iz, element.J, element.L, shear);
+  return condenseWithElementReleases(elastic, element, shear);
 }
 
 /** Assemble global K (symmetric skyline). */
 export function assembleK3d(mesh: AnalysisMesh3d): SkylineMatrix {
   const groups = mesh.elements.map((element) => [...elementDofs3d(element)]);
   const K = createSkyline(profileFromDofGroups(mesh.ndof, groups));
+  const shear = mesh.shearFlexible === true;
   for (const element of mesh.elements) {
-    const local = elementLocalStiffness3d(element);
+    const local = elementLocalStiffness3d(element, shear);
     addElementMatrixSkyline3d(K, transformToGlobal3d(local, element.R), element);
   }
   return K;
@@ -471,10 +488,10 @@ function pushReleases(out: number[], base: number, r: EndReleases3d): void {
  * Static condensation of released rotational DOFs using the element's elastic
  * release transform (Cᵀ A C).
  */
-function condenseWithElementReleases(matrix: Float64Array, element: Element3d): Float64Array {
+function condenseWithElementReleases(matrix: Float64Array, element: Element3d, shear?: { AsY: number; AsZ: number }): Float64Array {
   const released = releasedRotations3d(element);
   if (released.length === 0) return matrix;
-  const elastic = kLocal3d(element.E, element.G, element.A, element.Iy, element.Iz, element.J, element.L);
+  const elastic = kLocal3d(element.E, element.G, element.A, element.Iy, element.Iz, element.J, element.L, shear);
   const transform = releaseTransform3d(elastic, released);
   const condensed = new Float64Array(N * N);
   for (let row = 0; row < N; row++) {

@@ -33,6 +33,21 @@ export {
   deckLength3d,
 } from './deck';
 export {
+  prepareInfluence3d,
+  computeInfluenceLine3d,
+  computeInfluenceLineAt3d,
+  sampleInfluenceAt3d,
+  envelopeFromInfluence3d,
+  memberMomentEnvelopeFromInfluence3d,
+} from './influence';
+export type {
+  InfluenceQuantity3d,
+  InfluenceSample3d,
+  InfluenceLine3d,
+  InfluenceScenario3d,
+  InfluenceEnvelope3d,
+} from './influence';
+export {
   evaluateFailure3d,
   collapseCascade3d,
   analyzeAtFactor3d,
@@ -43,6 +58,8 @@ export {
   normalizeCableMember3d,
 } from './cables';
 export { runPushover3d } from './pushover';
+export { solveSecondOrderStatic3d, elementAxial3d } from './second-order';
+export type { SecondOrderAnalysis3d } from './second-order';
 export {
   assembleMassWithVehicle3d,
   vehicleMassKg,
@@ -54,6 +71,7 @@ export type { CableSolveResult3d } from './cables';
 export type { PushoverResult3d, PushoverPoint3d, PushoverHinge3d } from './pushover';
 export type {
   AnalysisMesh3d,
+  AnalysisOptions3d,
   EditorModel3d,
   Element3d,
   EndReleases3d,

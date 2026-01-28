@@ -12,7 +12,7 @@ import {
 import { expandFreeVector, freeVector } from '../solve';
 import { assembleK3d, assembleLoadCase3d, elementLocalStiffness3d } from './assemble';
 import { buildMesh3d } from './mesh';
-import type { AnalysisMesh3d, EditorModel3d, StaticResult3d } from './types';
+import type { AnalysisMesh3d, AnalysisOptions3d, EditorModel3d, StaticResult3d } from './types';
 
 export type StaticAnalysis3d =
   | { kind: 'stable'; mesh: AnalysisMesh3d; result: StaticResult3d }
@@ -94,10 +94,13 @@ export function utilizationAtDisplacement3d(
   return recoverUtilization3d(mesh, recoverElementForces3d(mesh, u, elementFixedEnd));
 }
 
-/** Build mesh + solve the model's nodal load case (optional gravity −Z). */
-export function analyzeStaticModel3d(model: EditorModel3d): StaticAnalysis3d {
+/**
+ * Build mesh + solve the model's nodal load case (optional gravity −Z).
+ * `options.shearFlexible` selects the Timoshenko element block.
+ */
+export function analyzeStaticModel3d(model: EditorModel3d, options: AnalysisOptions3d = {}): StaticAnalysis3d {
   try {
-    const mesh = buildMesh3d(model);
+    const mesh = buildMesh3d(model, options);
     const nodeIndex = new Map<number, number>();
     for (let index = 0; index < mesh.editorNode.length; index++) {
       const id = mesh.editorNode[index]!;
@@ -124,7 +127,7 @@ function recoverElementForces3d(
   const out = new Float64Array(mesh.elements.length * 12);
   for (let index = 0; index < mesh.elements.length; index++) {
     const element = mesh.elements[index]!;
-    const k = elementLocalStiffness3d(element);
+    const k = elementLocalStiffness3d(element, mesh.shearFlexible === true);
     const ug = new Float64Array(12);
     const a = 6 * element.na;
     const b = 6 * element.nb;

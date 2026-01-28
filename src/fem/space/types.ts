@@ -111,6 +111,8 @@ export interface Element3d {
   R: Float64Array;
   releaseA: EndReleases3d;
   releaseB: EndReleases3d;
+  /** Shear area for Timoshenko option. Same value both planes. */
+  As?: number;
 }
 
 export interface AnalysisMesh3d {
@@ -120,6 +122,13 @@ export interface AnalysisMesh3d {
   editorNode: Int32Array;
   freeDofs: Int32Array;
   ndof: number;
+  /** Timoshenko toggle: when true, kLocal3d uses (1+φ) blocks. */
+  shearFlexible?: boolean;
+}
+
+/** Optional analysis toggles when meshing a 3D model. */
+export interface AnalysisOptions3d {
+  shearFlexible?: boolean;
 }
 
 export interface StaticResult3d {
