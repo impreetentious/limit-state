@@ -46,6 +46,8 @@ export interface StructureCanvas3dProps {
   ) => void;
   selectedNodeId?: number | null;
   selectedMemberId?: number | null;
+  /** Optional per-member overlay: 'axial' | 'shear' | 'moment' colors + widths by force magnitude. */
+  diagram?: 'none' | 'axial' | 'shear' | 'moment';
 }
 
 export function StructureCanvas3d({
@@ -59,6 +61,7 @@ export function StructureCanvas3d({
   onWorkplaneClick,
   selectedNodeId,
   selectedMemberId,
+  diagram,
 }: StructureCanvas3dProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null);
   const propsRef = useRef({
@@ -72,6 +75,7 @@ export function StructureCanvas3d({
     onWorkplaneClick,
     selectedNodeId,
     selectedMemberId,
+    diagram,
   });
   propsRef.current = {
     model,
@@ -84,6 +88,7 @@ export function StructureCanvas3d({
     onWorkplaneClick,
     selectedNodeId,
     selectedMemberId,
+    diagram,
   };
 
   useEffect(() => {
@@ -287,7 +292,7 @@ function ghostTopologyKey(props: StructureCanvas3dProps): string {
 }
 
 function sceneSignature(props: StructureCanvas3dProps): string {
-  const { model, analysis, showDeformed, selectedNodeId, selectedMemberId, dynamicDisplacement, trafficAxles } = props;
+  const { model, analysis, showDeformed, selectedNodeId, selectedMemberId, dynamicDisplacement, trafficAxles, diagram } = props;
   const uMax = analysis.kind === 'stable' ? analysis.result.utilization.size : -1;
   const kind = analysis.kind;
   const dyn = dynamicDisplacement
@@ -296,7 +301,7 @@ function sceneSignature(props: StructureCanvas3dProps): string {
   const story = model.story?.kind ?? 'nostory';
   const deck = (model.deck ?? []).join(',');
   const axles = trafficAxles?.map((a) => `${a.x.toFixed(2)},${a.z.toFixed(2)}`).join(';') ?? '';
-  return `${model.name}|${model.members.length}|${model.nodes.length}|${model.supports.length}|${model.loads.points.length}|${kind}|${uMax}|${showDeformed}|${selectedNodeId}|${selectedMemberId}|${dyn}|${story}|${deck}|${axles}`;
+  return `${model.name}|${model.members.length}|${model.nodes.length}|${model.supports.length}|${model.loads.points.length}|${kind}|${uMax}|${showDeformed}|${selectedNodeId}|${selectedMemberId}|${dyn}|${story}|${deck}|${axles}|${diagram ?? 'none'}`;
 }
 
 function rebuildStructure(root: THREE.Group, props: StructureCanvas3dProps, useLines: boolean): void {
@@ -338,14 +343,32 @@ function rebuildStructure(root: THREE.Group, props: StructureCanvas3dProps, useL
     for (let i = 0; i < mesh3.elements.length; i++) maxAxial = Math.max(maxAxial, Math.abs(elementForces[i * 12]!));
   }
 
+  // Per-member N / V / M magnitudes for optional overlay.
+  const diagram = props.diagram ?? 'none';
+  const diagramValues = diagram !== 'none' && mesh3 && elementForces
+    ? memberDiagramMagnitudes(diagram, model, mesh3, elementForces)
+    : undefined;
+  const diagramMax = diagramValues
+    ? Math.max(1e-9, ...Array.from(diagramValues.values()).map(Math.abs))
+    : 1e-9;
+
   for (const member of model.members) {
     const a = nodePos.get(member.a);
     const b = nodePos.get(member.b);
     if (!a || !b) continue;
     const onDeck = (model.deck ?? []).includes(member.id);
-    const color = onDeck ? BLUE : stressColorHex(utilization?.get(member.id) ?? 0);
-    const axial = memberAxial(member.id, mesh3, elementForces);
-    const width = (onDeck ? 0.07 : 0.04) + 0.1 * Math.min(1, Math.abs(axial) / maxAxial);
+    let color: number;
+    let width: number;
+    if (diagramValues) {
+      const value = diagramValues.get(member.id) ?? 0;
+      const ratio = Math.abs(value) / diagramMax;
+      color = onDeck ? BLUE : diagramColorHex(ratio);
+      width = (onDeck ? 0.07 : 0.04) + 0.12 * ratio;
+    } else {
+      color = onDeck ? BLUE : stressColorHex(utilization?.get(member.id) ?? 0);
+      const axial = memberAxial(member.id, mesh3, elementForces);
+      width = (onDeck ? 0.07 : 0.04) + 0.1 * Math.min(1, Math.abs(axial) / maxAxial);
+    }
     root.add(memberVisual(a, b, color, width, useLines));
   }
 
@@ -422,6 +445,57 @@ function memberAxial(memberId: number, mesh: AnalysisMesh3d | undefined, forces:
     max = Math.max(max, Math.abs(forces[i * 12]!));
   }
   return max;
+}
+
+/**
+ * Per-member peak magnitude for the chosen result diagram. Axial N = |Fx|;
+ * shear V = max √(Fy² + Fz²) at either end; moment M = max √(My² + Mz²) at
+ * either end.
+ */
+function memberDiagramMagnitudes(
+  diagram: 'axial' | 'shear' | 'moment',
+  model: EditorModel3d,
+  mesh: AnalysisMesh3d,
+  forces: Float64Array,
+): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const member of model.members) out.set(member.id, 0);
+  for (let i = 0; i < mesh.elements.length; i++) {
+    const memberId = mesh.elements[i]!.memberId;
+    const base = i * 12;
+    let value = 0;
+    if (diagram === 'axial') {
+      value = Math.abs(forces[base]!);
+    } else if (diagram === 'shear') {
+      const Va = Math.hypot(forces[base + 1]!, forces[base + 2]!);
+      const Vb = Math.hypot(forces[base + 7]!, forces[base + 8]!);
+      value = Math.max(Va, Vb);
+    } else {
+      const Ma = Math.hypot(forces[base + 4]!, forces[base + 5]!);
+      const Mb = Math.hypot(forces[base + 10]!, forces[base + 11]!);
+      value = Math.max(Ma, Mb);
+    }
+    out.set(memberId, Math.max(out.get(memberId) ?? 0, value));
+  }
+  return out;
+}
+
+/** Uniform blue → red intensity for a normalized [0,1] diagram value. */
+function diagramColorHex(ratio: number): number {
+  const t = Math.max(0, Math.min(1, ratio));
+  // Blueprint blue → paper → deep red (mirror stressColorHex scale).
+  if (t <= 0.5) return blendHex(0x2456a4, 0xf4f1ea, t * 2);
+  return blendHex(0xf4f1ea, 0xc0392b, (t - 0.5) * 2);
+}
+
+function blendHex(a: number, b: number, amount: number): number {
+  const t = Math.max(0, Math.min(1, amount));
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar * (1 - t) + br * t);
+  const g = Math.round(ag * (1 - t) + bg * t);
+  const bl = Math.round(ab * (1 - t) + bb * t);
+  return (r << 16) | (g << 8) | bl;
 }
 
 function deformedPoint(coords: Float64Array, u: Float64Array, node: number, scale: number): THREE.Vector3 {

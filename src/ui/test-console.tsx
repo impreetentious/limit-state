@@ -193,7 +193,7 @@ export function TestConsole({
       <span>{buckling?.values[0] ? `Buckling λ ${buckling.values[0]!.toFixed(2)}` : 'Buckling: no compression'}</span>
       <span>{f1 ? `f₁ ${f1.toFixed(2)} Hz` : 'f₁ unavailable'}</span>
       <span>Mass {(massKg / 1000).toFixed(2)} t</span>
-      <span>{capacityToWeight ? `Capacity/weight ${capacityToWeight.toFixed(2)} kN/t` : 'Capacity/weight needs a reference load'}</span>
+      <span title="Resonance is excluded — it is frequency- not amplitude-governed. See wind story for the DAF meter.">{capacityToWeight ? `Capacity/weight ${capacityToWeight.toFixed(2)} kN/t` : 'Capacity/weight needs a reference load'}</span>
       {story.kind === 'traffic' && <span>{trafficCapacityLabel(trafficYieldCapacity)}</span>}
     </div>
   </section>;

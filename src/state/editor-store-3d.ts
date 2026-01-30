@@ -29,6 +29,7 @@ import {
 /** @deprecated Prefer WorkplaneKind — kept for existing imports. */
 export type Workplane = WorkplaneKind;
 export type EditorTool3d = 'select' | 'node' | 'member' | 'support' | 'load' | 'deck' | 'delete' | 'workplane';
+export type ResultDiagram3d = 'none' | 'axial' | 'shear' | 'moment';
 
 export type Selection3d =
   | { kind: 'none' }
@@ -54,6 +55,14 @@ interface EditorState3d {
   extrudeDistance: number;
   /** Number of copies for extrude / replicate. */
   extrudeCount: number;
+  /** Undo / redo snapshot stack. */
+  past: EditorModel3d[];
+  future: EditorModel3d[];
+  undo: () => void;
+  redo: () => void;
+  /** Result diagram overlay for 3D members. */
+  resultDiagram: ResultDiagram3d;
+  setResultDiagram: (diagram: ResultDiagram3d) => void;
   setTool: (tool: EditorTool3d) => void;
   setWorkplanePreset: (plane: 'ground' | 'xz' | 'yz') => void;
   beginCustomWorkplane: () => void;
@@ -101,9 +110,49 @@ function snapValue(value: number, enabled: boolean): number {
   return enabled ? Math.round(value * 2) / 2 : value;
 }
 
+const HISTORY_LIMIT_3D = 100;
+export const MEMBER_HARD_LIMIT_3D = 200;
+export const MEMBER_SOFT_LIMIT_3D = 120;
+
+/** Deep-ish snapshot for undo/redo. Editor models stay small; clone the shell. */
+export function cloneModel3d(model: EditorModel3d): EditorModel3d {
+  return {
+    ...model,
+    nodes: model.nodes.map((node) => ({ ...node })),
+    members: model.members.map((member) => ({
+      ...member,
+      section: { ...member.section },
+      releaseA: { ...member.releaseA },
+      releaseB: { ...member.releaseB },
+    })),
+    supports: model.supports.map((support) => ({ ...support })),
+    loads: { ...model.loads, points: model.loads.points.map((point) => ({ ...point })) },
+    deck: model.deck ? [...model.deck] : undefined,
+    story: model.story ? { ...model.story } : undefined,
+  };
+}
+
 let nextId = 100;
 
-export const useEditorStore3d = create<EditorState3d>((set, get) => ({
+export const useEditorStore3d = create<EditorState3d>((rawSet, get) => {
+  type Patch = Partial<EditorState3d> | ((state: EditorState3d) => Partial<EditorState3d>);
+  const withHistory = (state: EditorState3d, patch: Partial<EditorState3d>): Partial<EditorState3d> => {
+    if (!('model' in patch) || patch.model === undefined || patch.model === state.model) return patch;
+    return {
+      ...patch,
+      past: [...state.past, cloneModel3d(state.model)].slice(-HISTORY_LIMIT_3D),
+      future: [],
+    };
+  };
+  const set = (partial: Patch): void => {
+    if (typeof partial === 'function') {
+      // zustand accepts state → partial via its own overload; forward through rawSet.
+      rawSet((state) => withHistory(state, (partial as (s: EditorState3d) => Partial<EditorState3d>)(state)) as EditorState3d);
+      return;
+    }
+    rawSet((state) => withHistory(state, partial) as EditorState3d);
+  };
+  return ({
   model: blankSpace3d(),
   tool: 'select',
   workplane: { kind: 'ground' },
@@ -114,6 +163,33 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
   notice: 'Blank space — draw on the ground workplane, or open a 3D preset.',
   extrudeDistance: 5,
   extrudeCount: 1,
+  past: [],
+  future: [],
+  resultDiagram: 'none',
+  setResultDiagram: (resultDiagram) => rawSet({ resultDiagram }),
+
+  undo: () => rawSet((state) => {
+    const previous = state.past.at(-1);
+    if (!previous) return {};
+    return {
+      model: cloneModel3d(previous),
+      past: state.past.slice(0, -1),
+      future: [cloneModel3d(state.model), ...state.future],
+      selection: { kind: 'none' },
+      memberStart: null,
+    };
+  }),
+  redo: () => rawSet((state) => {
+    const next = state.future[0];
+    if (!next) return {};
+    return {
+      model: cloneModel3d(next),
+      past: [...state.past, cloneModel3d(state.model)].slice(-HISTORY_LIMIT_3D),
+      future: state.future.slice(1),
+      selection: { kind: 'none' },
+      memberStart: null,
+    };
+  }),
 
   setTool: (tool) => set({ tool, memberStart: null }),
   setWorkplanePreset: (plane) =>
@@ -171,12 +247,14 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
 
   loadModel: (model) => {
     nextId = Math.max(nextId, ...model.nodes.map((n) => n.id), ...model.members.map((m) => m.id), 100) + 1;
-    set({ model, selection: { kind: 'none' }, memberStart: null, notice: null });
+    rawSet({ model, past: [], future: [], selection: { kind: 'none' }, memberStart: null, notice: null });
   },
 
   reset: () =>
-    set({
+    rawSet({
       model: blankModel(),
+      past: [],
+      future: [],
       selection: { kind: 'none' },
       memberStart: null,
       workplane: { kind: 'ground' },
@@ -204,6 +282,10 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
   addMemberBetween: (a, b) => {
     if (a === b) return;
     const { model } = get();
+    if (model.members.length >= MEMBER_HARD_LIMIT_3D) {
+      rawSet({ notice: `Member limit reached (${MEMBER_HARD_LIMIT_3D}). Simplify the model before adding more members.`, memberStart: null });
+      return;
+    }
     if (model.members.some((m) => (m.a === a && m.b === b) || (m.a === b && m.b === a))) {
       set({ notice: 'Member already exists between those nodes.', memberStart: null });
       return;
@@ -304,6 +386,10 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
       set({ notice: 'Extrude added nothing — check distance.' });
       return;
     }
+    if (result.model.members.length > MEMBER_HARD_LIMIT_3D) {
+      rawSet({ notice: `Extrude would exceed the member limit (${MEMBER_HARD_LIMIT_3D}). Simplify before extruding.` });
+      return;
+    }
     set({
       model: result.model,
       selection: { kind: 'none' },
@@ -325,6 +411,10 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
     });
     if (result.addedNodes === 0) {
       set({ notice: 'Replicate added nothing — check distance.' });
+      return;
+    }
+    if (result.model.members.length > MEMBER_HARD_LIMIT_3D) {
+      rawSet({ notice: `Replicate would exceed the member limit (${MEMBER_HARD_LIMIT_3D}). Simplify before replicating.` });
       return;
     }
     set({
@@ -455,7 +545,8 @@ export const useEditorStore3d = create<EditorState3d>((set, get) => ({
     }
     set({ notice: 'Deck members must form one contiguous path.' });
   },
-}));
+  });
+});
 
 /** Project a world hit onto the active workplane. */
 export function projectToWorkplane(

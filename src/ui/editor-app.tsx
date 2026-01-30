@@ -10,7 +10,7 @@ import { analyzeStaticModel3d, buckling3d, deformationDisplay3d, modal3d } from 
 import type { EditorModel, EigenResult } from '../fem/types';
 import { PRESETS } from '../presets/scenes';
 import { PRESETS_3D } from '../presets/scenes3d';
-import { useEditorStore3d, type EditorTool3d } from '../state/editor-store-3d';
+import { MEMBER_HARD_LIMIT_3D, MEMBER_SOFT_LIMIT_3D, useEditorStore3d, type EditorTool3d } from '../state/editor-store-3d';
 import { decodeModel, decodeModel3d, encodeModel, encodeModel3d, peekShareSchemaVersion } from '../share/serialize';
 import { inspectStability } from '../state/stability';
 import { MEMBER_HARD_LIMIT, MEMBER_SOFT_LIMIT, type EditorTool, useEditorStore } from '../state/editor-store';
@@ -47,9 +47,13 @@ import {
 } from '../stories/wind';
 import type { EigenWorkerResponse } from '../workers/eigen.worker';
 import {
+  detectResonance3d,
   initialWindState3d,
+  measuredDaf3d,
+  modalCoordinates3d,
   prepareWind3d,
   stepWind3d,
+  windReferenceCoordinates3d,
   type WindScenario3d,
 } from '../stories/wind3d';
 import {
@@ -177,6 +181,12 @@ export function EditorApp(): React.JSX.Element {
   const setSelection3d = useEditorStore3d((s) => s.setSelection);
   const setModelName3d = useEditorStore3d((s) => s.setModelName);
   const setNotice3d = useEditorStore3d((s) => s.setNotice);
+  const undo3d = useEditorStore3d((s) => s.undo);
+  const redo3d = useEditorStore3d((s) => s.redo);
+  const past3d = useEditorStore3d((s) => s.past);
+  const future3d = useEditorStore3d((s) => s.future);
+  const resultDiagram3d = useEditorStore3d((s) => s.resultDiagram);
+  const setResultDiagram3d = useEditorStore3d((s) => s.setResultDiagram);
 
   const analysis3d = useMemo(() => analyzeStaticModel3d(model3d), [model3d]);
   const eigen3d = useMemo(() => {
@@ -236,15 +246,26 @@ export function EditorApp(): React.JSX.Element {
     if (viewDimension !== '3d' || !storyPlaying3d || !windScenario3d || !eigen3d) return;
     const initial = initialWindState3d(windScenario3d, eigen3d.modal);
     if (!initial) return;
+    const initialCoordinates = modalCoordinates3d(windScenario3d.mesh, eigen3d.modal, initial.u, windScenario3d.mass);
+    const referenceCoordinates = windReferenceCoordinates3d(windScenario3d, eigen3d.modal);
     let current = initial;
+    let history: number[] = [];
     let frame = 0;
     const tick = () => {
       current = stepWind3d(windScenario3d, current);
-      setWindFrame3d({ scenario: windScenario3d, t: current.t, u: current.u });
+      const raw = modalCoordinates3d(windScenario3d.mesh, eigen3d.modal, current.u, windScenario3d.mass);
+      const coordinates = new Float64Array(raw.length);
+      for (let index = 0; index < coordinates.length; index++) coordinates[index] = raw[index]! - initialCoordinates[index]!;
+      const nearestMode = nearestFrequencyMode(eigen3d.modal, windScenario3d.model.freqHz);
+      const samplesPerCycle = Math.max(1, Math.ceil(1 / (windScenario3d.dt * 4 * Math.max(0.05, windScenario3d.model.freqHz))));
+      history = [...history, Math.abs(coordinates[nearestMode] ?? 0)].slice(-samplesPerCycle * 5);
+      const resonanceMode = detectResonance3d(windScenario3d.model.freqHz, eigen3d.modal, windScenario3d.model.zeta, history, samplesPerCycle);
+      const daf = measuredDaf3d(coordinates, referenceCoordinates);
+      setWindFrame3d({ scenario: windScenario3d, t: current.t, u: current.u, coordinates, daf, resonanceMode });
       setStoryTime3d(current.t);
       frame = window.requestAnimationFrame(tick);
     };
-    setWindFrame3d({ scenario: windScenario3d, t: initial.t, u: initial.u });
+    setWindFrame3d({ scenario: windScenario3d, t: initial.t, u: initial.u, coordinates: new Float64Array(initialCoordinates.length), daf: measuredDaf3d(new Float64Array(initialCoordinates.length), referenceCoordinates) });
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
   }, [eigen3d, storyPlaying3d, viewDimension, windScenario3d]);
@@ -727,7 +748,9 @@ export function EditorApp(): React.JSX.Element {
       if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault();
-        if (event.shiftKey) redo(); else undo();
+        if (viewDimension === '3d') {
+          if (event.shiftKey) redo3d(); else undo3d();
+        } else if (event.shiftKey) redo(); else undo();
         return;
       }
       if (event.key === ' ') {
@@ -743,7 +766,7 @@ export function EditorApp(): React.JSX.Element {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [mode, redo, setTool, undo]);
+  }, [mode, redo, redo3d, setTool, undo, undo3d, viewDimension]);
 
   return (
     <main className="editor-shell">
@@ -851,6 +874,14 @@ export function EditorApp(): React.JSX.Element {
                 </div>
                 <p className="rail-hint">Draw on a plane, then Extrude along its normal (Ground → +Z) to go spatial. Replicate arrays bays without connectors.</p>
               </div>
+              <div className="rail-bottom">
+                <button type="button" className="history-button" onClick={undo3d} disabled={past3d.length === 0}>Undo <kbd>⌘Z</kbd></button>
+                <button type="button" className="history-button" onClick={redo3d} disabled={future3d.length === 0}>Redo <kbd>⇧⌘Z</kbd></button>
+                <span className={`rail-lint ${model3d.members.length >= MEMBER_HARD_LIMIT_3D ? 'hard' : model3d.members.length >= MEMBER_SOFT_LIMIT_3D ? 'soft' : ''}`}>
+                  {model3d.members.length}/{MEMBER_HARD_LIMIT_3D} members
+                  {analysis3d.kind === 'mechanism' ? ' · mechanism' : analysis3d.kind === 'invalid' ? ' · invalid' : ''}
+                </span>
+              </div>
             </>
           ) : (
             <>
@@ -894,6 +925,7 @@ export function EditorApp(): React.JSX.Element {
               workplane={workplane}
               selectedNodeId={selection3d.kind === 'node' ? selection3d.id : null}
               selectedMemberId={selection3d.kind === 'member' ? selection3d.id : null}
+              diagram={mode === 'test' ? resultDiagram3d : 'none'}
               onWorkplaneClick={(point, hitNodeId, hitMemberId) => {
                 if (tool3d === 'workplane') {
                   pickCustomWorkplanePoint(point);
@@ -973,6 +1005,12 @@ export function EditorApp(): React.JSX.Element {
               rampCapacity={capacity3d}
               pushover={pushover3d}
               earthquake={earthquakeFrame3d}
+              wind={windFrame3d ? {
+                daf: windFrame3d.daf,
+                resonanceMode: windFrame3d.resonanceMode,
+                coordinates: windFrame3d.coordinates,
+                modalFrequenciesHz: eigen3d?.modal.values ? Array.from(eigen3d.modal.values).map((w) => w / (Math.PI * 2)) : undefined,
+              } : undefined}
               onTogglePlayback={() => {
                 if (model3d.story?.kind === 'traffic' && !(model3d.deck?.length)) {
                   setTrafficStory({});
@@ -1039,6 +1077,7 @@ export function EditorApp(): React.JSX.Element {
           )}
           {(viewDimension === '2d' ? analysis.kind === 'stable' : analysis3d.kind === 'stable') && <div className="result-controls" aria-label="Static result display">
             {viewDimension === '2d' && (['none', 'axial', 'shear', 'moment'] as const).map((diagram) => <button key={diagram} type="button" className={resultDiagram === diagram ? 'active' : ''} onClick={() => setResultDiagram(diagram)}>{diagram === 'none' ? 'Results' : diagram[0]!.toUpperCase() + diagram.slice(1)}</button>)}
+            {viewDimension === '3d' && (['none', 'axial', 'shear', 'moment'] as const).map((diagram) => <button key={`3d-${diagram}`} type="button" className={resultDiagram3d === diagram ? 'active' : ''} onClick={() => setResultDiagram3d(diagram)}>{diagram === 'none' ? 'Results' : diagram[0]!.toUpperCase() + diagram.slice(1)}</button>)}
             <label><input type="checkbox" checked={showDeformed} onChange={(event) => setShowDeformed(event.target.checked)} /> Deformed</label>
             {viewDimension === '2d' && <>
             <label><input type="checkbox" checked={shearFlexible} onChange={(event) => setShearFlexible(event.target.checked)} /> Timoshenko</label>
@@ -1054,7 +1093,7 @@ export function EditorApp(): React.JSX.Element {
           {viewDimension === '2d' && movingMassFrame?.movingMass && <div className="dynamic-badge">Moving-mass Newmark — amp ×{movingMassFrame.movingMass.amplification.toFixed(2)} vs static at this station · vehicle mass lumped at axle contacts</div>}
           {viewDimension === '2d' && failurePhase !== undefined && <div className="failure-cinematic-badge">failure animation ×{reducedMotion ? 'static' : formatScale(0.25 + failurePhase * 0.75)} — illustrative, computed onset and mechanism</div>}
           {viewDimension === '2d' && model.members.length >= MEMBER_SOFT_LIMIT && <div className="member-limit-badge">{model.members.length}/{MEMBER_HARD_LIMIT} members — performance warning at {MEMBER_SOFT_LIMIT}; hard cap {MEMBER_HARD_LIMIT}</div>}
-          {viewDimension === '3d' && model3d.members.length >= MEMBER_SOFT_LIMIT && <div className="member-limit-badge">{model3d.members.length}/{MEMBER_HARD_LIMIT} members — line LOD forced above 64; eigen skipped above ~1.5k DOF</div>}
+          {viewDimension === '3d' && model3d.members.length >= MEMBER_SOFT_LIMIT_3D && <div className="member-limit-badge">{model3d.members.length}/{MEMBER_HARD_LIMIT_3D} members — line LOD forced above 64; eigen skipped above ~1.5k DOF</div>}
           {viewDimension === '3d' && analysis3d.kind === 'stable' && analysis3d.mesh.ndof > 1500 && <div className="member-limit-badge">Modal/buckling deferred — {analysis3d.mesh.ndof} DOF (cap 1500 for live Build)</div>}
           {(viewDimension === '3d' ? analysis3d.kind === 'stable' : analysis.kind === 'stable') && <div className="eigen-panel" aria-live="polite">
             <span>Modal + Buckling{viewDimension === '3d' ? ' (3D)' : ''}</span>
@@ -1156,6 +1195,9 @@ interface WindFrame3d {
   scenario: WindScenario3d;
   t: number;
   u: Float64Array;
+  coordinates?: Float64Array;
+  daf?: { mode: number; ratio: number };
+  resonanceMode?: number;
 }
 
 interface EarthquakeFrame3d {

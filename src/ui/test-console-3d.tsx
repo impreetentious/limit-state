@@ -26,6 +26,13 @@ interface Props {
   rampCapacity?: number;
   pushover?: PushoverResult3d;
   earthquake?: { scenario: EarthquakeScenario3d; t: number; yieldMember?: number };
+  /** 3D wind DAF / resonance / modal-energy chrome. */
+  wind?: {
+    daf?: { mode: number; ratio: number };
+    resonanceMode?: number;
+    coordinates?: Float64Array;
+    modalFrequenciesHz?: number[];
+  };
   onTogglePlayback: () => void;
   onRestart: () => void;
   onSetStory: (kind: StorySpec3d['kind']) => void;
@@ -46,6 +53,7 @@ export function TestConsole3d({
   rampCapacity,
   pushover,
   earthquake,
+  wind,
   onTogglePlayback,
   onRestart,
   onSetStory,
@@ -104,6 +112,42 @@ export function TestConsole3d({
               <option value="gusts">Gusts</option>
             </select>
           </label>
+          <label className="snap-toggle">Frequency (Hz)
+            <input type="number" min={0.05} max={5} step={0.05} value={story.freqHz} onChange={(e) => onPatchWind({ freqHz: Number(e.target.value) || 0.05 })} aria-label="Wind forcing frequency" />
+          </label>
+          <label className="snap-toggle">ζ
+            <input type="number" min={0.005} max={0.1} step={0.005} value={story.zeta} onChange={(e) => onPatchWind({ zeta: Number(e.target.value) || 0.02 })} aria-label="Damping ratio" />
+          </label>
+          {wind && (
+            <div className="wind3d-daf">
+              <span>{wind.daf ? `DAF ×${wind.daf.ratio.toFixed(2)} on mode ${wind.daf.mode + 1}` : 'DAF measuring…'}</span>
+              {wind.resonanceMode !== undefined && (
+                <span className="wind3d-resonance">Resonance with mode {wind.resonanceMode + 1}</span>
+              )}
+            </div>
+          )}
+          {wind?.modalFrequenciesHz && wind.modalFrequenciesHz.length > 0 && (
+            <div className="wind3d-freq-marks" aria-label="modal frequency marks">
+              {wind.modalFrequenciesHz.slice(0, 4).map((freq, index) => (
+                <span key={index} className={Math.abs(story.freqHz - freq) / Math.max(freq, 0.01) < 0.1 ? 'near' : ''}>
+                  f{index + 1} {freq.toFixed(2)} Hz
+                </span>
+              ))}
+            </div>
+          )}
+          {wind?.coordinates && wind.coordinates.length > 0 && (
+            <div className="wind3d-modal-bars" aria-label="modal energy bars">
+              {Array.from(wind.coordinates).slice(0, 6).map((q, index) => {
+                const norm = Math.min(1, Math.abs(q) / Math.max(...Array.from(wind.coordinates!).map(Math.abs), 1e-9));
+                return (
+                  <div key={index} className="wind3d-modal-row">
+                    <span className="wind3d-modal-label">q{index + 1}</span>
+                    <div className="wind3d-modal-track"><div className="wind3d-modal-fill" style={{ width: `${(norm * 100).toFixed(1)}%` }} /></div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <p className="rail-hint">Horizontal pressure along the dial. Warping / member-level LTB still out of scope.</p>
         </>
       )}
@@ -174,10 +218,15 @@ export function TestConsole3d({
           {pushover ? (
             <div className="pushover-panel">
               <p>Collapse H {(pushover.collapseBaseShear / 1000).toFixed(1)} kN at λ {pushover.collapseLoadFactor.toFixed(2)} · {pushover.outcome} · {pushover.hinges.length} hinge{pushover.hinges.length === 1 ? '' : 's'}</p>
+              <PushoverPanel3d result={pushover} />
               <ol>{pushover.hinges.map((hinge, i) => <li key={`${hinge.memberId}-${hinge.end}-${i}`}>Member {hinge.memberId} end {hinge.end.toUpperCase()} at λ {hinge.loadFactor.toFixed(2)}</li>)}</ol>
             </div>
           ) : <p>Add lateral point loads to run a pushover curve.</p>}
         </>
+      )}
+
+      {story.kind === 'earthquake' && earthquake?.scenario.spectrum && (
+        <SpectrumPanel3d spectrum={earthquake.scenario.spectrum} f1={modalFreqHz} />
       )}
 
       <div className="capacity-panel">
@@ -185,7 +234,9 @@ export function TestConsole3d({
         <span>{bucklingLambda !== undefined ? `Buckling λcr ${bucklingLambda.toFixed(2)}` : 'No buckling under this load direction'}</span>
         <span>{modalFreqHz !== undefined ? `f₁ ${modalFreqHz.toFixed(2)} Hz` : 'f₁ needs a modal solve'}</span>
         <span>Mass {(massKg / 1000).toFixed(2)} t</span>
-        <span>{capacityToWeight ? `Capacity/weight ${capacityToWeight.toFixed(2)} kN/t` : 'Capacity/weight needs a reference load'}</span>
+        <span title="Resonance is excluded — it is frequency- not amplitude-governed. See wind story for the DAF meter.">
+          {capacityToWeight ? `Capacity/weight ${capacityToWeight.toFixed(2)} kN/t` : 'Capacity/weight needs a reference load'}
+        </span>
       </div>
     </aside>
   );
@@ -247,4 +298,64 @@ function formatFinite(value: number): string {
 
 function formatForce(value: number): string {
   return `${(value / 1000).toFixed(1)} kN`;
+}
+
+/** Compact pushover base-shear vs roof-displacement curve for 3D. */
+function PushoverPanel3d({ result }: { result: PushoverResult3d }): React.JSX.Element {
+  const maxShear = Math.max(...result.points.map((p) => p.baseShear), 1e-9);
+  const maxDisp = Math.max(...result.points.map((p) => p.roofDisp), 1e-12);
+  const path = result.points.map((p, i) => {
+    const x = (p.roofDisp / maxDisp) * 300 + 10;
+    const y = 64 - (p.baseShear / maxShear) * 56;
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
+  return (
+    <div className="influence-panel" aria-label="Pushover curve">
+      <div className="spectrum-header">
+        <span>Base shear vs roof displacement</span>
+        <span>{(result.collapseBaseShear / 1000).toFixed(1)} kN · {result.outcome}</span>
+      </div>
+      <svg viewBox="0 0 320 72" className="spectrum-chart" role="img" aria-label="3D pushover curve">
+        <path d={path} fill="none" stroke="#2456a4" strokeWidth="1.6" />
+        {result.points.map((p, i) => {
+          const x = (p.roofDisp / maxDisp) * 300 + 10;
+          const y = 64 - (p.baseShear / maxShear) * 56;
+          return <circle key={i} cx={x} cy={y} r={i === result.points.length - 1 ? 3 : 2} fill={i === result.points.length - 1 ? '#c0392b' : '#2456a4'} />;
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/** Compact 3D pseudo-acceleration spectrum with an f₁ marker. */
+function SpectrumPanel3d({
+  spectrum,
+  f1,
+}: {
+  spectrum: EarthquakeScenario3d['spectrum'];
+  f1?: number;
+}): React.JSX.Element {
+  const maxSa = Math.max(...spectrum.points.map((p) => p.sa), 1e-9);
+  return (
+    <div className="spectrum-panel" aria-label="Response spectrum (3D)">
+      <div className="spectrum-header">
+        <span>Sa spectrum (ζ {(spectrum.zeta * 100).toFixed(0)}%)</span>
+        <span>peak {spectrum.points[spectrum.peakIndex]!.sa.toFixed(2)} m/s² at {spectrum.points[spectrum.peakIndex]!.freqHz.toFixed(2)} Hz</span>
+      </div>
+      <svg viewBox="0 0 320 72" className="spectrum-chart" role="img" aria-label="3D pseudo-acceleration spectrum">
+        {spectrum.points.map((p, i) => {
+          const x = (i / Math.max(1, spectrum.points.length - 1)) * 300 + 10;
+          const h = (p.sa / maxSa) * 56;
+          const active = i === spectrum.peakIndex;
+          return <rect key={p.freqHz} x={x} y={64 - h} width={3.2} height={h} fill={active ? '#c0392b' : '#2456a4'} opacity={active ? 1 : 0.75} />;
+        })}
+        {f1 !== undefined && f1 >= 0.1 && f1 <= 10 && (() => {
+          const t = Math.log(f1 / 0.1) / Math.log(10 / 0.1);
+          const x = t * 300 + 10;
+          return <line x1={x} x2={x} y1={8} y2={64} stroke="#1a1d21" strokeDasharray="2 2" strokeWidth="1" />;
+        })()}
+      </svg>
+      <p className="honesty-note">SDOF sweep 0.1–10 Hz on the scaled record — dashed mark is f₁ when in range.</p>
+    </div>
+  );
 }
