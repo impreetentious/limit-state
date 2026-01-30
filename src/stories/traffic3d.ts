@@ -259,3 +259,46 @@ function maxNodalDisp3d(u: Float64Array): number {
   }
   return maximum;
 }
+
+/**
+ * Merge per-member combined bending magnitude |M| = √(My² + Mz²) across a
+ * quasi-static station sweep into a persistent moving-load envelope.
+ */
+export function mergeMomentEnvelope3d(
+  previous: ReadonlyMap<number, number>,
+  analysis: StaticAnalysis3d,
+): Map<number, number> {
+  const next = new Map(previous);
+  if (analysis.kind !== 'stable') return next;
+  const mesh = analysis.mesh;
+  const forces = analysis.result.elementForces;
+  for (let index = 0; index < mesh.elements.length; index++) {
+    const memberId = mesh.elements[index]!.memberId;
+    const base = index * 12;
+    const magA = Math.hypot(forces[base + 4]!, forces[base + 5]!);
+    const magB = Math.hypot(forces[base + 10]!, forces[base + 11]!);
+    const worst = Math.max(magA, magB);
+    next.set(memberId, Math.max(next.get(memberId) ?? 0, worst));
+  }
+  return next;
+}
+
+/**
+ * Sweep the traffic vehicle across the deck at fixed spacing and return the
+ * moving-load |M| envelope per member.
+ */
+export function trafficMomentEnvelope3d(
+  scenario: TrafficScenario3d,
+  stepMeters?: number,
+): Map<number, number> {
+  const step = stepMeters ?? Math.max(scenario.length / 40, 0.5);
+  let envelope: Map<number, number> = new Map();
+  const stations: number[] = [];
+  for (let s = 0; s <= scenario.length + 1e-9; s += step) stations.push(Math.min(s, scenario.length));
+  if (stations.length === 0 || stations[stations.length - 1]! < scenario.length) stations.push(scenario.length);
+  for (const station of stations) {
+    const frame = analyzeTrafficAt3d(scenario, station);
+    envelope = mergeMomentEnvelope3d(envelope, frame.analysis);
+  }
+  return envelope;
+}

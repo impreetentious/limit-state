@@ -11,6 +11,8 @@ import {
 } from '../skyline';
 import { expandFreeVector, freeVector } from '../solve';
 import { assembleK3d, assembleLoadCase3d, elementLocalStiffness3d } from './assemble';
+// Function-level cycle with ./cables (it imports solveStatic3d) — resolved at call time.
+import { modelHasCables3d, solveTensionOnly3d } from './cables';
 import { buildMesh3d } from './mesh';
 import type { AnalysisMesh3d, AnalysisOptions3d, EditorModel3d, StaticResult3d } from './types';
 
@@ -96,9 +98,13 @@ export function utilizationAtDisplacement3d(
 
 /**
  * Build mesh + solve the model's nodal load case (optional gravity −Z).
- * `options.shearFlexible` selects the Timoshenko element block.
+ * `options.shearFlexible` selects the Timoshenko element block (§14 4E).
+ * When any member is `cableOnly`, delegates to the tension-only iteration so
+ * wind/traffic/ramp base solves see cable slack on the live Build path
+ * instead of only through the dedicated helper.
  */
 export function analyzeStaticModel3d(model: EditorModel3d, options: AnalysisOptions3d = {}): StaticAnalysis3d {
+  if (modelHasCables3d(model)) return solveTensionOnly3d(model, 1, options).analysis;
   try {
     const mesh = buildMesh3d(model, options);
     const nodeIndex = new Map<number, number>();

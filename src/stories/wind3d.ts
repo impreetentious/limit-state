@@ -149,6 +149,142 @@ export function stepWind3d(scenario: WindScenario3d, state: NewmarkState, subste
   return next;
 }
 
+/**
+ * Modal projection q_i = φ_iᵀ M u for the 3D wind explainer bars.
+ */
+export function modalCoordinates3d(mesh: AnalysisMesh3d, modal: EigenResult, u: Float64Array, mass: Float64Array): Float64Array {
+  const count = modal.values.length;
+  const output = new Float64Array(count);
+  if (modal.vectors.length !== mesh.ndof * count || u.length !== mesh.ndof) return output;
+  const Mu = matVec(mass, mesh.ndof, u);
+  for (let mode = 0; mode < count; mode++) {
+    let value = 0;
+    for (let dof = 0; dof < mesh.ndof; dof++) value += modal.vectors[dof * count + mode]! * Mu[dof]!;
+    output[mode] = value;
+  }
+  return output;
+}
+
+/**
+ * Modal coordinates of the static response to a unit-amplitude wind load — the
+ * denominator of the measured DAF. Solved via K uref = F_unit.
+ */
+export function windReferenceCoordinates3d(scenario: WindScenario3d, modal: EigenResult): Float64Array {
+  const Funit = windIncrementUnit3d(scenario);
+  const uref = solveDenseSPD(scenario.K, scenario.mesh.ndof, Funit, scenario.mesh.freeDofs);
+  return modalCoordinates3d(scenario.mesh, modal, uref, scenario.mass);
+}
+
+function solveDenseSPD(K: Float64Array, ndof: number, F: Float64Array, freeDofs: Int32Array): Float64Array {
+  const n = freeDofs.length;
+  const Kff = new Float64Array(n * n);
+  const Ff = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const gi = freeDofs[i]!;
+    Ff[i] = F[gi]!;
+    for (let j = 0; j < n; j++) Kff[i * n + j] = K[gi * ndof + freeDofs[j]!]!;
+  }
+  // Solve Kff * uf = Ff by simple LU (Kff is SPD; Doolittle is fine for reference)
+  const A = new Float64Array(Kff);
+  const b = new Float64Array(Ff);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let row = col + 1; row < n; row++) {
+      if (Math.abs(A[row * n + col]!) > Math.abs(A[pivot * n + col]!)) pivot = row;
+    }
+    if (pivot !== col) {
+      for (let j = 0; j < n; j++) {
+        const tmp = A[col * n + j]!;
+        A[col * n + j] = A[pivot * n + j]!;
+        A[pivot * n + j] = tmp;
+      }
+      const tmpb = b[col]!;
+      b[col] = b[pivot]!;
+      b[pivot] = tmpb;
+    }
+    const diag = A[col * n + col]!;
+    if (Math.abs(diag) < 1e-30) return new Float64Array(ndof);
+    for (let row = col + 1; row < n; row++) {
+      const factor = A[row * n + col]! / diag;
+      if (factor === 0) continue;
+      A[row * n + col] = factor;
+      for (let j = col + 1; j < n; j++) A[row * n + j] = A[row * n + j]! - factor * A[col * n + j]!;
+      b[row] = b[row]! - factor * b[col]!;
+    }
+  }
+  const uf = new Float64Array(n);
+  for (let i = n - 1; i >= 0; i--) {
+    let sum = b[i]!;
+    for (let j = i + 1; j < n; j++) sum -= A[i * n + j]! * uf[j]!;
+    uf[i] = sum / A[i * n + i]!;
+  }
+  const u = new Float64Array(ndof);
+  for (let i = 0; i < n; i++) u[freeDofs[i]!] = uf[i]!;
+  return u;
+}
+
+function matVec(matrix: Float64Array, size: number, vector: Float64Array): Float64Array {
+  const out = new Float64Array(size);
+  for (let row = 0; row < size; row++) {
+    let value = 0;
+    for (let column = 0; column < size; column++) value += matrix[row * size + column]! * vector[column]!;
+    out[row] = value;
+  }
+  return out;
+}
+
+/**
+ * Ratio between the currently-dominant modal coordinate amplitude and its
+ * static reference — the honest measured dynamic amplification.
+ */
+export function measuredDaf3d(
+  coordinates: Float64Array,
+  referenceCoordinates: Float64Array,
+): { mode: number; ratio: number } | undefined {
+  let mode = -1;
+  let largest = 0;
+  for (let index = 0; index < Math.min(coordinates.length, referenceCoordinates.length); index++) {
+    const reference = Math.abs(referenceCoordinates[index]!);
+    const amplitude = Math.abs(coordinates[index]!);
+    if (reference > 1e-12 && amplitude > largest) {
+      largest = amplitude;
+      mode = index;
+    }
+  }
+  return mode >= 0 ? { mode, ratio: largest / Math.abs(referenceCoordinates[mode]!) } : undefined;
+}
+
+/**
+ * Three-part resonance detector matching §4.6 (forcing within ±10 % of f_i,
+ * envelope growth ≥ 1.5× over five forcing cycles, ζ < 5 %). Dimension-agnostic.
+ */
+export function detectResonance3d(
+  forcingHz: number,
+  modal: EigenResult | undefined,
+  zeta: number,
+  recentCoordinates: readonly number[],
+  samplesPerCycle = 1,
+): number | undefined {
+  const samples = Math.max(1, Math.ceil(samplesPerCycle));
+  const required = samples * 5;
+  if (!modal || zeta >= 0.05 || recentCoordinates.length < required) return undefined;
+  const window = recentCoordinates.slice(-required);
+  const first = peakMagnitude(window.slice(0, samples));
+  const latest = peakMagnitude(window.slice(-samples));
+  if (latest <= Math.max(1e-12, first * 1.5)) return undefined;
+  for (let mode = 0; mode < modal.values.length; mode++) {
+    const frequency = modal.values[mode]! / (Math.PI * 2);
+    if (Math.abs(forcingHz - frequency) / frequency <= 0.1) return mode;
+  }
+  return undefined;
+}
+
+function peakMagnitude(values: readonly number[]): number {
+  let peak = 0;
+  for (const value of values) peak = Math.max(peak, Math.abs(value));
+  return peak;
+}
+
 function windMultiplier(story: Extract<StorySpec3d, { kind: 'wind' }>, seed: number, time: number): number {
   if (story.pattern === 'steady') return 1;
   if (story.pattern === 'sine') return Math.sin(Math.PI * 2 * story.freqHz * time);

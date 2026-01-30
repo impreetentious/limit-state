@@ -4,7 +4,7 @@
 import { assembleLoadCase3d, type LoadAssembly3d } from './assemble';
 import { buildMesh3d } from './mesh';
 import { solveStatic3d, type StaticAnalysis3d } from './statics';
-import type { EditorModel3d, MemberSpec3d } from './types';
+import type { AnalysisOptions3d, EditorModel3d, MemberSpec3d } from './types';
 
 const MAX_CABLE_ITERATIONS = 10;
 const SLACK_FORCE = 1e-6;
@@ -25,9 +25,14 @@ export function modelHasCables3d(model: EditorModel3d): boolean {
 
 /**
  * Static solve with iterative slack removal for `cableOnly` members.
- * `loadFactor` scales gravity and point loads together.
+ * `loadFactor` scales gravity and point loads together; `options` carries the
+ * analysis flags (Timoshenko) through every iteration.
  */
-export function solveTensionOnly3d(model: EditorModel3d, loadFactor = 1): CableSolveResult3d {
+export function solveTensionOnly3d(
+  model: EditorModel3d,
+  loadFactor = 1,
+  options: AnalysisOptions3d = {},
+): CableSolveResult3d {
   if (!(loadFactor > 0) || !Number.isFinite(loadFactor)) {
     return {
       analysis: { kind: 'invalid', message: 'Cable load factor must be finite and positive.' },
@@ -41,7 +46,7 @@ export function solveTensionOnly3d(model: EditorModel3d, loadFactor = 1): CableS
   const cableIds = model.members.filter((member) => member.cableOnly).map((member) => member.id);
   if (cableIds.length === 0) {
     return {
-      analysis: solveScaled3d(model, loadFactor),
+      analysis: solveScaled3d(model, loadFactor, options),
       activeCables: [],
       slackCables: [],
       iterations: 0,
@@ -58,7 +63,7 @@ export function solveTensionOnly3d(model: EditorModel3d, loadFactor = 1): CableS
   for (let iter = 0; iter < MAX_CABLE_ITERATIONS; iter++) {
     iterations = iter + 1;
     const reduced = withActiveCables3d(model, active);
-    analysis = solveScaled3d(reduced, loadFactor);
+    analysis = solveScaled3d(reduced, loadFactor, options);
     if (analysis.kind !== 'stable') {
       return summarize(analysis, cableIds, active, iterations, frozen);
     }
@@ -88,7 +93,7 @@ export function solveTensionOnly3d(model: EditorModel3d, loadFactor = 1): CableS
     if (iter === MAX_CABLE_ITERATIONS - 1) frozen = true;
   }
 
-  analysis = solveScaled3d(withActiveCables3d(model, active), loadFactor);
+  analysis = solveScaled3d(withActiveCables3d(model, active), loadFactor, options);
   return summarize(analysis, cableIds, active, iterations, frozen);
 }
 
@@ -108,9 +113,9 @@ function summarize(
   };
 }
 
-function solveScaled3d(model: EditorModel3d, loadFactor: number): StaticAnalysis3d {
+function solveScaled3d(model: EditorModel3d, loadFactor: number, options: AnalysisOptions3d): StaticAnalysis3d {
   try {
-    const mesh = buildMesh3d(model);
+    const mesh = buildMesh3d(model, options);
     const nodeIndex = new Map<number, number>();
     for (let index = 0; index < mesh.editorNode.length; index++) {
       const id = mesh.editorNode[index]!;

@@ -1,5 +1,6 @@
 /**
- * Phase 4E gates: 3D Timoshenko + P-Δ.
+ * Phase 4 solver gates: 3D Timoshenko + P-Δ (4E) and the live cable
+ * slack path (4H).
  */
 import { describe, expect, it } from 'vitest';
 import { MATERIALS, sectionProps } from '../materials';
@@ -9,6 +10,7 @@ import {
   solveSecondOrderStatic3d,
   type EditorModel3d,
 } from '../space';
+import { guyedMast3d } from '../../presets/scenes3d';
 
 function stubbyCantilever(L = 1.5): EditorModel3d {
   // L/h = 3 → shear deflection is significant.
@@ -120,5 +122,27 @@ describe('Phase 4E — 3D P-Δ amplification', () => {
     const analysis = solveSecondOrderStatic3d(model);
     if (analysis.kind !== 'stable') throw new Error(analysis.message);
     expect(Math.abs(analysis.momentAmplification - 1)).toBeLessThan(1e-3);
+  });
+});
+
+describe('Phase 4H — live cable slack path', () => {
+  it('analyzeStaticModel3d routes guyed-mast statics through cable slack iteration', () => {
+    const analysis = analyzeStaticModel3d(guyedMast3d());
+    expect(analysis.kind).toBe('stable');
+    // Guy 3 (load-side) must go slack via the live path — its axial should be
+    // near zero, while restraint guy 2 must carry tension.
+    if (analysis.kind !== 'stable') return;
+    const axialByMember = new Map<number, number>();
+    for (let index = 0; index < analysis.mesh.elements.length; index++) {
+      const memberId = analysis.mesh.elements[index]!.memberId;
+      const N = -analysis.result.elementForces[index * 12]!;
+      const prior = axialByMember.get(memberId);
+      if (prior === undefined || Math.abs(N) > Math.abs(prior)) axialByMember.set(memberId, N);
+    }
+    // Guy 2 (restraint) taut; guy 3 (load side) missing or slack.
+    const guy2 = axialByMember.get(2);
+    expect(guy2 !== undefined && guy2 > 0).toBe(true);
+    const guy3 = axialByMember.get(3) ?? 0;
+    expect(Math.abs(guy3)).toBeLessThan(Math.abs(guy2 ?? 0) * 1e-3);
   });
 });
