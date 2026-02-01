@@ -287,6 +287,12 @@ function migrateSupportKind(kind: 'pin' | 'roller' | 'fixed'): SupportKind3d {
   return 'pin';
 }
 
+/** Deterministic `#mu=` share fragment for curated 3D gallery entries. */
+export function encodeModelUncompressed3d(model: EditorModel3d): string {
+  const valid = validateModel3d(model);
+  return `#mu=${base64urlEncode(new TextEncoder().encode(JSON.stringify(valid)))}`;
+}
+
 /** Encode a validated v2 space-frame model as a URL fragment. */
 export async function encodeModel3d(model: EditorModel3d): Promise<string> {
   const valid = validateModel3d(model);

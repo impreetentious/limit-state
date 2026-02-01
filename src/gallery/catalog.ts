@@ -4,13 +4,22 @@
  */
 import { CHALLENGE_SOLUTIONS, CHALLENGES } from '../challenges/catalog';
 import type { EditorModel } from '../fem/types';
+import type { EditorModel3d } from '../fem/space';
 import { PRESETS } from '../presets/scenes';
+import { PRESETS_3D } from '../presets/scenes3d';
 
 export interface GallerySource {
   id: string;
   title: string;
   blurb: string;
   model: EditorModel;
+}
+
+export interface GallerySource3d {
+  id: string;
+  title: string;
+  blurb: string;
+  model: EditorModel3d;
 }
 
 /** Authored gallery scenes — presets plus challenge reference solutions. */
@@ -32,4 +41,16 @@ export function gallerySources(): GallerySource[] {
   }));
 
   return [...presets, ...solutions];
+}
+
+/** 3D gallery sources — the spatial teaching presets. */
+export function gallerySources3d(): GallerySource3d[] {
+  return PRESETS_3D
+    .filter((preset) => preset.id !== 'blank')
+    .map((preset) => ({
+      id: `preset3d-${preset.id}`,
+      title: `${preset.label.replace(/^\d+\s·\s/, '')} (3D)`,
+      blurb: 'Spatial teaching preset — open in the 3D editor and run its default story.',
+      model: preset.build(),
+    }));
 }

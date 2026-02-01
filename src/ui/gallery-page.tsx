@@ -31,13 +31,19 @@ export function GalleryPage(): React.JSX.Element {
         </p>
       </header>
       <section className="gallery-grid" aria-label="Curated models">
-        {ENTRIES.map((entry) => (
-          <article key={entry.id} className="gallery-card">
-            <h2>{entry.title}</h2>
-            <p>{entry.blurb}</p>
-            <Link href={{ pathname: '/', hash: entry.hash.replace(/^#/, '') }}>Open in editor</Link>
-          </article>
-        ))}
+        {ENTRIES.map((entry) => {
+          const is3d = entry.id.startsWith('preset3d-');
+          return (
+            <article key={entry.id} className={is3d ? 'gallery-card gallery-card-3d' : 'gallery-card'}>
+              <h2>
+                {entry.title}
+                {is3d && <span className="gallery-badge" title="Schema v2 · 3D space frame">v2 · 3D</span>}
+              </h2>
+              <p>{entry.blurb}</p>
+              <Link href={{ pathname: '/', hash: entry.hash.replace(/^#/, '') }}>Open in editor</Link>
+            </article>
+          );
+        })}
       </section>
       <footer className="gallery-footer">
         <p>

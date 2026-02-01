@@ -57,7 +57,7 @@ Next.js (static export) · React 19 · TypeScript (strict) · Zustand · Canvas2
 
 ## Status & plan
 
-Phase 1–2 and Phase 3 through closeout **3P–3Z** are shipped (spatial FEM, Stories parity, cables, share URLs, README stills). Physics ceilings (flutter, warping/LTB) stay labeled honesty — not fakeable.
+Phase 1–2, Phase 3 through closeout **3P–3Z**, and **Phase 4A–4J** are shipped — spatial FEM, Stories parity, cables on the live Build path, 3D influence lines, Timoshenko + P-Δ, A/S/M diagrams, undo/redo, share URLs and a curated 3D gallery. No build-ledger items remain open. Physics ceilings (flutter, warping/LTB) stay labeled honesty — not fakeable.
 
 ## License
 
@@ -72,4 +72,4 @@ This IST timestamp rule is permanent for all future workflows, commits, and AI a
 Follow this format for version control:
 
 * **Base Format Version:** 0.0.0 — the version of the version-block schema itself (the shape of these lines).
-* **Product Version:** `v0.6.2_2026-01-31_03:29:55` (IST)
+* **Product Version:** `v0.6.3_2026-02-02_00:23:28` (IST)

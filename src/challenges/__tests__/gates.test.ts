@@ -13,8 +13,8 @@ import {
   steelMassKg,
   structureHeightM,
 } from '../evaluate';
-import { gallerySources } from '../../gallery/catalog';
-import { decodeModel, encodeModelUncompressed } from '../../share/serialize';
+import { gallerySources, gallerySources3d } from '../../gallery/catalog';
+import { decodeModel, decodeModel3d, encodeModelUncompressed, encodeModelUncompressed3d } from '../../share/serialize';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -64,19 +64,40 @@ describe('G20 — challenges & gallery (Phase 2G)', () => {
     expect(verdict.checks.find((check) => check.id === 'steel-budget')?.ok).toBe(false);
   });
 
-  it('G20d: curated gallery.json hashes decode to the authored gallery models', async () => {
+  it('G20d: curated gallery.json 2D hashes decode to the authored gallery models', async () => {
     const raw = readFileSync(join(ROOT, 'public/gallery.json'), 'utf8');
     const entries = JSON.parse(raw) as Array<{ id: string; title: string; blurb: string; hash: string }>;
     const sources = gallerySources();
-    expect(entries.length).toBe(sources.length);
+    const twoD = entries.filter((entry) => !entry.id.startsWith('preset3d-'));
+    expect(twoD.length).toBe(sources.length);
     for (let index = 0; index < sources.length; index++) {
       const source = sources[index]!;
-      const entry = entries[index]!;
+      const entry = twoD[index]!;
       expect(entry.id).toBe(source.id);
       expect(entry.title).toBe(source.title);
       expect(entry.blurb).toBe(source.blurb);
       expect(entry.hash).toBe(encodeModelUncompressed(source.model));
       expect(await decodeModel(entry.hash)).toEqual(source.model);
+    }
+  });
+
+  it('Phase 4J: curated 3D gallery hashes round-trip through decodeModel3d', async () => {
+    const raw = readFileSync(join(ROOT, 'public/gallery.json'), 'utf8');
+    const entries = JSON.parse(raw) as Array<{ id: string; title: string; blurb: string; hash: string }>;
+    const sources = gallerySources3d();
+    const threeD = entries.filter((entry) => entry.id.startsWith('preset3d-'));
+    expect(threeD.length).toBe(sources.length);
+    for (let index = 0; index < sources.length; index++) {
+      const source = sources[index]!;
+      const entry = threeD[index]!;
+      expect(entry.id).toBe(source.id);
+      expect(entry.hash).toBe(encodeModelUncompressed3d(source.model));
+      const decoded = await decodeModel3d(entry.hash);
+      expect(decoded.v).toBe(2);
+      expect(decoded.nodes.length).toBe(source.model.nodes.length);
+      expect(decoded.members.length).toBe(source.model.members.length);
+      // Hash size stays reasonable for URL sharing (< 32 kB).
+      expect(entry.hash.length).toBeLessThan(32 * 1024);
     }
   });
 });
