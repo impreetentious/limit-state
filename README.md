@@ -25,20 +25,34 @@ Construction games fake physics with springs. Real finite-element analysis lives
 
 ## Honesty, stated plainly
 
-Every number is computed by the real method; every flourish is labeled. Deformed shapes carry their exaggeration factor ("×120 — true max 3.2 mm"). The collapse animation is labeled quasi-static. The 2D slender-deck preset shows bending resonance only; its 3D twin-girder cousin exposes a real St. Venant torsional mode — and still says plainly that Tacoma Narrows was aeroelastic flutter with warping, which this sandbox does not fake.
+Every number is computed by the real method; every flourish is labeled. Deformed shapes carry their exaggeration factor ("×120 — true max 3.2 mm"). The collapse animation is labeled quasi-static. The 2D slender-deck preset shows bending resonance only; its 3D twin-girder cousin exposes a real St. Venant torsional mode.
 
-The solver is verified against closed-form solutions in CI — cantilever deflection to 1e−10, Euler buckling to 0.8%, beam frequencies to 0.5%.
+Two things this sandbox will not fake, and says so in the product:
+
+- **Aeroelastic flutter.** Tacoma Narrows failed by flutter with warping. That is not what the wind story models, and the app never implies otherwise.
+- **Warping torsion and member-level lateral-torsional buckling.** Out of scope for the element formulation.
+
+The solver is verified against closed-form solutions on every test run — cantilever deflection to 1e−10, Euler buckling to 0.8%, beam frequencies to 0.5%. Those benchmarks are what `npm test` checks, and they run in CI.
 
 ## Run it
 
+Requires Node 22+.
+
 ```bash
 npm install
-npm run dev        # local dev server
-npm test           # solver verification gates
-npm run build      # static export in out/
+npm run dev        # local dev server on http://localhost:3000
 ```
 
-Requires Node 22+.
+The 3D view needs WebGL; eigen solves run in a Web Worker.
+
+## Verify
+
+```bash
+npm run typecheck
+npm test           # solver checks against the closed-form benchmarks
+npm run lint
+npm run build      # static export in out/
+```
 
 To refresh README stills after a UI change: `npm run build && npx serve out -l 4173` then `npm run screenshots`.
 
@@ -55,21 +69,10 @@ Both set `BASE_PATH` for project-site subpaths; for a custom domain or root site
 
 Next.js (static export) · React 19 · TypeScript (strict) · Zustand · Canvas2D + three.js (3D). The FEM kernel (`src/fem/`) is hand-rolled on `Float64Array` with **zero numerics dependencies** — Euler–Bernoulli frame elements (2D + 12-DOF space frame), LDLᵀ / skyline+RCM free solves, subspace-iteration eigenanalysis, Newmark-β dynamics. Eigen solves run in a Web Worker; traffic re-solves are single back-substitutions, which is why it holds 60 fps.
 
-## Status & plan
-
-Phase 1–2, Phase 3 through closeout **3P–3Z**, and **Phase 4A–4J** are shipped — spatial FEM, Stories parity, cables on the live Build path, 3D influence lines, Timoshenko + P-Δ, A/S/M diagrams, undo/redo, share URLs and a curated 3D gallery. No build-ledger items remain open. Physics ceilings (flutter, warping/LTB) stay labeled honesty — not fakeable.
-
 ## License
 
 MIT — see [LICENSE](./LICENSE).
 
-## AI Agent Instructions
+---
 
-Before every commit, update the **Product Version** string below with the exact IST author/committer timestamp (`Asia/Kolkata`). Keep the same numeric release version in `package.json` and the root package entries of `package-lock.json` (once `package.json` exists — from P0 on).
-
-This IST timestamp rule is permanent for all future workflows, commits, and AI agents working in this repository.
-
-Follow this format for version control:
-
-* **Base Format Version:** 0.0.0 — the version of the version-block schema itself (the shape of these lines).
-* **Product Version:** `v0.6.4_2026-02-02_21:10:21` (IST)
+**Version:** v0.7.0
