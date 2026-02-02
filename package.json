@@ -1,8 +1,13 @@
 {
   "name": "limit-state",
   "private": true,
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "Limit State — a structural sandbox that tells the truth. True FEM core, playful surface.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ItsMonarch04/limit-state.git"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -21,7 +26,7 @@
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/ibm-plex-sans": "^5.2.8",
-    "next": "^16.1.5",
+    "next": "^16.1.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "three": "^0.182.0",
@@ -29,7 +34,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.9",
-    "@types/react": "^19.2.9",
+    "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.182.0",
     "oxlint": "^1.42.0",
