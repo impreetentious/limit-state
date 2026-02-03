@@ -28,7 +28,12 @@ worker.onmessage = (event: MessageEvent<EigenWorkerRequest>) => {
   try {
     const modalResult = modal(mesh, nModes);
     const bucklingResult = buckling(mesh, elementN);
-    const response: EigenWorkerResponse = { id, ok: true, modal: modalResult, buckling: bucklingResult };
+    const response: EigenWorkerResponse = {
+      id,
+      ok: true,
+      modal: modalResult,
+      buckling: bucklingResult,
+    };
     worker.postMessage(response);
   } catch (error) {
     worker.postMessage({

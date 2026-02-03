@@ -145,8 +145,10 @@ function validateSupports(
 ): void {
   const supported = new Set<number>();
   for (const support of supports) {
-    if (!nodes.has(support.node)) throw new Error(`Support references missing node ${support.node}.`);
-    if (supported.has(support.node)) throw new Error(`Node ${support.node} has more than one support.`);
+    if (!nodes.has(support.node))
+      throw new Error(`Support references missing node ${support.node}.`);
+    if (supported.has(support.node))
+      throw new Error(`Node ${support.node} has more than one support.`);
     supported.add(support.node);
   }
 }

@@ -91,7 +91,11 @@ export function frameExtrudeAxis(frame: WorkplaneFrame): Vec3 {
 /**
  * Build a frame from three non-collinear points (origin, u-direction, v hint).
  */
-export function frameFromThreePoints(origin: Vec3, alongU: Vec3, alongV: Vec3): WorkplaneFrame | undefined {
+export function frameFromThreePoints(
+  origin: Vec3,
+  alongU: Vec3,
+  alongV: Vec3,
+): WorkplaneFrame | undefined {
   const u = unit(sub(alongU, origin));
   if (!u) return undefined;
   const rawV = sub(alongV, origin);
@@ -108,7 +112,8 @@ export function frameFromThreePoints(origin: Vec3, alongU: Vec3, alongV: Vec3): 
 export function frameFromPointNormal(origin: Vec3, normal: Vec3): WorkplaneFrame | undefined {
   const n = unit(normal);
   if (!n) return undefined;
-  const ref = Math.abs(dot(n, { x: 0, y: 0, z: 1 })) > 0.9 ? { x: 0, y: 1, z: 0 } : { x: 0, y: 0, z: 1 };
+  const ref =
+    Math.abs(dot(n, { x: 0, y: 0, z: 1 })) > 0.9 ? { x: 0, y: 1, z: 0 } : { x: 0, y: 0, z: 1 };
   const u = unit(cross(ref, n));
   if (!u) return undefined;
   const v = unit(cross(n, u));

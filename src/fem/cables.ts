@@ -119,7 +119,11 @@ function summarize(
   };
 }
 
-function solveScaled(model: EditorModel, options: AnalysisOptions, loadFactor: number): StaticAnalysis {
+function solveScaled(
+  model: EditorModel,
+  options: AnalysisOptions,
+  loadFactor: number,
+): StaticAnalysis {
   try {
     const mesh = buildMesh(model, options);
     const nodeIndex = new Map<number, number>();
@@ -134,7 +138,10 @@ function solveScaled(model: EditorModel, options: AnalysisOptions, loadFactor: n
     const base = assembleLoadCase(mesh, { gravity: model.loads.gravity, points });
     return solveStatic(mesh, scaleLoadAssembly(base, loadFactor));
   } catch (error) {
-    return { kind: 'invalid', message: error instanceof Error ? error.message : 'Cable analysis could not run.' };
+    return {
+      kind: 'invalid',
+      message: error instanceof Error ? error.message : 'Cable analysis could not run.',
+    };
   }
 }
 
@@ -142,7 +149,8 @@ function scaleLoadAssembly(loads: LoadAssembly, factor: number): LoadAssembly {
   const F = new Float64Array(loads.F.length);
   const elementFixedEnd = new Float64Array(loads.elementFixedEnd.length);
   for (let index = 0; index < F.length; index++) F[index] = loads.F[index]! * factor;
-  for (let index = 0; index < elementFixedEnd.length; index++) elementFixedEnd[index] = loads.elementFixedEnd[index]! * factor;
+  for (let index = 0; index < elementFixedEnd.length; index++)
+    elementFixedEnd[index] = loads.elementFixedEnd[index]! * factor;
   return { F, elementFixedEnd };
 }
 
@@ -158,7 +166,10 @@ function withActiveCables(model: EditorModel, active: ReadonlySet<number>): Edit
   };
 }
 
-function memberAxial(analysis: Extract<StaticAnalysis, { kind: 'stable' }>, memberId: number): number {
+function memberAxial(
+  analysis: Extract<StaticAnalysis, { kind: 'stable' }>,
+  memberId: number,
+): number {
   let N = 0;
   let found = false;
   for (let index = 0; index < analysis.mesh.elements.length; index++) {

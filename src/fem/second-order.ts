@@ -32,7 +32,10 @@ export type SecondOrderAnalysis =
  * Displacements come from (K+K_g)u = F; member forces recover from elastic k
  * (engineering beam theory); support reactions use the current K_eff.
  */
-export function solveSecondOrderStatic(mesh: AnalysisMesh, loads: LoadAssembly): SecondOrderAnalysis {
+export function solveSecondOrderStatic(
+  mesh: AnalysisMesh,
+  loads: LoadAssembly,
+): SecondOrderAnalysis {
   const linear = solveStatic(mesh, loads);
   if (linear.kind !== 'stable') {
     if (linear.kind === 'mechanism') return linear;
@@ -139,7 +142,11 @@ function momentAmplification(linear: StaticResult, second: StaticResult): number
 function peakMoment(result: StaticResult): number {
   let peak = 0;
   for (let index = 0; index < result.elementForces.length; index += 5) {
-    peak = Math.max(peak, Math.abs(result.elementForces[index + 2]!), Math.abs(result.elementForces[index + 4]!));
+    peak = Math.max(
+      peak,
+      Math.abs(result.elementForces[index + 2]!),
+      Math.abs(result.elementForces[index + 4]!),
+    );
   }
   return peak;
 }

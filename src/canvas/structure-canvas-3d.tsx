@@ -178,7 +178,9 @@ export function StructureCanvas3d({
 
       let hitMember: number | null = null;
       let bestMember = 0.55;
-      const nodePos = new Map(props.model.nodes.map((n) => [n.id, new THREE.Vector3(n.x, n.y, n.z)]));
+      const nodePos = new Map(
+        props.model.nodes.map((n) => [n.id, new THREE.Vector3(n.x, n.y, n.z)]),
+      );
       for (const member of props.model.members) {
         const a = nodePos.get(member.a);
         const b = nodePos.get(member.b);
@@ -199,7 +201,9 @@ export function StructureCanvas3d({
       const xAxis = new THREE.Vector3(frame.u.x, frame.u.y, frame.u.z);
       const yAxis = new THREE.Vector3(frame.v.x, frame.v.y, frame.v.z);
       const zAxis = new THREE.Vector3(frame.n.x, frame.n.y, frame.n.z);
-      workplaneMesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis));
+      workplaneMesh.quaternion.setFromRotationMatrix(
+        new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis),
+      );
       workplaneMesh.updateMatrixWorld(true);
       const hits = raycaster.intersectObject(workplaneMesh);
       const hit = hits[0];
@@ -263,17 +267,32 @@ export function StructureCanvas3d({
     };
   }, []);
 
-  return <div ref={hostRef} className="structure-canvas-3d-host" aria-label="3D structure viewport" />;
+  return (
+    <div ref={hostRef} className="structure-canvas-3d-host" aria-label="3D structure viewport" />
+  );
 }
 
 /** Faint space-portal sketch for empty 3D canvas. */
 function buildEmptyGhost(): THREE.Group {
   const g = new THREE.Group();
-  const mat = new THREE.LineDashedMaterial({ color: INK, dashSize: 0.35, gapSize: 0.25, transparent: true, opacity: 0.28 });
+  const mat = new THREE.LineDashedMaterial({
+    color: INK,
+    dashSize: 0.35,
+    gapSize: 0.25,
+    transparent: true,
+    opacity: 0.28,
+  });
   const pts: Array<[number, number, number]> = [
-    [0, 0, 0], [8, 0, 0], [0, 0, 6], [8, 0, 6],
+    [0, 0, 0],
+    [8, 0, 0],
+    [0, 0, 6],
+    [8, 0, 6],
   ];
-  const segs: Array<[number, number]> = [[0, 2], [1, 3], [2, 3]];
+  const segs: Array<[number, number]> = [
+    [0, 2],
+    [1, 3],
+    [2, 3],
+  ];
   for (const [i, j] of segs) {
     const a = new THREE.Vector3(...pts[i]!);
     const b = new THREE.Vector3(...pts[j]!);
@@ -292,7 +311,16 @@ function ghostTopologyKey(props: StructureCanvas3dProps): string {
 }
 
 function sceneSignature(props: StructureCanvas3dProps): string {
-  const { model, analysis, showDeformed, selectedNodeId, selectedMemberId, dynamicDisplacement, trafficAxles, diagram } = props;
+  const {
+    model,
+    analysis,
+    showDeformed,
+    selectedNodeId,
+    selectedMemberId,
+    dynamicDisplacement,
+    trafficAxles,
+    diagram,
+  } = props;
   const uMax = analysis.kind === 'stable' ? analysis.result.utilization.size : -1;
   const kind = analysis.kind;
   const dyn = dynamicDisplacement
@@ -304,7 +332,11 @@ function sceneSignature(props: StructureCanvas3dProps): string {
   return `${model.name}|${model.members.length}|${model.nodes.length}|${model.supports.length}|${model.loads.points.length}|${kind}|${uMax}|${showDeformed}|${selectedNodeId}|${selectedMemberId}|${dyn}|${story}|${deck}|${axles}|${diagram ?? 'none'}`;
 }
 
-function rebuildStructure(root: THREE.Group, props: StructureCanvas3dProps, useLines: boolean): void {
+function rebuildStructure(
+  root: THREE.Group,
+  props: StructureCanvas3dProps,
+  useLines: boolean,
+): void {
   disposeObject(root);
   while (root.children.length) root.remove(root.children[0]!);
 
@@ -340,14 +372,16 @@ function rebuildStructure(root: THREE.Group, props: StructureCanvas3dProps, useL
 
   let maxAxial = 1e-9;
   if (mesh3 && elementForces) {
-    for (let i = 0; i < mesh3.elements.length; i++) maxAxial = Math.max(maxAxial, Math.abs(elementForces[i * 12]!));
+    for (let i = 0; i < mesh3.elements.length; i++)
+      maxAxial = Math.max(maxAxial, Math.abs(elementForces[i * 12]!));
   }
 
   // Per-member N / V / M magnitudes for optional overlay.
   const diagram = props.diagram ?? 'none';
-  const diagramValues = diagram !== 'none' && mesh3 && elementForces
-    ? memberDiagramMagnitudes(diagram, model, mesh3, elementForces)
-    : undefined;
+  const diagramValues =
+    diagram !== 'none' && mesh3 && elementForces
+      ? memberDiagramMagnitudes(diagram, model, mesh3, elementForces)
+      : undefined;
   const diagramMax = diagramValues
     ? Math.max(1e-9, ...Array.from(diagramValues.values()).map(Math.abs))
     : 1e-9;
@@ -382,9 +416,10 @@ function rebuildStructure(root: THREE.Group, props: StructureCanvas3dProps, useL
   }
 
   if (showDeformed && analysis.kind === 'stable') {
-    const u = props.dynamicDisplacement && props.dynamicDisplacement.length === analysis.mesh.ndof
-      ? props.dynamicDisplacement
-      : analysis.result.u;
+    const u =
+      props.dynamicDisplacement && props.dynamicDisplacement.length === analysis.mesh.ndof
+        ? props.dynamicDisplacement
+        : analysis.result.u;
     const display = deformationDisplay3d(analysis.mesh, u, 44);
     if (display.maxMeters > 0) {
       for (const element of analysis.mesh.elements) {
@@ -410,8 +445,22 @@ function rebuildGhost(root: THREE.Group, props: StructureCanvas3dProps): void {
   const inv = maxComp > 0 ? amp / maxComp : 0;
   for (let ei = 0; ei < analysis.mesh.elements.length; ei++) {
     const element = analysis.mesh.elements[ei]!;
-    const pa = modePoint(analysis.mesh.coords, result.vectors, nModes, element.na, mode, phase * inv);
-    const pb = modePoint(analysis.mesh.coords, result.vectors, nModes, element.nb, mode, phase * inv);
+    const pa = modePoint(
+      analysis.mesh.coords,
+      result.vectors,
+      nModes,
+      element.na,
+      mode,
+      phase * inv,
+    );
+    const pb = modePoint(
+      analysis.mesh.coords,
+      result.vectors,
+      nModes,
+      element.nb,
+      mode,
+      phase * inv,
+    );
     const line = memberVisual(pa, pb, 0x7c3f9c, 0.03, true, 0.65, true);
     line.userData = { na: element.na, nb: element.nb, inv };
     root.add(line);
@@ -437,7 +486,11 @@ function updateGhostPhase(root: THREE.Group, props: StructureCanvas3dProps): voi
   }
 }
 
-function memberAxial(memberId: number, mesh: AnalysisMesh3d | undefined, forces: Float64Array | undefined): number {
+function memberAxial(
+  memberId: number,
+  mesh: AnalysisMesh3d | undefined,
+  forces: Float64Array | undefined,
+): number {
   if (!mesh || !forces) return 0;
   let max = 0;
   for (let i = 0; i < mesh.elements.length; i++) {
@@ -490,15 +543,24 @@ function diagramColorHex(ratio: number): number {
 
 function blendHex(a: number, b: number, amount: number): number {
   const t = Math.max(0, Math.min(1, amount));
-  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
-  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const ar = (a >> 16) & 0xff,
+    ag = (a >> 8) & 0xff,
+    ab = a & 0xff;
+  const br = (b >> 16) & 0xff,
+    bg = (b >> 8) & 0xff,
+    bb = b & 0xff;
   const r = Math.round(ar * (1 - t) + br * t);
   const g = Math.round(ag * (1 - t) + bg * t);
   const bl = Math.round(ab * (1 - t) + bb * t);
   return (r << 16) | (g << 8) | bl;
 }
 
-function deformedPoint(coords: Float64Array, u: Float64Array, node: number, scale: number): THREE.Vector3 {
+function deformedPoint(
+  coords: Float64Array,
+  u: Float64Array,
+  node: number,
+  scale: number,
+): THREE.Vector3 {
   return new THREE.Vector3(
     coords[3 * node]! + scale * u[6 * node]!,
     coords[3 * node + 1]! + scale * u[6 * node + 1]!,
@@ -506,7 +568,12 @@ function deformedPoint(coords: Float64Array, u: Float64Array, node: number, scal
   );
 }
 
-function modeMaxComponent(vectors: Float64Array, ndof: number, nModes: number, mode: number): number {
+function modeMaxComponent(
+  vectors: Float64Array,
+  ndof: number,
+  nModes: number,
+  mode: number,
+): number {
   let maxComp = 0;
   for (let i = 0; i < ndof; i++) maxComp = Math.max(maxComp, Math.abs(vectors[i * nModes + mode]!));
   return maxComp;
@@ -539,7 +606,13 @@ function memberVisual(
   if (asLine || dashed) {
     const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
     const mat = dashed
-      ? new THREE.LineDashedMaterial({ color, dashSize: 0.25, gapSize: 0.15, transparent: opacity < 1, opacity })
+      ? new THREE.LineDashedMaterial({
+          color,
+          dashSize: 0.25,
+          gapSize: 0.15,
+          transparent: opacity < 1,
+          opacity,
+        })
       : new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity });
     const line = new THREE.Line(geo, mat);
     if (dashed) line.computeLineDistances();
@@ -550,7 +623,13 @@ function memberVisual(
   if (!(len > 0)) return new THREE.Group();
   const cyl = new THREE.Mesh(
     UNIT_CYLINDER,
-    new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05, transparent: opacity < 1, opacity }),
+    new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.55,
+      metalness: 0.05,
+      transparent: opacity < 1,
+      opacity,
+    }),
   );
   cyl.scale.set(radius, len, radius);
   cyl.position.copy(a).add(b).multiplyScalar(0.5);

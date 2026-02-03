@@ -6,7 +6,11 @@ import { MATERIALS, plasticMoment } from '../materials';
 import { solveTensionOnly3d } from '../space/cables';
 import { evaluateFailure3d } from '../space/failure';
 import { runPushover3d } from '../space/pushover';
-import { assembleMassWithVehicle3d, lumpedVehicleTranslationalTrace3d, vehicleMassKg } from '../space/moving-mass';
+import {
+  assembleMassWithVehicle3d,
+  lumpedVehicleTranslationalTrace3d,
+  vehicleMassKg,
+} from '../space/moving-mass';
 import { buildMesh3d } from '../space/mesh';
 import { NO_RELEASES, type EditorModel3d } from '../space/types';
 import { guyedMast3d, portalPushover3d, PRESETS_3D, radioMast3d } from '../../presets/scenes3d';
@@ -29,19 +33,30 @@ describe('Phase 3 closeout — 3U share round-trip', () => {
   });
 
   it('peekShareSchemaVersion distinguishes v1 and v2', async () => {
-    const { encodeModel, encodeModel3d, peekShareSchemaVersion } = await import('../../share/serialize');
+    const { encodeModel, encodeModel3d, peekShareSchemaVersion } =
+      await import('../../share/serialize');
     const v2 = await encodeModel3d(radioMast3d());
     expect(await peekShareSchemaVersion(v2)).toBe(2);
     const v1 = await encodeModel({
       v: 1,
       name: 'beam',
       seed: 1,
-      nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 1, y: 0 }],
-      members: [{
-        id: 1, a: 1, b: 2, material: 'steel-s355',
-        section: { kind: 'rect', b: 0.1, h: 0.2 },
-        releaseA: false, releaseB: false, cableOnly: false,
-      }],
+      nodes: [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 1, y: 0 },
+      ],
+      members: [
+        {
+          id: 1,
+          a: 1,
+          b: 2,
+          material: 'steel-s355',
+          section: { kind: 'rect', b: 0.1, h: 0.2 },
+          releaseA: false,
+          releaseB: false,
+          cableOnly: false,
+        },
+      ],
       supports: [{ node: 1, kind: 'fixed' }],
       loads: { gravity: false, points: [] },
       deck: [],
@@ -60,7 +75,11 @@ describe('Phase 3 closeout — 3V ramp + failure', () => {
     expect(Number.isFinite(capacity!)).toBe(true);
     const frame = analyzeRamp3d(model, capacity!, true);
     expect(frame.report).toBeDefined();
-    expect(frame.report!.kind === 'stable' || frame.report!.kind === 'yield' || frame.report!.kind === 'buckling').toBe(true);
+    expect(
+      frame.report!.kind === 'stable' ||
+        frame.report!.kind === 'yield' ||
+        frame.report!.kind === 'buckling',
+    ).toBe(true);
   });
 
   it('evaluateFailure3d at tiny factor is stable with finite capacity', () => {
@@ -109,12 +128,23 @@ describe('Phase 3 closeout — 3Y moving-mass lumping', () => {
         { id: 1, x: 0, y: 0, z: 0 },
         { id: 2, x: 16, y: 0, z: 0 },
       ],
-      members: [{
-        id: 1, a: 1, b: 2, material: 'steel-s355',
-        section: { kind: 'box', b: 0.3, h: 0.5, t: 0.02 },
-        releaseA: NO_RELEASES, releaseB: NO_RELEASES, roll: 0, cableOnly: false,
-      }],
-      supports: [{ node: 1, kind: 'fixed' }, { node: 2, kind: 'pin' }],
+      members: [
+        {
+          id: 1,
+          a: 1,
+          b: 2,
+          material: 'steel-s355',
+          section: { kind: 'box', b: 0.3, h: 0.5, t: 0.02 },
+          releaseA: NO_RELEASES,
+          releaseB: NO_RELEASES,
+          roll: 0,
+          cableOnly: false,
+        },
+      ],
+      supports: [
+        { node: 1, kind: 'fixed' },
+        { node: 2, kind: 'pin' },
+      ],
       loads: { gravity: false, points: [] },
       deck: [1],
       story: { kind: 'traffic', weightkN: 200, speed: 10, movingMass: true },

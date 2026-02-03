@@ -74,7 +74,13 @@ export const CHALLENGES: ChallengeSpec[] = [
 /** Reference solutions used by the gallery and by G20. */
 export const CHALLENGE_SOLUTIONS: Record<string, EditorModel> = {
   'span-40-steel-6t': deepBeamSolution('Solution: Span 40 m', 40, 100, DEEP_IBEAM),
-  'heavy-12m': deepBeamSolution('Solution: Heavy 12 m', 12, 400, { kind: 'ibeam', b: 0.3, h: 0.9, tf: 0.03, tw: 0.016 }),
+  'heavy-12m': deepBeamSolution('Solution: Heavy 12 m', 12, 400, {
+    kind: 'ibeam',
+    b: 0.3,
+    h: 0.9,
+    tf: 0.03,
+    tw: 0.016,
+  }),
   'mast-30-lambda-2': mastSolution(),
   'efficient-24m': prattSolution(),
 };
@@ -91,14 +97,22 @@ function abutments(name: string, spanM: number, weightkN: number): EditorModel {
     seed: 42,
     nodes: [node(1, -half, 0), node(2, half, 0)],
     members: [],
-    supports: [{ node: 1, kind: 'pin' }, { node: 2, kind: 'roller' }],
+    supports: [
+      { node: 1, kind: 'pin' },
+      { node: 2, kind: 'roller' },
+    ],
     loads: { gravity: true, points: [] },
     deck: [],
     story: { kind: 'traffic', weightkN, speed: 12, movingMass: false },
   };
 }
 
-function deepBeamSolution(name: string, spanM: number, weightkN: number, section: SectionSpec): EditorModel {
+function deepBeamSolution(
+  name: string,
+  spanM: number,
+  weightkN: number,
+  section: SectionSpec,
+): EditorModel {
   const half = spanM / 2;
   return {
     v: 1,
@@ -106,7 +120,10 @@ function deepBeamSolution(name: string, spanM: number, weightkN: number, section
     seed: 42,
     nodes: [node(1, -half, 0), node(2, 0, 0), node(3, half, 0)],
     members: [frame(1, 1, 2, section), frame(2, 2, 3, section)],
-    supports: [{ node: 1, kind: 'pin' }, { node: 3, kind: 'roller' }],
+    supports: [
+      { node: 1, kind: 'pin' },
+      { node: 3, kind: 'roller' },
+    ],
     loads: { gravity: true, points: [] },
     deck: [1, 2],
     story: { kind: 'traffic', weightkN, speed: 12, movingMass: false },
@@ -119,10 +136,7 @@ function mastSolution(): EditorModel {
     name: 'Solution: 30 m mast',
     seed: 42,
     nodes: [node(1, 0, 0), node(2, 0, 15), node(3, 0, 30)],
-    members: [
-      frame(1, 1, 2, MAST_TUBE),
-      frame(2, 2, 3, MAST_TUBE),
-    ],
+    members: [frame(1, 1, 2, MAST_TUBE), frame(2, 2, 3, MAST_TUBE)],
     supports: [{ node: 1, kind: 'fixed' }],
     loads: { gravity: false, points: [{ node: 3, fx: 2_000, fy: 0 }] },
     deck: [],
@@ -138,15 +152,31 @@ function prattSolution(): EditorModel {
     name: 'Solution: Efficient 24 m',
     seed: 42,
     nodes: [
-      node(1, -12, 0), node(2, -4, 0), node(3, 4, 0), node(4, 12, 0),
-      node(5, -8, 4), node(6, 0, 4), node(7, 8, 4),
+      node(1, -12, 0),
+      node(2, -4, 0),
+      node(3, 4, 0),
+      node(4, 12, 0),
+      node(5, -8, 4),
+      node(6, 0, 4),
+      node(7, 8, 4),
     ],
     members: [
-      truss(1, 1, 2, section), truss(2, 2, 3, section), truss(3, 3, 4, section),
-      truss(4, 1, 5, section), truss(5, 5, 6, section), truss(6, 6, 7, section), truss(7, 7, 4, section),
-      truss(8, 5, 2, section), truss(9, 2, 6, section), truss(10, 6, 3, section), truss(11, 3, 7, section),
+      truss(1, 1, 2, section),
+      truss(2, 2, 3, section),
+      truss(3, 3, 4, section),
+      truss(4, 1, 5, section),
+      truss(5, 5, 6, section),
+      truss(6, 6, 7, section),
+      truss(7, 7, 4, section),
+      truss(8, 5, 2, section),
+      truss(9, 2, 6, section),
+      truss(10, 6, 3, section),
+      truss(11, 3, 7, section),
     ],
-    supports: [{ node: 1, kind: 'pin' }, { node: 4, kind: 'roller' }],
+    supports: [
+      { node: 1, kind: 'pin' },
+      { node: 4, kind: 'roller' },
+    ],
     loads: { gravity: true, points: [] },
     deck: [1, 2, 3],
     story: { kind: 'traffic', weightkN: 80, speed: 12, movingMass: false },
@@ -158,7 +188,16 @@ function node(id: number, x: number, y: number): EditorModel['nodes'][number] {
 }
 
 function frame(id: number, a: number, b: number, section: SectionSpec): MemberSpec {
-  return { id, a, b, material: 'steel-s355', section: { ...section }, releaseA: false, releaseB: false, cableOnly: false };
+  return {
+    id,
+    a,
+    b,
+    material: 'steel-s355',
+    section: { ...section },
+    releaseA: false,
+    releaseB: false,
+    cableOnly: false,
+  };
 }
 
 function truss(id: number, a: number, b: number, section: SectionSpec): MemberSpec {

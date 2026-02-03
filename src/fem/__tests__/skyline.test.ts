@@ -89,10 +89,12 @@ describe('skyline (Phase 3 closeout 3S)', () => {
     const dy = 4;
     const dz = 3;
     const nodes: EditorModel3d['nodes'] = [];
-    const idAt = (i: number, j: number, k: number) => 1 + i + j * (nx + 1) + k * (nx + 1) * (ny + 1);
+    const idAt = (i: number, j: number, k: number) =>
+      1 + i + j * (nx + 1) + k * (nx + 1) * (ny + 1);
     for (let k = 0; k <= nz; k++) {
       for (let j = 0; j <= ny; j++) {
-        for (let i = 0; i <= nx; i++) nodes.push({ id: idAt(i, j, k), x: i * dx, y: j * dy, z: k * dz });
+        for (let i = 0; i <= nx; i++)
+          nodes.push({ id: idAt(i, j, k), x: i * dx, y: j * dy, z: k * dz });
       }
     }
     const members: EditorModel3d['members'] = [];
@@ -111,14 +113,18 @@ describe('skyline (Phase 3 closeout 3S)', () => {
       });
     };
     for (let k = 0; k <= nz; k++) {
-      for (let j = 0; j <= ny; j++) for (let i = 0; i < nx; i++) add(idAt(i, j, k), idAt(i + 1, j, k));
-      for (let i = 0; i <= nx; i++) for (let j = 0; j < ny; j++) add(idAt(i, j, k), idAt(i, j + 1, k));
+      for (let j = 0; j <= ny; j++)
+        for (let i = 0; i < nx; i++) add(idAt(i, j, k), idAt(i + 1, j, k));
+      for (let i = 0; i <= nx; i++)
+        for (let j = 0; j < ny; j++) add(idAt(i, j, k), idAt(i, j + 1, k));
     }
     for (let j = 0; j <= ny; j++) {
-      for (let i = 0; i <= nx; i++) for (let k = 0; k < nz; k++) add(idAt(i, j, k), idAt(i, j, k + 1));
+      for (let i = 0; i <= nx; i++)
+        for (let k = 0; k < nz; k++) add(idAt(i, j, k), idAt(i, j, k + 1));
     }
     const supports: EditorModel3d['supports'] = [];
-    for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) supports.push({ node: idAt(i, j, 0), kind: 'fixed' });
+    for (let j = 0; j <= ny; j++)
+      for (let i = 0; i <= nx; i++) supports.push({ node: idAt(i, j, 0), kind: 'fixed' });
     const model: EditorModel3d = {
       v: 2,
       name: 'lattice',
@@ -141,7 +147,10 @@ describe('skyline (Phase 3 closeout 3S)', () => {
   });
 
   it('createSkyline + add round-trips a tiny SPD system', () => {
-    const first = profileFromDofGroups(3, [[0, 1], [1, 2]]);
+    const first = profileFromDofGroups(3, [
+      [0, 1],
+      [1, 2],
+    ]);
     const K = createSkyline(first);
     skylineAdd(K, 0, 0, 2);
     skylineAdd(K, 1, 0, -1);

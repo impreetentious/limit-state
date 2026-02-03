@@ -46,7 +46,13 @@ type SectionKey = `${number}:${'a' | 'b'}`;
 export function runPushover(model: EditorModel, options: AnalysisOptions = {}): PushoverResult {
   const reference = { ...model, loads: { gravity: false, points: model.loads.points } };
   if (reference.loads.points.length === 0) {
-    return { points: [], hinges: [], collapseLoadFactor: 0, collapseBaseShear: 0, outcome: 'stable' };
+    return {
+      points: [],
+      hinges: [],
+      collapseLoadFactor: 0,
+      collapseBaseShear: 0,
+      outcome: 'stable',
+    };
   }
 
   let current = cloneModel(reference);
@@ -63,7 +69,8 @@ export function runPushover(model: EditorModel, options: AnalysisOptions = {}): 
     const event = nextPathEvent(current, unit, moments, loadFactor);
     if (!event) {
       const state = analyzeAtFactor(current, Math.max(loadFactor, 1e-9), options);
-      if (state.kind === 'stable' && loadFactor > 0) points.push(samplePoint(state, loadFactor, hinges));
+      if (state.kind === 'stable' && loadFactor > 0)
+        points.push(samplePoint(state, loadFactor, hinges));
       return finish(points, hinges, loadFactor > 0 ? loadFactor : 1, 'stable');
     }
 
@@ -163,7 +170,9 @@ function endMoment(
   memberId: number,
   end: 'a' | 'b',
 ): number {
-  const indices = analysis.mesh.elements.flatMap((element, index) => (element.memberId === memberId ? [index] : []));
+  const indices = analysis.mesh.elements.flatMap((element, index) =>
+    element.memberId === memberId ? [index] : [],
+  );
   if (indices.length === 0) return 0;
   if (end === 'a') return analysis.result.elementForces[indices[0]! * 5 + 2]!;
   return analysis.result.elementForces[indices[indices.length - 1]! * 5 + 4]!;
@@ -182,13 +191,17 @@ function samplePoint(
   };
 }
 
-function baseShear(analysis: Extract<ReturnType<typeof analyzeAtFactor>, { kind: 'stable' }>): number {
+function baseShear(
+  analysis: Extract<ReturnType<typeof analyzeAtFactor>, { kind: 'stable' }>,
+): number {
   let shear = 0;
   for (const reaction of analysis.result.reactions.values()) shear += Math.abs(reaction.fx);
   return shear;
 }
 
-function roofDisplacement(analysis: Extract<ReturnType<typeof analyzeAtFactor>, { kind: 'stable' }>): number {
+function roofDisplacement(
+  analysis: Extract<ReturnType<typeof analyzeAtFactor>, { kind: 'stable' }>,
+): number {
   let bestY = -Infinity;
   let bestUx = 0;
   for (let node = 0; node < analysis.mesh.editorNode.length; node++) {
@@ -209,7 +222,10 @@ function insertHinge(model: EditorModel, memberId: number, end: 'a' | 'b'): Edit
       if (member.id !== memberId) return member;
       return end === 'a' ? { ...member, releaseA: true } : { ...member, releaseB: true };
     }),
-    loads: { gravity: model.loads.gravity, points: model.loads.points.map((point) => ({ ...point })) },
+    loads: {
+      gravity: model.loads.gravity,
+      points: model.loads.points.map((point) => ({ ...point })),
+    },
     deck: [...model.deck],
   };
 }
@@ -220,7 +236,10 @@ function cloneModel(model: EditorModel): EditorModel {
     nodes: model.nodes.map((node) => ({ ...node })),
     members: model.members.map((member) => ({ ...member, section: { ...member.section } })),
     supports: model.supports.map((support) => ({ ...support })),
-    loads: { gravity: model.loads.gravity, points: model.loads.points.map((point) => ({ ...point })) },
+    loads: {
+      gravity: model.loads.gravity,
+      points: model.loads.points.map((point) => ({ ...point })),
+    },
     deck: [...model.deck],
     story: { ...model.story },
   };

@@ -3,7 +3,13 @@
  * response quantities, plus two-axle envelope evaluation from the line.
  */
 import { assembleLoadCase, type LoadAssembly } from './assemble';
-import { buildDeckRoute, deckLength, editorNodeIndex, mapDeckStation, type DeckSegment } from './deck';
+import {
+  buildDeckRoute,
+  deckLength,
+  editorNodeIndex,
+  mapDeckStation,
+  type DeckSegment,
+} from './deck';
 import { buildMesh } from './mesh';
 import { prepareStaticSystem, solveStatic, type StaticSystem } from './statics';
 import type { AnalysisMesh, AnalysisOptions, EditorModel, StaticResult } from './types';
@@ -45,7 +51,10 @@ export interface InfluenceEnvelope {
 }
 
 /** Factor the deck once; subsequent unit-load stations are back-substitutions. */
-export function prepareInfluence(model: EditorModel, options: AnalysisOptions = {}): InfluenceScenario {
+export function prepareInfluence(
+  model: EditorModel,
+  options: AnalysisOptions = {},
+): InfluenceScenario {
   const mesh = buildMesh(model, options);
   const route = buildDeckRoute(model, mesh);
   return {
@@ -157,7 +166,7 @@ export function memberMomentEnvelopeFromInfluence(
   options: AnalysisOptions = {},
 ): Map<number, number> {
   const weightkN = model.story.kind === 'traffic' ? model.story.weightkN : 0;
-  const axleForce = Math.max(0, weightkN) * 1000 / 2;
+  const axleForce = (Math.max(0, weightkN) * 1000) / 2;
   const scenario = prepareInfluence(model, options);
   const envelope = new Map<number, number>();
   for (const memberId of model.deck) {
@@ -223,7 +232,9 @@ function sectionMoment(
   at: 'a' | 'b' | 'mid',
   loadedElement: number,
 ): number {
-  const indices = mesh.elements.flatMap((element, index) => (element.memberId === memberId ? [index] : []));
+  const indices = mesh.elements.flatMap((element, index) =>
+    element.memberId === memberId ? [index] : [],
+  );
   if (indices.length === 0) return 0;
   if (at === 'a') {
     const index = indices[0]!;
@@ -252,9 +263,17 @@ function sectionMoment(
   return endMoment(mesh, result, left, 'b');
 }
 
-function endMoment(mesh: AnalysisMesh, result: StaticResult, elementIndex: number, end: 'a' | 'b'): number {
+function endMoment(
+  mesh: AnalysisMesh,
+  result: StaticResult,
+  elementIndex: number,
+  end: 'a' | 'b',
+): number {
   const element = mesh.elements[elementIndex]!;
-  const raw = end === 'a' ? result.elementForces[elementIndex * 5 + 2]! : result.elementForces[elementIndex * 5 + 4]!;
+  const raw =
+    end === 'a'
+      ? result.elementForces[elementIndex * 5 + 2]!
+      : result.elementForces[elementIndex * 5 + 4]!;
   // Deck members drawn right-to-left reverse the local sagging-positive sense.
   return element.cos >= 0 ? raw : -raw;
 }

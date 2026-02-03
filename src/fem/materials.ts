@@ -3,10 +3,31 @@ import type { Material, MaterialId, SectionProps, SectionSpec } from './types';
 
 export const MATERIALS: Record<MaterialId, Material> = {
   // G = E / (2(1+ν)). Steel/alu/spaghetti use isotropic ν; timber uses a softwood G∥ ≈ E/16.
-  'steel-s355': { id: 'steel-s355', label: 'Steel S355', E: 200e9, G: 200e9 / 2.6, fy: 355e6, rho: 7850 },
-  'alu-6061': { id: 'alu-6061', label: 'Aluminum 6061-T6', E: 69e9, G: 69e9 / (2 * 1.33), fy: 276e6, rho: 2700 },
+  'steel-s355': {
+    id: 'steel-s355',
+    label: 'Steel S355',
+    E: 200e9,
+    G: 200e9 / 2.6,
+    fy: 355e6,
+    rho: 7850,
+  },
+  'alu-6061': {
+    id: 'alu-6061',
+    label: 'Aluminum 6061-T6',
+    E: 69e9,
+    G: 69e9 / (2 * 1.33),
+    fy: 276e6,
+    rho: 2700,
+  },
   timber: { id: 'timber', label: 'Timber (softwood)', E: 11e9, G: 11e9 / 16, fy: 40e6, rho: 500 },
-  spaghetti: { id: 'spaghetti', label: 'Spaghetti (dry)', E: 3.8e9, G: 3.8e9 / 2.6, fy: 20e6, rho: 1500 },
+  spaghetti: {
+    id: 'spaghetti',
+    label: 'Spaghetti (dry)',
+    E: 3.8e9,
+    G: 3.8e9 / 2.6,
+    fy: 20e6,
+    rho: 1500,
+  },
 };
 
 export const DEFAULT_SECTION: SectionSpec = { kind: 'box', b: 0.2, h: 0.2, t: 0.008 };

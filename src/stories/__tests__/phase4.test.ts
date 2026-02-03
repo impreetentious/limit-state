@@ -80,9 +80,16 @@ describe('Phase 4B — 3D influence lines', () => {
     // For a clamped-clamped beam under a unit load at midspan, the sagging
     // moment at midspan equals L/8.
     const L = 8;
-    const line = computeInfluenceLine3d(clampedClampedBeam(L), {
-      kind: 'moment', memberId: 1, at: 'mid', axis: 'mag',
-    }, { step: 0.1 });
+    const line = computeInfluenceLine3d(
+      clampedClampedBeam(L),
+      {
+        kind: 'moment',
+        memberId: 1,
+        at: 'mid',
+        axis: 'mag',
+      },
+      { step: 0.1 },
+    );
     expect(line.samples.length).toBeGreaterThan(20);
     // Peak sample should be near midspan and equal L/8 within a tight tolerance.
     expect(Math.abs(line.peak.station - L / 2)).toBeLessThan(0.3);
@@ -92,9 +99,15 @@ describe('Phase 4B — 3D influence lines', () => {
 
   it('reaction influence line at fixed end sums to unit downward regardless of station', () => {
     // Unit −Z load at any station: reactions along −Z must sum to +1 for equilibrium.
-    const line = computeInfluenceLine3d(clampedClampedBeam(8), {
-      kind: 'reaction', nodeId: 1, component: 'fz',
-    }, { step: 1 });
+    const line = computeInfluenceLine3d(
+      clampedClampedBeam(8),
+      {
+        kind: 'reaction',
+        nodeId: 1,
+        component: 'fz',
+      },
+      { step: 1 },
+    );
     for (const sample of line.samples) {
       // Load−fz at node1 alone won't equal 1 (fixed-fixed shares vertical reaction),
       // but must lie between 0 and 1 for a downward unit load.
@@ -105,13 +118,20 @@ describe('Phase 4B — 3D influence lines', () => {
 
   it('two-axle envelope from influence line matches expected magnitudes', () => {
     const L = 8;
-    const line = computeInfluenceLine3d(clampedClampedBeam(L), {
-      kind: 'moment', memberId: 1, at: 'mid', axis: 'mag',
-    }, { step: 0.1 });
+    const line = computeInfluenceLine3d(
+      clampedClampedBeam(L),
+      {
+        kind: 'moment',
+        memberId: 1,
+        at: 'mid',
+        axis: 'mag',
+      },
+      { step: 0.1 },
+    );
     const axleForce = 100_000; // N, one axle
     const envelope = envelopeFromInfluence3d(line, axleForce, 4);
     // Sanity: exceeds single-axle midspan contribution alone.
-    expect(envelope.maxAbs).toBeGreaterThan(axleForce * L / 8 * 0.9);
+    expect(envelope.maxAbs).toBeGreaterThan(((axleForce * L) / 8) * 0.9);
     expect(envelope.criticalStation).toBeGreaterThan(0);
   });
 

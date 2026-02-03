@@ -31,7 +31,10 @@ describe('workplane frames (Phase 3 closeout 3T)', () => {
     expect(frame).toBeDefined();
     if (!frame) return;
     const p = projectPointToFrame({ x: 0.5, y: 0.5, z: 10 }, frame);
-    const relZ = (p.x - frame.origin.x) * frame.n.x + (p.y - frame.origin.y) * frame.n.y + (p.z - frame.origin.z) * frame.n.z;
+    const relZ =
+      (p.x - frame.origin.x) * frame.n.x +
+      (p.y - frame.origin.y) * frame.n.y +
+      (p.z - frame.origin.z) * frame.n.z;
     expect(Math.abs(relZ)).toBeLessThan(1e-12);
   });
 
@@ -40,13 +43,16 @@ describe('workplane frames (Phase 3 closeout 3T)', () => {
     expect(frame).toBeDefined();
     if (!frame) return;
     expect(frame.n.z).toBeCloseTo(1, 12);
-    const c =
-      frame.u.x * frame.v.x + frame.u.y * frame.v.y + frame.u.z * frame.v.z;
+    const c = frame.u.x * frame.v.x + frame.u.y * frame.v.y + frame.u.z * frame.v.z;
     expect(Math.abs(c)).toBeLessThan(1e-12);
   });
 
   it('resolveWorkplaneFrame keeps custom frames intact', () => {
-    const custom = frameFromThreePoints({ x: 0, y: 0, z: 1 }, { x: 2, y: 0, z: 1 }, { x: 0, y: 2, z: 1 })!;
+    const custom = frameFromThreePoints(
+      { x: 0, y: 0, z: 1 },
+      { x: 2, y: 0, z: 1 },
+      { x: 0, y: 2, z: 1 },
+    )!;
     const resolved = resolveWorkplaneFrame({ kind: 'custom', frame: custom });
     expect(resolved.origin.z).toBe(1);
     expect(resolved.n.z).toBeCloseTo(1, 12);

@@ -44,7 +44,10 @@ export function createSkyline(firstCol: Int32Array): SkylineMatrix {
 /**
  * Profile from element DOF lists: firstCol[i] = min connected DOF ≤ i (self inclusive).
  */
-export function profileFromDofGroups(ndof: number, groups: ReadonlyArray<ReadonlyArray<number>>): Int32Array {
+export function profileFromDofGroups(
+  ndof: number,
+  groups: ReadonlyArray<ReadonlyArray<number>>,
+): Int32Array {
   const firstCol = new Int32Array(ndof);
   for (let i = 0; i < ndof; i++) firstCol[i] = i;
   for (const group of groups) {
@@ -130,8 +133,7 @@ export function freeSkyline(
 ): { Kff: SkylineMatrix; perm: Int32Array } {
   const n = freeDofs.length;
   const identity = Int32Array.from({ length: n }, (_, i) => i);
-  const perm =
-    groups && groups.length > 0 ? rcmOrder(freeAdjacency(freeDofs, groups)) : identity;
+  const perm = groups && groups.length > 0 ? rcmOrder(freeAdjacency(freeDofs, groups)) : identity;
   const inv = new Int32Array(n);
   for (let i = 0; i < n; i++) inv[perm[i]!] = i;
 
@@ -185,7 +187,8 @@ export function factorSkylineLDLT(K: SkylineMatrix): SkylineFactorResult {
   const ld = Float64Array.from(K.values);
   const d = new Float64Array(n);
   let maxDiagonal = 0;
-  for (let i = 0; i < n; i++) maxDiagonal = Math.max(maxDiagonal, Math.abs(K.values[diagIndex[i]!]!));
+  for (let i = 0; i < n; i++)
+    maxDiagonal = Math.max(maxDiagonal, Math.abs(K.values[diagIndex[i]!]!));
   const mechanismTolerance = 1e-10 * maxDiagonal;
 
   const get = (row: number, col: number): number => {
@@ -216,7 +219,16 @@ export function factorSkylineLDLT(K: SkylineMatrix): SkylineFactorResult {
     set(i, i, 1);
   }
 
-  return { ok: true, factor: { n, firstCol: Int32Array.from(firstCol), diagIndex: Int32Array.from(diagIndex), ld, d } };
+  return {
+    ok: true,
+    factor: {
+      n,
+      firstCol: Int32Array.from(firstCol),
+      diagIndex: Int32Array.from(diagIndex),
+      ld,
+      d,
+    },
+  };
 }
 
 /** Forward / diagonal / back substitution on a skyline factor. */
@@ -271,7 +283,9 @@ export function rcmOrder(adjacency: ReadonlyArray<ReadonlyArray<number>>): Int32
     while (queue.length) {
       const node = queue.shift()!;
       level.push(node);
-      const nbrs = [...adjacency[node]!].filter((j) => !visited[j]).sort((a, b) => degree[a]! - degree[b]!);
+      const nbrs = [...adjacency[node]!]
+        .filter((j) => !visited[j])
+        .sort((a, b) => degree[a]! - degree[b]!);
       for (const nbr of nbrs) {
         visited[nbr] = 1;
         queue.push(nbr);

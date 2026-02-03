@@ -69,7 +69,10 @@ export function windDirectionUnit(directionDeg: number): { x: number; y: number;
 
 export function windLoadAt3d(scenario: WindScenario3d, time: number): Float64Array {
   const load = new Float64Array(scenario.baseLoad);
-  const increment = windIncrementForMultiplier3d(scenario, windMultiplier(scenario.model, scenario.seed, time));
+  const increment = windIncrementForMultiplier3d(
+    scenario,
+    windMultiplier(scenario.model, scenario.seed, time),
+  );
   for (let dof = 0; dof < load.length; dof++) load[dof] = load[dof]! + increment[dof]!;
   return load;
 }
@@ -116,13 +119,22 @@ function windIncrementForMultiplier3d(scenario: WindScenario3d, multiplier: numb
   return load;
 }
 
-export function initialWindState3d(scenario: WindScenario3d, modal?: EigenResult): NewmarkState | undefined {
+export function initialWindState3d(
+  scenario: WindScenario3d,
+  modal?: EigenResult,
+): NewmarkState | undefined {
   if (scenario.baseAnalysis.kind !== 'stable') return undefined;
   const omega1 = modal?.values[0];
   const omega2 = modal?.values[1] ?? (omega1 ? omega1 * 3 : undefined);
   if (!(omega1 && omega2)) return undefined;
   const damping = rayleighFit(scenario.model.zeta, omega1, omega2);
-  const system = prepareNewmarkSystemAssembled(scenario.mesh, scenario.K, scenario.mass, scenario.dt, damping);
+  const system = prepareNewmarkSystemAssembled(
+    scenario.mesh,
+    scenario.K,
+    scenario.mass,
+    scenario.dt,
+    damping,
+  );
   return {
     u: new Float64Array(scenario.baseAnalysis.result.u),
     v: new Float64Array(scenario.mesh.ndof),
@@ -133,8 +145,13 @@ export function initialWindState3d(scenario: WindScenario3d, modal?: EigenResult
   };
 }
 
-export function stepWind3d(scenario: WindScenario3d, state: NewmarkState, substeps = 4): NewmarkState {
-  if (!state.system || !state.damping) throw new Error('3D wind state is missing a prepared Newmark system.');
+export function stepWind3d(
+  scenario: WindScenario3d,
+  state: NewmarkState,
+  substeps = 4,
+): NewmarkState {
+  if (!state.system || !state.damping)
+    throw new Error('3D wind state is missing a prepared Newmark system.');
   let next = state;
   for (let index = 0; index < substeps; index++) {
     next = newmarkStepAssembled(
@@ -152,14 +169,20 @@ export function stepWind3d(scenario: WindScenario3d, state: NewmarkState, subste
 /**
  * Modal projection q_i = φ_iᵀ M u for the 3D wind explainer bars.
  */
-export function modalCoordinates3d(mesh: AnalysisMesh3d, modal: EigenResult, u: Float64Array, mass: Float64Array): Float64Array {
+export function modalCoordinates3d(
+  mesh: AnalysisMesh3d,
+  modal: EigenResult,
+  u: Float64Array,
+  mass: Float64Array,
+): Float64Array {
   const count = modal.values.length;
   const output = new Float64Array(count);
   if (modal.vectors.length !== mesh.ndof * count || u.length !== mesh.ndof) return output;
   const Mu = matVec(mass, mesh.ndof, u);
   for (let mode = 0; mode < count; mode++) {
     let value = 0;
-    for (let dof = 0; dof < mesh.ndof; dof++) value += modal.vectors[dof * count + mode]! * Mu[dof]!;
+    for (let dof = 0; dof < mesh.ndof; dof++)
+      value += modal.vectors[dof * count + mode]! * Mu[dof]!;
     output[mode] = value;
   }
   return output;
@@ -169,13 +192,21 @@ export function modalCoordinates3d(mesh: AnalysisMesh3d, modal: EigenResult, u: 
  * Modal coordinates of the static response to a unit-amplitude wind load — the
  * denominator of the measured DAF. Solved via K uref = F_unit.
  */
-export function windReferenceCoordinates3d(scenario: WindScenario3d, modal: EigenResult): Float64Array {
+export function windReferenceCoordinates3d(
+  scenario: WindScenario3d,
+  modal: EigenResult,
+): Float64Array {
   const Funit = windIncrementUnit3d(scenario);
   const uref = solveDenseSPD(scenario.K, scenario.mesh.ndof, Funit, scenario.mesh.freeDofs);
   return modalCoordinates3d(scenario.mesh, modal, uref, scenario.mass);
 }
 
-function solveDenseSPD(K: Float64Array, ndof: number, F: Float64Array, freeDofs: Int32Array): Float64Array {
+function solveDenseSPD(
+  K: Float64Array,
+  ndof: number,
+  F: Float64Array,
+  freeDofs: Int32Array,
+): Float64Array {
   const n = freeDofs.length;
   const Kff = new Float64Array(n * n);
   const Ff = new Float64Array(n);
@@ -227,7 +258,8 @@ function matVec(matrix: Float64Array, size: number, vector: Float64Array): Float
   const out = new Float64Array(size);
   for (let row = 0; row < size; row++) {
     let value = 0;
-    for (let column = 0; column < size; column++) value += matrix[row * size + column]! * vector[column]!;
+    for (let column = 0; column < size; column++)
+      value += matrix[row * size + column]! * vector[column]!;
     out[row] = value;
   }
   return out;
@@ -285,7 +317,11 @@ function peakMagnitude(values: readonly number[]): number {
   return peak;
 }
 
-function windMultiplier(story: Extract<StorySpec3d, { kind: 'wind' }>, seed: number, time: number): number {
+function windMultiplier(
+  story: Extract<StorySpec3d, { kind: 'wind' }>,
+  seed: number,
+  time: number,
+): number {
   if (story.pattern === 'steady') return 1;
   if (story.pattern === 'sine') return Math.sin(Math.PI * 2 * story.freqHz * time);
   let value = 0.35;

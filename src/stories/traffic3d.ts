@@ -90,7 +90,10 @@ export function prepareTraffic3d(model: EditorModel3d): TrafficScenario3d {
   };
 }
 
-export function analyzeTrafficAt3d(scenario: TrafficScenario3d, frontStation: number): TrafficFrame3d {
+export function analyzeTrafficAt3d(
+  scenario: TrafficScenario3d,
+  frontStation: number,
+): TrafficFrame3d {
   const weightkN = scenario.model.story?.kind === 'traffic' ? scenario.model.story.weightkN : 0;
   return analyzeTrafficAtWeight3d(scenario, frontStation, weightkN);
 }
@@ -98,11 +101,15 @@ export function analyzeTrafficAt3d(scenario: TrafficScenario3d, frontStation: nu
 /**
  * Seed a moving-mass Newmark state from the quasi-static solution at the current station.
  */
-export function initialMovingMassState3d(scenario: TrafficScenario3d, frontStation: number): NewmarkState {
+export function initialMovingMassState3d(
+  scenario: TrafficScenario3d,
+  frontStation: number,
+): NewmarkState {
   const frame = analyzeTrafficAt3d(scenario, frontStation);
-  const u = frame.analysis.kind === 'stable'
-    ? new Float64Array(frame.analysis.result.u)
-    : new Float64Array(scenario.mesh.ndof);
+  const u =
+    frame.analysis.kind === 'stable'
+      ? new Float64Array(frame.analysis.result.u)
+      : new Float64Array(scenario.mesh.ndof);
   const speed = scenario.model.story?.kind === 'traffic' ? scenario.model.story.speed : 1;
   return {
     u,
@@ -121,7 +128,8 @@ export function stepMovingMassTraffic3d(
   state: NewmarkState,
   substeps = 4,
 ): { state: NewmarkState; frame: TrafficFrame3d } {
-  const speed = scenario.model.story?.kind === 'traffic' ? Math.max(0.1, scenario.model.story.speed) : 12;
+  const speed =
+    scenario.model.story?.kind === 'traffic' ? Math.max(0.1, scenario.model.story.speed) : 12;
   let current = state;
   for (let step = 0; step < substeps; step++) {
     const nextTime = current.t + scenario.dt;
@@ -138,7 +146,12 @@ export function stepMovingMassTraffic3d(
     current = newmarkStepAssembled(
       scenario.mesh,
       current,
-      (t) => trafficLoadCase3d(scenario, t * speed, scenario.model.story?.kind === 'traffic' ? scenario.model.story.weightkN : 0).F,
+      (t) =>
+        trafficLoadCase3d(
+          scenario,
+          t * speed,
+          scenario.model.story?.kind === 'traffic' ? scenario.model.story.weightkN : 0,
+        ).F,
       scenario.dt,
       scenario.damping,
       system,
@@ -196,7 +209,8 @@ function trafficFrameFromDisplacement3d(
     result: { u, reactions: new Map(), elementForces: forces, utilization },
   };
   const dynamicMaxDisp = maxNodalDisp3d(u);
-  const staticMaxDisp = staticFrame.analysis.kind === 'stable' ? maxNodalDisp3d(staticFrame.analysis.result.u) : 0;
+  const staticMaxDisp =
+    staticFrame.analysis.kind === 'stable' ? maxNodalDisp3d(staticFrame.analysis.result.u) : 0;
   return {
     analysis,
     length: scenario.length,
@@ -216,9 +230,19 @@ function trafficLoadCase3d(scenario: TrafficScenario3d, frontStation: number, we
     const meshNode = nodeIndex.get(point.node);
     return meshNode === undefined
       ? []
-      : [{ meshNode, fx: point.fx, fy: point.fy, fz: point.fz, mx: point.mx, my: point.my, mz: point.mz }];
+      : [
+          {
+            meshNode,
+            fx: point.fx,
+            fy: point.fy,
+            fz: point.fz,
+            mx: point.mx,
+            my: point.my,
+            mz: point.mz,
+          },
+        ];
   });
-  const axleForce = Math.max(0, weightkN) * 1000 / 2;
+  const axleForce = (Math.max(0, weightkN) * 1000) / 2;
   return assembleLoadCase3d(mesh, {
     points,
     inElement: mapped.map((axle) => ({
@@ -231,7 +255,10 @@ function trafficLoadCase3d(scenario: TrafficScenario3d, frontStation: number, we
   });
 }
 
-export function vehicleContactsAt3d(scenario: TrafficScenario3d, frontStation: number): VehicleContact[] {
+export function vehicleContactsAt3d(
+  scenario: TrafficScenario3d,
+  frontStation: number,
+): VehicleContact[] {
   const weightkN = scenario.model.story?.kind === 'traffic' ? scenario.model.story.weightkN : 0;
   const axleMass = vehicleMassKg(weightkN) / 2;
   return axleHits3d(scenario, frontStation).map((hit) => ({
@@ -294,8 +321,10 @@ export function trafficMomentEnvelope3d(
   const step = stepMeters ?? Math.max(scenario.length / 40, 0.5);
   let envelope: Map<number, number> = new Map();
   const stations: number[] = [];
-  for (let s = 0; s <= scenario.length + 1e-9; s += step) stations.push(Math.min(s, scenario.length));
-  if (stations.length === 0 || stations[stations.length - 1]! < scenario.length) stations.push(scenario.length);
+  for (let s = 0; s <= scenario.length + 1e-9; s += step)
+    stations.push(Math.min(s, scenario.length));
+  if (stations.length === 0 || stations[stations.length - 1]! < scenario.length)
+    stations.push(scenario.length);
   for (const station of stations) {
     const frame = analyzeTrafficAt3d(scenario, station);
     envelope = mergeMomentEnvelope3d(envelope, frame.analysis);

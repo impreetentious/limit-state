@@ -91,8 +91,13 @@ export function freeVector(F: Float64Array, freeDofs: Int32Array): Float64Array 
 }
 
 /** Expand a free-DOF solution into the full vector; constrained entries remain zero. */
-export function expandFreeVector(ndof: number, freeDofs: Int32Array, freeValues: Float64Array): Float64Array {
-  if (freeDofs.length !== freeValues.length) throw new Error('Free solution length does not match free DOFs.');
+export function expandFreeVector(
+  ndof: number,
+  freeDofs: Int32Array,
+  freeValues: Float64Array,
+): Float64Array {
+  if (freeDofs.length !== freeValues.length)
+    throw new Error('Free solution length does not match free DOFs.');
   const out = new Float64Array(ndof);
   for (let i = 0; i < freeDofs.length; i++) out[freeDofs[i]!] = freeValues[i]!;
   return out;
@@ -120,7 +125,8 @@ export function mechanismEditorNode(mesh: AnalysisMesh, freeDofIndex: number): n
     if (element.nb === meshNode) adjacent = element.na;
     if (adjacent === undefined) continue;
     const editorId = mesh.editorNode[adjacent];
-    if (editorId !== undefined && editorId >= 0 && free.has(3 * adjacent + component)) candidates.push(adjacent);
+    if (editorId !== undefined && editorId >= 0 && free.has(3 * adjacent + component))
+      candidates.push(adjacent);
   }
 
   // A rotational pivot can be adjacent to a supported pin (its rotation is

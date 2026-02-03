@@ -26,12 +26,7 @@ export {
   utilizationAtDisplacement3d,
 } from './statics';
 export { buckling3d, modal3d } from './eigen';
-export {
-  buildDeckRoute3d,
-  mapDeckStation3d,
-  editorNodeIndex3d,
-  deckLength3d,
-} from './deck';
+export { buildDeckRoute3d, mapDeckStation3d, editorNodeIndex3d, deckLength3d } from './deck';
 export {
   prepareInfluence3d,
   computeInfluenceLine3d,
@@ -47,16 +42,8 @@ export type {
   InfluenceScenario3d,
   InfluenceEnvelope3d,
 } from './influence';
-export {
-  evaluateFailure3d,
-  collapseCascade3d,
-  analyzeAtFactor3d,
-} from './failure';
-export {
-  modelHasCables3d,
-  solveTensionOnly3d,
-  normalizeCableMember3d,
-} from './cables';
+export { evaluateFailure3d, collapseCascade3d, analyzeAtFactor3d } from './failure';
+export { modelHasCables3d, solveTensionOnly3d, normalizeCableMember3d } from './cables';
 export { runPushover3d } from './pushover';
 export { solveSecondOrderStatic3d, elementAxial3d } from './second-order';
 export type { SecondOrderAnalysis3d } from './second-order';

@@ -37,7 +37,10 @@ export interface TrafficFrame {
 }
 
 /** Yield-only vehicle capacity at one deck station, found with the same cached static solver. */
-export function trafficYieldWeightAt(scenario: TrafficScenario, frontStation: number): number | undefined {
+export function trafficYieldWeightAt(
+  scenario: TrafficScenario,
+  frontStation: number,
+): number | undefined {
   if (!(frontStation > 0)) return undefined;
   const baseline = analyzeTrafficAtWeight(scenario, frontStation, 0).analysis;
   if (baseline.kind !== 'stable') return undefined;
@@ -53,7 +56,8 @@ export function trafficYieldWeightAt(scenario: TrafficScenario, frontStation: nu
     upper *= 2;
   }
   const upperFrame = analyzeTrafficAtWeight(scenario, frontStation, upper);
-  if (upperFrame.analysis.kind !== 'stable' || maximumUtilization(upperFrame.analysis) < 1) return undefined;
+  if (upperFrame.analysis.kind !== 'stable' || maximumUtilization(upperFrame.analysis) < 1)
+    return undefined;
   for (let iteration = 0; iteration < 36; iteration++) {
     const middle = (lower + upper) / 2;
     const frame = analyzeTrafficAtWeight(scenario, frontStation, middle);
@@ -78,12 +82,19 @@ export interface TrafficScenario {
 }
 
 /** Solve the model under two W/2 axles separated by four metres. */
-export function analyzeTraffic(model: EditorModel, frontStation: number, options: AnalysisOptions = {}): TrafficFrame {
+export function analyzeTraffic(
+  model: EditorModel,
+  frontStation: number,
+  options: AnalysisOptions = {},
+): TrafficFrame {
   try {
     return analyzeTrafficAt(prepareTraffic(model, options), frontStation);
   } catch (error) {
     return {
-      analysis: { kind: 'invalid', message: error instanceof Error ? error.message : 'Traffic analysis could not run.' },
+      analysis: {
+        kind: 'invalid',
+        message: error instanceof Error ? error.message : 'Traffic analysis could not run.',
+      },
       length: 0,
       axles: [],
     };
@@ -124,11 +135,15 @@ export function analyzeTrafficAt(scenario: TrafficScenario, frontStation: number
 /**
  * Seed a moving-mass Newmark state from the quasi-static solution at the current station.
  */
-export function initialMovingMassState(scenario: TrafficScenario, frontStation: number): NewmarkState {
+export function initialMovingMassState(
+  scenario: TrafficScenario,
+  frontStation: number,
+): NewmarkState {
   const frame = analyzeTrafficAt(scenario, frontStation);
-  const u = frame.analysis.kind === 'stable'
-    ? new Float64Array(frame.analysis.result.u)
-    : new Float64Array(scenario.mesh.ndof);
+  const u =
+    frame.analysis.kind === 'stable'
+      ? new Float64Array(frame.analysis.result.u)
+      : new Float64Array(scenario.mesh.ndof);
   const speed = scenario.model.story.kind === 'traffic' ? scenario.model.story.speed : 1;
   return {
     u,
@@ -148,7 +163,8 @@ export function stepMovingMassTraffic(
   state: NewmarkState,
   substeps = 4,
 ): { state: NewmarkState; frame: TrafficFrame } {
-  const speed = scenario.model.story.kind === 'traffic' ? Math.max(0.1, scenario.model.story.speed) : 12;
+  const speed =
+    scenario.model.story.kind === 'traffic' ? Math.max(0.1, scenario.model.story.speed) : 12;
   let current = state;
   for (let step = 0; step < substeps; step++) {
     const nextTime = current.t + scenario.dt;
@@ -169,7 +185,11 @@ export function stepMovingMassTraffic(
   return { state: current, frame };
 }
 
-function analyzeTrafficAtWeight(scenario: TrafficScenario, frontStation: number, weightkN: number): TrafficFrame {
+function analyzeTrafficAtWeight(
+  scenario: TrafficScenario,
+  frontStation: number,
+  weightkN: number,
+): TrafficFrame {
   try {
     const loads = trafficLoadCase(scenario, frontStation, weightkN);
     const mapped = axleHits(scenario, frontStation);
@@ -180,7 +200,10 @@ function analyzeTrafficAtWeight(scenario: TrafficScenario, frontStation: number,
     };
   } catch (error) {
     return {
-      analysis: { kind: 'invalid', message: error instanceof Error ? error.message : 'Traffic analysis could not run.' },
+      analysis: {
+        kind: 'invalid',
+        message: error instanceof Error ? error.message : 'Traffic analysis could not run.',
+      },
       length: 0,
       axles: [],
     };
@@ -205,7 +228,8 @@ function trafficFrameFromDisplacement(
     loads,
   };
   const dynamicMaxDisp = maxNodalDisp(u);
-  const staticMaxDisp = staticFrame.analysis.kind === 'stable' ? maxNodalDisp(staticFrame.analysis.result.u) : 0;
+  const staticMaxDisp =
+    staticFrame.analysis.kind === 'stable' ? maxNodalDisp(staticFrame.analysis.result.u) : 0;
   return {
     analysis,
     length: scenario.length,
@@ -218,7 +242,10 @@ function trafficFrameFromDisplacement(
   };
 }
 
-function trafficLoadVector(scenario: TrafficScenario, frontStation: number): ReturnType<typeof assembleLoadCase> {
+function trafficLoadVector(
+  scenario: TrafficScenario,
+  frontStation: number,
+): ReturnType<typeof assembleLoadCase> {
   const weightkN = scenario.model.story.kind === 'traffic' ? scenario.model.story.weightkN : 0;
   return trafficLoadCase(scenario, frontStation, weightkN);
 }
@@ -230,7 +257,7 @@ function trafficLoadCase(scenario: TrafficScenario, frontStation: number, weight
     const meshNode = nodeIndex.get(point.node);
     return meshNode === undefined ? [] : [{ meshNode, fx: point.fx, fy: point.fy }];
   });
-  const axleForce = Math.max(0, weightkN) * 1000 / 2;
+  const axleForce = (Math.max(0, weightkN) * 1000) / 2;
   return assembleLoadCase(mesh, {
     gravity: model.loads.gravity,
     points,
@@ -239,7 +266,10 @@ function trafficLoadCase(scenario: TrafficScenario, frontStation: number, weight
 }
 
 /** Axle contacts with equal share of vehicle mass. */
-export function vehicleContactsAt(scenario: TrafficScenario, frontStation: number): VehicleContact[] {
+export function vehicleContactsAt(
+  scenario: TrafficScenario,
+  frontStation: number,
+): VehicleContact[] {
   const weightkN = scenario.model.story.kind === 'traffic' ? scenario.model.story.weightkN : 0;
   const axleMass = vehicleMassKg(weightkN) / 2;
   return axleHits(scenario, frontStation).map((hit) => ({
@@ -257,7 +287,8 @@ function axleHits(scenario: TrafficScenario, frontStation: number) {
 
 function maximumUtilization(analysis: Extract<StaticAnalysis, { kind: 'stable' }>): number {
   let maximum = 0;
-  for (const utilization of analysis.result.utilization.values()) maximum = Math.max(maximum, utilization);
+  for (const utilization of analysis.result.utilization.values())
+    maximum = Math.max(maximum, utilization);
   return maximum;
 }
 
@@ -270,12 +301,18 @@ function maxNodalDisp(u: Float64Array): number {
 }
 
 /** Merge per-member maximum |M| values into a persistent moving-load envelope. */
-export function mergeMomentEnvelope(previous: ReadonlyMap<number, number>, analysis: StaticAnalysis): Map<number, number> {
+export function mergeMomentEnvelope(
+  previous: ReadonlyMap<number, number>,
+  analysis: StaticAnalysis,
+): Map<number, number> {
   const next = new Map(previous);
   if (analysis.kind !== 'stable') return next;
   for (let index = 0; index < analysis.mesh.elements.length; index++) {
     const memberId = analysis.mesh.elements[index]!.memberId;
-    const moment = Math.max(Math.abs(analysis.result.elementForces[index * 5 + 2]!), Math.abs(analysis.result.elementForces[index * 5 + 4]!));
+    const moment = Math.max(
+      Math.abs(analysis.result.elementForces[index * 5 + 2]!),
+      Math.abs(analysis.result.elementForces[index * 5 + 4]!),
+    );
     next.set(memberId, Math.max(next.get(memberId) ?? 0, moment));
   }
   return next;

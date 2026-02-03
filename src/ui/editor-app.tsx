@@ -10,13 +10,37 @@ import { analyzeStaticModel3d, buckling3d, deformationDisplay3d, modal3d } from 
 import type { EditorModel, EigenResult } from '../fem/types';
 import { PRESETS } from '../presets/scenes';
 import { PRESETS_3D } from '../presets/scenes3d';
-import { MEMBER_HARD_LIMIT_3D, MEMBER_SOFT_LIMIT_3D, useEditorStore3d, type EditorTool3d } from '../state/editor-store-3d';
-import { decodeModel, decodeModel3d, encodeModel, encodeModel3d, peekShareSchemaVersion } from '../share/serialize';
+import {
+  MEMBER_HARD_LIMIT_3D,
+  MEMBER_SOFT_LIMIT_3D,
+  useEditorStore3d,
+  type EditorTool3d,
+} from '../state/editor-store-3d';
+import {
+  decodeModel,
+  decodeModel3d,
+  encodeModel,
+  encodeModel3d,
+  peekShareSchemaVersion,
+} from '../share/serialize';
 import { inspectStability } from '../state/stability';
-import { MEMBER_HARD_LIMIT, MEMBER_SOFT_LIMIT, type EditorTool, useEditorStore } from '../state/editor-store';
+import {
+  MEMBER_HARD_LIMIT,
+  MEMBER_SOFT_LIMIT,
+  type EditorTool,
+  useEditorStore,
+} from '../state/editor-store';
 import { analyzeRamp, rampCapacity } from '../stories/ramp';
 import { analyzeRamp3d, rampCapacity3d } from '../stories/ramp3d';
-import { analyzeTrafficAt, initialMovingMassState, mergeMomentEnvelope, prepareTraffic, stepMovingMassTraffic, trafficYieldWeightAt, type TrafficFrame } from '../stories/traffic';
+import {
+  analyzeTrafficAt,
+  initialMovingMassState,
+  mergeMomentEnvelope,
+  prepareTraffic,
+  stepMovingMassTraffic,
+  trafficYieldWeightAt,
+  type TrafficFrame,
+} from '../stories/traffic';
 import { memberMomentEnvelopeFromInfluence } from '../fem/influence';
 import { runPushover } from '../fem/pushover';
 import { runPushover3d } from '../fem/space/pushover';
@@ -119,8 +143,14 @@ export function EditorApp(): React.JSX.Element {
   const setSecondOrder = useEditorStore((state) => state.setSecondOrder);
   const activeChallengeId = useEditorStore((state) => state.activeChallengeId);
   const setActiveChallenge = useEditorStore((state) => state.setActiveChallenge);
-  const analysisOptions = useMemo(() => ({ shearFlexible, secondOrder }), [secondOrder, shearFlexible]);
-  const baseAnalysis = useMemo(() => analyzeStaticModel(model, analysisOptions), [analysisOptions, model]);
+  const analysisOptions = useMemo(
+    () => ({ shearFlexible, secondOrder }),
+    [secondOrder, shearFlexible],
+  );
+  const baseAnalysis = useMemo(
+    () => analyzeStaticModel(model, analysisOptions),
+    [analysisOptions, model],
+  );
   const stockyMembers = useMemo(() => stockyMemberIds(model), [model]);
   const requestId = useRef(0);
   const [eigen, setEigen] = useState<EigenUiState>({ kind: 'idle' });
@@ -210,11 +240,13 @@ export function EditorApp(): React.JSX.Element {
     }
   }, [analysis3d]);
   const windScenario3d = useMemo(
-    () => (viewDimension === '3d' && model3d.story?.kind === 'wind' ? prepareWind3d(model3d) : undefined),
+    () =>
+      viewDimension === '3d' && model3d.story?.kind === 'wind' ? prepareWind3d(model3d) : undefined,
     [model3d, viewDimension],
   );
   const trafficScenario3d = useMemo(() => {
-    if (viewDimension !== '3d' || model3d.story?.kind !== 'traffic' || !(model3d.deck?.length)) return undefined;
+    if (viewDimension !== '3d' || model3d.story?.kind !== 'traffic' || !model3d.deck?.length)
+      return undefined;
     try {
       return prepareTraffic3d(model3d);
     } catch {
@@ -222,22 +254,32 @@ export function EditorApp(): React.JSX.Element {
     }
   }, [model3d, viewDimension]);
   const earthquakeScenario3d = useMemo(
-    () => (viewDimension === '3d' && model3d.story?.kind === 'earthquake' ? prepareEarthquake3d(model3d) : undefined),
+    () =>
+      viewDimension === '3d' && model3d.story?.kind === 'earthquake'
+        ? prepareEarthquake3d(model3d)
+        : undefined,
     [model3d, viewDimension],
   );
   const capacity3d = useMemo(
     () => (model3d.story?.kind === 'ramp' ? rampCapacity3d(model3d) : undefined),
     [model3d],
   );
-  const rampFactor3d = model3d.story?.kind === 'ramp' && capacity3d !== undefined
-    ? Math.min(capacity3d, Math.max(0.001, storyTime3d * capacity3d / 8))
-    : 0.001;
+  const rampFactor3d =
+    model3d.story?.kind === 'ramp' && capacity3d !== undefined
+      ? Math.min(capacity3d, Math.max(0.001, (storyTime3d * capacity3d) / 8))
+      : 0.001;
   const rampFrame3d = useMemo(
-    () => (model3d.story?.kind === 'ramp' && viewDimension === '3d' ? analyzeRamp3d(model3d, rampFactor3d, storyTime3d >= 8) : undefined),
+    () =>
+      model3d.story?.kind === 'ramp' && viewDimension === '3d'
+        ? analyzeRamp3d(model3d, rampFactor3d, storyTime3d >= 8)
+        : undefined,
     [model3d, rampFactor3d, storyTime3d, viewDimension],
   );
   const pushover3d = useMemo(
-    () => (model3d.story?.kind === 'pushover' && viewDimension === '3d' ? runPushover3d(model3d) : undefined),
+    () =>
+      model3d.story?.kind === 'pushover' && viewDimension === '3d'
+        ? runPushover3d(model3d)
+        : undefined,
     [model3d, viewDimension],
   );
   const trafficFrame3dActive = movingMassFrame3d ?? trafficFrame3d;
@@ -246,26 +288,59 @@ export function EditorApp(): React.JSX.Element {
     if (viewDimension !== '3d' || !storyPlaying3d || !windScenario3d || !eigen3d) return;
     const initial = initialWindState3d(windScenario3d, eigen3d.modal);
     if (!initial) return;
-    const initialCoordinates = modalCoordinates3d(windScenario3d.mesh, eigen3d.modal, initial.u, windScenario3d.mass);
+    const initialCoordinates = modalCoordinates3d(
+      windScenario3d.mesh,
+      eigen3d.modal,
+      initial.u,
+      windScenario3d.mass,
+    );
     const referenceCoordinates = windReferenceCoordinates3d(windScenario3d, eigen3d.modal);
     let current = initial;
     let history: number[] = [];
     let frame = 0;
     const tick = () => {
       current = stepWind3d(windScenario3d, current);
-      const raw = modalCoordinates3d(windScenario3d.mesh, eigen3d.modal, current.u, windScenario3d.mass);
+      const raw = modalCoordinates3d(
+        windScenario3d.mesh,
+        eigen3d.modal,
+        current.u,
+        windScenario3d.mass,
+      );
       const coordinates = new Float64Array(raw.length);
-      for (let index = 0; index < coordinates.length; index++) coordinates[index] = raw[index]! - initialCoordinates[index]!;
+      for (let index = 0; index < coordinates.length; index++)
+        coordinates[index] = raw[index]! - initialCoordinates[index]!;
       const nearestMode = nearestFrequencyMode(eigen3d.modal, windScenario3d.model.freqHz);
-      const samplesPerCycle = Math.max(1, Math.ceil(1 / (windScenario3d.dt * 4 * Math.max(0.05, windScenario3d.model.freqHz))));
+      const samplesPerCycle = Math.max(
+        1,
+        Math.ceil(1 / (windScenario3d.dt * 4 * Math.max(0.05, windScenario3d.model.freqHz))),
+      );
       history = [...history, Math.abs(coordinates[nearestMode] ?? 0)].slice(-samplesPerCycle * 5);
-      const resonanceMode = detectResonance3d(windScenario3d.model.freqHz, eigen3d.modal, windScenario3d.model.zeta, history, samplesPerCycle);
+      const resonanceMode = detectResonance3d(
+        windScenario3d.model.freqHz,
+        eigen3d.modal,
+        windScenario3d.model.zeta,
+        history,
+        samplesPerCycle,
+      );
       const daf = measuredDaf3d(coordinates, referenceCoordinates);
-      setWindFrame3d({ scenario: windScenario3d, t: current.t, u: current.u, coordinates, daf, resonanceMode });
+      setWindFrame3d({
+        scenario: windScenario3d,
+        t: current.t,
+        u: current.u,
+        coordinates,
+        daf,
+        resonanceMode,
+      });
       setStoryTime3d(current.t);
       frame = window.requestAnimationFrame(tick);
     };
-    setWindFrame3d({ scenario: windScenario3d, t: initial.t, u: initial.u, coordinates: new Float64Array(initialCoordinates.length), daf: measuredDaf3d(new Float64Array(initialCoordinates.length), referenceCoordinates) });
+    setWindFrame3d({
+      scenario: windScenario3d,
+      t: initial.t,
+      u: initial.u,
+      coordinates: new Float64Array(initialCoordinates.length),
+      daf: measuredDaf3d(new Float64Array(initialCoordinates.length), referenceCoordinates),
+    });
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
   }, [eigen3d, storyPlaying3d, viewDimension, windScenario3d]);
@@ -281,12 +356,13 @@ export function EditorApp(): React.JSX.Element {
 
   useEffect(() => {
     if (
-      viewDimension !== '3d'
-      || !storyPlaying3d
-      || !trafficScenario3d
-      || model3d.story?.kind !== 'traffic'
-      || model3d.story.movingMass
-    ) return;
+      viewDimension !== '3d' ||
+      !storyPlaying3d ||
+      !trafficScenario3d ||
+      model3d.story?.kind !== 'traffic' ||
+      model3d.story.movingMass
+    )
+      return;
     const speed = Math.max(0.1, model3d.story.speed);
     const duration = (trafficScenario3d.length + 4) / speed;
     let frame = 0;
@@ -311,11 +387,11 @@ export function EditorApp(): React.JSX.Element {
 
   useEffect(() => {
     if (
-      viewDimension !== '3d'
-      || !storyPlaying3d
-      || !trafficScenario3d
-      || model3d.story?.kind !== 'traffic'
-      || !model3d.story.movingMass
+      viewDimension !== '3d' ||
+      !storyPlaying3d ||
+      !trafficScenario3d ||
+      model3d.story?.kind !== 'traffic' ||
+      !model3d.story.movingMass
     ) {
       if (!(model3d.story?.kind === 'traffic' && model3d.story.movingMass && storyPlaying3d)) {
         setMovingMassFrame3d(undefined);
@@ -349,8 +425,15 @@ export function EditorApp(): React.JSX.Element {
     let frame = 0;
     const tick = () => {
       current = stepEarthquake3d(earthquakeScenario3d, current);
-      const yieldMember = governingYieldMember(earthquakeUtilization3d(earthquakeScenario3d, current.u));
-      setEarthquakeFrame3d({ scenario: earthquakeScenario3d, t: current.t, u: current.u, yieldMember });
+      const yieldMember = governingYieldMember(
+        earthquakeUtilization3d(earthquakeScenario3d, current.u),
+      );
+      setEarthquakeFrame3d({
+        scenario: earthquakeScenario3d,
+        t: current.t,
+        u: current.u,
+        yieldMember,
+      });
       setStoryTime3d(current.t);
       if (current.t >= earthquakeScenario3d.duration) {
         setStoryPlaying3d(false);
@@ -404,8 +487,11 @@ export function EditorApp(): React.JSX.Element {
     setStoryTime3d(0);
   }, [model3d.story, model3d.nodes, model3d.members, model3d.deck]);
 
-  const failureReport3d = rampFrame3d?.report && rampFrame3d.report.kind !== 'stable' ? rampFrame3d.report : undefined;
-  const failureKey3d = failureReport3d ? `${failureReport3d.kind}-${rampFrame3d?.factor ?? 0}` : undefined;
+  const failureReport3d =
+    rampFrame3d?.report && rampFrame3d.report.kind !== 'stable' ? rampFrame3d.report : undefined;
+  const failureKey3d = failureReport3d
+    ? `${failureReport3d.kind}-${rampFrame3d?.factor ?? 0}`
+    : undefined;
   useEffect(() => {
     if (!failureKey3d) {
       setFailurePhase3d(undefined);
@@ -446,17 +532,32 @@ export function EditorApp(): React.JSX.Element {
     };
     worker.onerror = () => setEigen({ kind: 'error', message: 'Eigen worker could not start.' });
     const axialForces = new Float64Array(baseAnalysis.mesh.elements.length);
-    for (let index = 0; index < axialForces.length; index++) axialForces[index] = baseAnalysis.result.elementForces[index * 5]!;
+    for (let index = 0; index < axialForces.length; index++)
+      axialForces[index] = baseAnalysis.result.elementForces[index * 5]!;
     worker.postMessage({ id, mesh: baseAnalysis.mesh, elementN: axialForces, nModes: 8 });
     return () => worker.terminate();
   }, [baseAnalysis]);
 
-  const activeEigen = viewDimension === '3d'
-    ? (eigen3d ? (modeFamily === 'modal' ? eigen3d.modal : eigen3d.buckling) : undefined)
-    : (eigen.kind === 'ready' ? (modeFamily === 'modal' ? eigen.modal : eigen.buckling) : undefined);
+  const activeEigen =
+    viewDimension === '3d'
+      ? eigen3d
+        ? modeFamily === 'modal'
+          ? eigen3d.modal
+          : eigen3d.buckling
+        : undefined
+      : eigen.kind === 'ready'
+        ? modeFamily === 'modal'
+          ? eigen.modal
+          : eigen.buckling
+        : undefined;
   const activeFrequency = modeFamily === 'modal' ? activeEigen?.values[selectedMode] : undefined;
-  const nativeAnimationHz = activeFrequency ? activeFrequency / (Math.PI * 2) : modeFamily === 'buckling' ? 0.5 : undefined;
-  const animationHz = nativeAnimationHz && nativeAnimationHz > 2 ? nativeAnimationHz / 4 : nativeAnimationHz;
+  const nativeAnimationHz = activeFrequency
+    ? activeFrequency / (Math.PI * 2)
+    : modeFamily === 'buckling'
+      ? 0.5
+      : undefined;
+  const animationHz =
+    nativeAnimationHz && nativeAnimationHz > 2 ? nativeAnimationHz / 4 : nativeAnimationHz;
   useEffect(() => {
     if (animationHz === undefined || reducedMotion) {
       setModePhase(1);
@@ -470,13 +571,18 @@ export function EditorApp(): React.JSX.Element {
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
   }, [animationHz, reducedMotion]);
-  const modeGhost = activeEigen && activeEigen.values[selectedMode] !== undefined
-    ? { vectors: activeEigen.vectors, mode: selectedMode, phase: modePhase }
-    : undefined;
+  const modeGhost =
+    activeEigen && activeEigen.values[selectedMode] !== undefined
+      ? { vectors: activeEigen.vectors, mode: selectedMode, phase: modePhase }
+      : undefined;
 
   const trafficScenario = useMemo(() => {
     if (model.story.kind !== 'traffic' || mode !== 'test') return undefined;
-    try { return prepareTraffic(model, analysisOptions); } catch { return undefined; }
+    try {
+      return prepareTraffic(model, analysisOptions);
+    } catch {
+      return undefined;
+    }
   }, [analysisOptions, mode, model]);
   const quasiStaticTraffic = useMemo(() => {
     if (!trafficScenario || model.story.kind !== 'traffic') return undefined;
@@ -484,41 +590,64 @@ export function EditorApp(): React.JSX.Element {
     return analyzeTrafficAt(trafficScenario, storyTime * model.story.speed);
   }, [model.story, storyPlaying, storyTime, trafficScenario]);
   const trafficFrame = movingMassFrame ?? quasiStaticTraffic;
-  const capacity = useMemo(() => model.story.kind === 'ramp' ? rampCapacity(model, analysisOptions) : undefined, [analysisOptions, model]);
-  const rampFactor = model.story.kind === 'ramp' && capacity !== undefined
-    ? Math.min(capacity, Math.max(0.001, storyTime * capacity / 8))
-    : 0.001;
+  const capacity = useMemo(
+    () => (model.story.kind === 'ramp' ? rampCapacity(model, analysisOptions) : undefined),
+    [analysisOptions, model],
+  );
+  const rampFactor =
+    model.story.kind === 'ramp' && capacity !== undefined
+      ? Math.min(capacity, Math.max(0.001, (storyTime * capacity) / 8))
+      : 0.001;
   const rampFrame = useMemo(
-    () => model.story.kind === 'ramp' && mode === 'test' ? analyzeRamp(model, rampFactor, storyTime >= 8, analysisOptions) : undefined,
+    () =>
+      model.story.kind === 'ramp' && mode === 'test'
+        ? analyzeRamp(model, rampFactor, storyTime >= 8, analysisOptions)
+        : undefined,
     [analysisOptions, mode, model, rampFactor, storyTime],
   );
   const pushover = useMemo(
-    () => model.story.kind === 'pushover' && mode === 'test' ? runPushover(model, analysisOptions) : undefined,
+    () =>
+      model.story.kind === 'pushover' && mode === 'test'
+        ? runPushover(model, analysisOptions)
+        : undefined,
     [analysisOptions, mode, model],
   );
   const analysis = trafficFrame?.analysis ?? rampFrame?.analysis ?? baseAnalysis;
-  const deformation = viewDimension === '3d'
-    ? (analysis3d.kind === 'stable' ? deformationDisplay3d(analysis3d.mesh, analysis3d.result.u, 44) : null)
-    : (analysis.kind === 'stable' ? deformationDisplay(analysis.mesh, analysis.result.u, 44) : null);
-  const modeGhost3d = activeEigen && viewDimension === '3d' && activeEigen.values[selectedMode] !== undefined
-    ? { result: activeEigen, mode: selectedMode, phase: modePhase }
-    : undefined;
-  const windScenario = useMemo(() => model.story.kind === 'wind' ? prepareWind(model, analysisOptions) : undefined, [analysisOptions, model]);
+  const deformation =
+    viewDimension === '3d'
+      ? analysis3d.kind === 'stable'
+        ? deformationDisplay3d(analysis3d.mesh, analysis3d.result.u, 44)
+        : null
+      : analysis.kind === 'stable'
+        ? deformationDisplay(analysis.mesh, analysis.result.u, 44)
+        : null;
+  const modeGhost3d =
+    activeEigen && viewDimension === '3d' && activeEigen.values[selectedMode] !== undefined
+      ? { result: activeEigen, mode: selectedMode, phase: modePhase }
+      : undefined;
+  const windScenario = useMemo(
+    () => (model.story.kind === 'wind' ? prepareWind(model, analysisOptions) : undefined),
+    [analysisOptions, model],
+  );
   const earthquakeScenario = useMemo(
-    () => model.story.kind === 'earthquake' ? prepareEarthquake(model, analysisOptions) : undefined,
+    () =>
+      model.story.kind === 'earthquake' ? prepareEarthquake(model, analysisOptions) : undefined,
     [analysisOptions, model],
   );
   const modal = eigen.kind === 'ready' ? eigen.modal : undefined;
-  const trafficDuration = trafficScenario && model.story.kind === 'traffic'
-    ? (trafficScenario.length + 4) / Math.max(0.1, model.story.speed)
-    : undefined;
+  const trafficDuration =
+    trafficScenario && model.story.kind === 'traffic'
+      ? (trafficScenario.length + 4) / Math.max(0.1, model.story.speed)
+      : undefined;
   const trafficYieldCapacity = useMemo(
-    () => !storyPlaying && trafficScenario && model.story.kind === 'traffic'
-      ? trafficYieldWeightAt(trafficScenario, storyTime * model.story.speed) ?? null
-      : undefined,
+    () =>
+      !storyPlaying && trafficScenario && model.story.kind === 'traffic'
+        ? (trafficYieldWeightAt(trafficScenario, storyTime * model.story.speed) ?? null)
+        : undefined,
     [model.story, storyPlaying, storyTime, trafficScenario],
   );
-  const failureReport = rampFrame?.report && rampFrame.report.kind !== 'stable' ? rampFrame.report : undefined;
+  const failureReport =
+    rampFrame?.report && rampFrame.report.kind !== 'stable' ? rampFrame.report : undefined;
   const failureKey = failureReport ? `${failureReport.kind}-${rampFrame?.factor ?? 0}` : undefined;
 
   useEffect(() => {
@@ -550,7 +679,8 @@ export function EditorApp(): React.JSX.Element {
   }, [analysisOptions, envelopeEnabled, influenceEnvelope, model]);
 
   useEffect(() => {
-    if (!failureKey) {      setFailurePhase(undefined);
+    if (!failureKey) {
+      setFailurePhase(undefined);
       return;
     }
     if (reducedMotion) {
@@ -569,7 +699,13 @@ export function EditorApp(): React.JSX.Element {
   }, [failureKey, failureReplay, reducedMotion]);
 
   useEffect(() => {
-    if (mode !== 'test' || !storyPlaying || model.story.kind === 'wind' || model.story.kind === 'earthquake') return;
+    if (
+      mode !== 'test' ||
+      !storyPlaying ||
+      model.story.kind === 'wind' ||
+      model.story.kind === 'earthquake'
+    )
+      return;
     if (model.story.kind === 'traffic' && model.story.movingMass) return;
     let frame = 0;
     let previous = performance.now();
@@ -595,7 +731,13 @@ export function EditorApp(): React.JSX.Element {
   }, [capacity, mode, model.story, storyPlaying, trafficDuration]);
 
   useEffect(() => {
-    if (mode !== 'test' || !storyPlaying || model.story.kind !== 'traffic' || !model.story.movingMass || !trafficScenario) {
+    if (
+      mode !== 'test' ||
+      !storyPlaying ||
+      model.story.kind !== 'traffic' ||
+      !model.story.movingMass ||
+      !trafficScenario
+    ) {
       return;
     }
     const speed = Math.max(0.1, model.story.speed);
@@ -636,27 +778,61 @@ export function EditorApp(): React.JSX.Element {
     if (mode !== 'test' || !storyPlaying || !windScenario || !modal) return;
     const initial = initialWindState(windScenario, modal);
     if (!initial) return;
-    const initialCoordinates = modalCoordinates(windScenario.mesh, modal, initial.u, windScenario.mass);
+    const initialCoordinates = modalCoordinates(
+      windScenario.mesh,
+      modal,
+      initial.u,
+      windScenario.mass,
+    );
     const referenceCoordinates = windReferenceCoordinates(windScenario, modal);
     let current = initial;
     let history: number[] = [];
     let frame = 0;
     const tick = () => {
       current = stepWind(windScenario, current);
-      const rawCoordinates = modalCoordinates(windScenario.mesh, modal, current.u, windScenario.mass);
+      const rawCoordinates = modalCoordinates(
+        windScenario.mesh,
+        modal,
+        current.u,
+        windScenario.mass,
+      );
       const coordinates = new Float64Array(rawCoordinates.length);
-      for (let index = 0; index < coordinates.length; index++) coordinates[index] = rawCoordinates[index]! - initialCoordinates[index]!;
+      for (let index = 0; index < coordinates.length; index++)
+        coordinates[index] = rawCoordinates[index]! - initialCoordinates[index]!;
       const nearestMode = nearestFrequencyMode(modal, windScenario.model.freqHz);
-      const samplesPerCycle = Math.max(1, Math.ceil(1 / (windScenario.dt * 4 * Math.max(0.05, windScenario.model.freqHz))));
+      const samplesPerCycle = Math.max(
+        1,
+        Math.ceil(1 / (windScenario.dt * 4 * Math.max(0.05, windScenario.model.freqHz))),
+      );
       history = [...history, Math.abs(coordinates[nearestMode] ?? 0)].slice(-samplesPerCycle * 5);
-      const resonanceMode = detectResonance(windScenario.model.freqHz, modal, windScenario.model.zeta, history, samplesPerCycle);
+      const resonanceMode = detectResonance(
+        windScenario.model.freqHz,
+        modal,
+        windScenario.model.zeta,
+        history,
+        samplesPerCycle,
+      );
       const daf = measuredDaf(coordinates, referenceCoordinates);
       const yieldMember = governingYieldMember(windUtilization(windScenario, current.u));
-      setWindFrame({ scenario: windScenario, t: current.t, u: current.u, coordinates, daf, resonanceMode, yieldMember });
+      setWindFrame({
+        scenario: windScenario,
+        t: current.t,
+        u: current.u,
+        coordinates,
+        daf,
+        resonanceMode,
+        yieldMember,
+      });
       setStoryTime(current.t);
       frame = window.requestAnimationFrame(tick);
     };
-    setWindFrame({ scenario: windScenario, t: initial.t, u: initial.u, coordinates: new Float64Array(initialCoordinates.length), daf: measuredDaf(new Float64Array(initialCoordinates.length), referenceCoordinates) });
+    setWindFrame({
+      scenario: windScenario,
+      t: initial.t,
+      u: initial.u,
+      coordinates: new Float64Array(initialCoordinates.length),
+      daf: measuredDaf(new Float64Array(initialCoordinates.length), referenceCoordinates),
+    });
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
   }, [modal, mode, storyPlaying, windScenario]);
@@ -669,7 +845,9 @@ export function EditorApp(): React.JSX.Element {
     let frame = 0;
     const tick = () => {
       current = stepEarthquake(earthquakeScenario, current);
-      const yieldMember = governingYieldMember(earthquakeUtilization(earthquakeScenario, current.u));
+      const yieldMember = governingYieldMember(
+        earthquakeUtilization(earthquakeScenario, current.u),
+      );
       setEarthquakeFrame({ scenario: earthquakeScenario, t: current.t, u: current.u, yieldMember });
       setStoryTime(current.t);
       if (current.t >= earthquakeScenario.duration) {
@@ -707,7 +885,9 @@ export function EditorApp(): React.JSX.Element {
         if (!cancelled) setNotice('This share URL could not be decoded.');
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [loadModel, loadModel3d, setNotice, setNotice3d]);
 
   useEffect(() => {
@@ -727,9 +907,11 @@ export function EditorApp(): React.JSX.Element {
       const hash = viewDimension === '3d' ? await encodeModel3d(model3d) : await encodeModel(model);
       window.history.replaceState(null, '', hash);
       await navigator.clipboard?.writeText(window.location.href);
-      setNotice(viewDimension === '3d'
-        ? '3D share link copied — the model stays entirely in the URL.'
-        : 'Share link copied — the model stays entirely in the URL.');
+      setNotice(
+        viewDimension === '3d'
+          ? '3D share link copied — the model stays entirely in the URL.'
+          : 'Share link copied — the model stays entirely in the URL.',
+      );
       if (viewDimension === '3d') setNotice3d('3D share link copied — schema v2 in the URL hash.');
     } catch {
       setNotice('Share link could not be encoded.');
@@ -738,19 +920,29 @@ export function EditorApp(): React.JSX.Element {
 
   useEffect(() => {
     setStability({ kind: 'checking', message: 'Checking stability…' });
-    const timer = window.setTimeout(() => setStability(inspectStability(model, analysisOptions)), 300);
+    const timer = window.setTimeout(
+      () => setStability(inspectStability(model, analysisOptions)),
+      300,
+    );
     return () => window.clearTimeout(timer);
   }, [analysisOptions, model, setStability]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
-      if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLSelectElement ||
+        target instanceof HTMLTextAreaElement
+      )
+        return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault();
         if (viewDimension === '3d') {
-          if (event.shiftKey) redo3d(); else undo3d();
-        } else if (event.shiftKey) redo(); else undo();
+          if (event.shiftKey) redo3d();
+          else undo3d();
+        } else if (event.shiftKey) redo();
+        else undo();
         return;
       }
       if (event.key === ' ') {
@@ -760,8 +952,13 @@ export function EditorApp(): React.JSX.Element {
         }
         return;
       }
-      if (event.key === 'Backspace' || event.key === 'Delete') { setTool('delete'); return; }
-      const matching = TOOLS.find((candidate) => candidate.key.toLowerCase() === event.key.toLowerCase());
+      if (event.key === 'Backspace' || event.key === 'Delete') {
+        setTool('delete');
+        return;
+      }
+      const matching = TOOLS.find(
+        (candidate) => candidate.key.toLowerCase() === event.key.toLowerCase(),
+      );
       if (matching) setTool(matching.id);
     };
     window.addEventListener('keydown', onKeyDown);
@@ -771,50 +968,134 @@ export function EditorApp(): React.JSX.Element {
   return (
     <main className="editor-shell">
       <header className="topbar">
-        <div className="brand"><span className="brand-mark" aria-hidden>△</span><span>Limit State</span></div>
-        <input className="model-name" aria-label="Model name" value={viewDimension === '3d' ? model3d.name : model.name} onChange={(event) => viewDimension === '3d' ? setModelName3d(event.target.value) : setModelName(event.target.value)} />
+        <div className="brand">
+          <span className="brand-mark" aria-hidden>
+            △
+          </span>
+          <span>Limit State</span>
+        </div>
+        <input
+          className="model-name"
+          aria-label="Model name"
+          value={viewDimension === '3d' ? model3d.name : model.name}
+          onChange={(event) =>
+            viewDimension === '3d'
+              ? setModelName3d(event.target.value)
+              : setModelName(event.target.value)
+          }
+        />
         <div className="topbar-actions">
           <div className="mode-switch" aria-label="Mode">
-            <button type="button" className={mode === 'build' ? 'active' : ''} onClick={() => setMode('build')}>Build</button>
-            <button type="button" className={mode === 'test' ? 'active' : ''} onClick={() => setMode('test')}>Test</button>
+            <button
+              type="button"
+              className={mode === 'build' ? 'active' : ''}
+              onClick={() => setMode('build')}
+            >
+              Build
+            </button>
+            <button
+              type="button"
+              className={mode === 'test' ? 'active' : ''}
+              onClick={() => setMode('test')}
+            >
+              Test
+            </button>
           </div>
           <div className="view-dimension" aria-label="Dimension">
-            <button type="button" className={viewDimension === '2d' ? 'active' : ''} onClick={() => setViewDimension('2d')}>2D</button>
-            <button type="button" className={viewDimension === '3d' ? 'active' : ''} onClick={() => { setViewDimension('3d'); setMode('build'); }}>3D</button>
+            <button
+              type="button"
+              className={viewDimension === '2d' ? 'active' : ''}
+              onClick={() => setViewDimension('2d')}
+            >
+              2D
+            </button>
+            <button
+              type="button"
+              className={viewDimension === '3d' ? 'active' : ''}
+              onClick={() => {
+                setViewDimension('3d');
+                setMode('build');
+              }}
+            >
+              3D
+            </button>
           </div>
           {viewDimension === '3d' ? (
-            <select className="preset-menu" aria-label="3D presets" defaultValue="" onChange={(event) => {
-              const preset = PRESETS_3D.find((d) => d.id === event.target.value);
-              if (preset) loadModel3d(preset.build());
-              event.currentTarget.value = '';
-            }}>
-              <option value="" disabled>3D presets</option>
-              {PRESETS_3D.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+            <select
+              className="preset-menu"
+              aria-label="3D presets"
+              defaultValue=""
+              onChange={(event) => {
+                const preset = PRESETS_3D.find((d) => d.id === event.target.value);
+                if (preset) loadModel3d(preset.build());
+                event.currentTarget.value = '';
+              }}
+            >
+              <option value="" disabled>
+                3D presets
+              </option>
+              {PRESETS_3D.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
             </select>
           ) : (
-          <select className="preset-menu" aria-label="Presets" defaultValue="" onChange={(event) => {
-            const preset = PRESETS.find((candidate) => candidate.id === event.target.value);
-            if (preset) loadModel(preset.model);
-            event.currentTarget.value = '';
-          }}>
-            <option value="" disabled>Presets</option>
-            {PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
-          </select>
+            <select
+              className="preset-menu"
+              aria-label="Presets"
+              defaultValue=""
+              onChange={(event) => {
+                const preset = PRESETS.find((candidate) => candidate.id === event.target.value);
+                if (preset) loadModel(preset.model);
+                event.currentTarget.value = '';
+              }}
+            >
+              <option value="" disabled>
+                Presets
+              </option>
+              {PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
           )}
-          <select className="preset-menu" aria-label="Challenges" defaultValue="" onChange={(event) => {
-            const challenge = CHALLENGES.find((candidate) => candidate.id === event.target.value);
-            if (challenge) {
-              loadModel(challenge.starter, { challengeId: challenge.id });
-              setNotice(challenge.brief);
-            }
-            event.currentTarget.value = '';
-          }}>
-            <option value="" disabled>Challenges</option>
-            {CHALLENGES.map((challenge) => <option key={challenge.id} value={challenge.id}>{challenge.label}</option>)}
+          <select
+            className="preset-menu"
+            aria-label="Challenges"
+            defaultValue=""
+            onChange={(event) => {
+              const challenge = CHALLENGES.find((candidate) => candidate.id === event.target.value);
+              if (challenge) {
+                loadModel(challenge.starter, { challengeId: challenge.id });
+                setNotice(challenge.brief);
+              }
+              event.currentTarget.value = '';
+            }}
+          >
+            <option value="" disabled>
+              Challenges
+            </option>
+            {CHALLENGES.map((challenge) => (
+              <option key={challenge.id} value={challenge.id}>
+                {challenge.label}
+              </option>
+            ))}
           </select>
-          <Link className="quiet-button" href="/gallery">Gallery</Link>
-          <button type="button" className="quiet-button" onClick={() => void shareModel()}>Share</button>
-          <button type="button" className="quiet-button" onClick={() => viewDimension === '3d' ? reset3d() : reset()}>Blank grid</button>
+          <Link className="quiet-button" href="/gallery">
+            Gallery
+          </Link>
+          <button type="button" className="quiet-button" onClick={() => void shareModel()}>
+            Share
+          </button>
+          <button
+            type="button"
+            className="quiet-button"
+            onClick={() => (viewDimension === '3d' ? reset3d() : reset())}
+          >
+            Blank grid
+          </button>
         </div>
       </header>
       <section className="editor-workspace">
@@ -823,12 +1104,19 @@ export function EditorApp(): React.JSX.Element {
             <>
               <span className="rail-label">3D tools</span>
               {TOOLS_3D.map((candidate) => (
-                <button key={candidate.id} type="button" className={tool3d === candidate.id ? 'tool active' : 'tool'} onClick={() => setTool3d(candidate.id)}>
-                  <span>{candidate.label}</span><kbd>{candidate.key}</kbd>
+                <button
+                  key={candidate.id}
+                  type="button"
+                  className={tool3d === candidate.id ? 'tool active' : 'tool'}
+                  onClick={() => setTool3d(candidate.id)}
+                >
+                  <span>{candidate.label}</span>
+                  <kbd>{candidate.key}</kbd>
                 </button>
               ))}
               <div className="rail-bottom">
-                <label className="snap-toggle">Workplane
+                <label className="snap-toggle">
+                  Workplane
                   <select
                     value={workplane.kind === 'custom' ? 'custom' : workplane.kind}
                     onChange={(e) => {
@@ -845,7 +1133,8 @@ export function EditorApp(): React.JSX.Element {
                   </select>
                 </label>
                 <div className="extrude-panel" aria-label="Extrude and replicate">
-                  <label className="snap-toggle">Distance (m)
+                  <label className="snap-toggle">
+                    Distance (m)
                     <input
                       type="number"
                       min={0.1}
@@ -855,7 +1144,8 @@ export function EditorApp(): React.JSX.Element {
                       aria-label="Extrude distance"
                     />
                   </label>
-                  <label className="snap-toggle">Copies
+                  <label className="snap-toggle">
+                    Copies
                     <input
                       type="number"
                       min={1}
@@ -865,33 +1155,88 @@ export function EditorApp(): React.JSX.Element {
                       aria-label="Extrude copies"
                     />
                   </label>
-                  <button type="button" className="history-button" onClick={() => extrude3d()} title="Copy along workplane normal and add connecting struts">
+                  <button
+                    type="button"
+                    className="history-button"
+                    onClick={() => extrude3d()}
+                    title="Copy along workplane normal and add connecting struts"
+                  >
                     Extrude
                   </button>
-                  <button type="button" className="history-button" onClick={() => replicate3d()} title="Array-copy along workplane normal without struts">
+                  <button
+                    type="button"
+                    className="history-button"
+                    onClick={() => replicate3d()}
+                    title="Array-copy along workplane normal without struts"
+                  >
                     Replicate
                   </button>
                 </div>
-                <p className="rail-hint">Draw on a plane, then Extrude along its normal (Ground → +Z) to go spatial. Replicate arrays bays without connectors.</p>
+                <p className="rail-hint">
+                  Draw on a plane, then Extrude along its normal (Ground → +Z) to go spatial.
+                  Replicate arrays bays without connectors.
+                </p>
               </div>
               <div className="rail-bottom">
-                <button type="button" className="history-button" onClick={undo3d} disabled={past3d.length === 0}>Undo <kbd>⌘Z</kbd></button>
-                <button type="button" className="history-button" onClick={redo3d} disabled={future3d.length === 0}>Redo <kbd>⇧⌘Z</kbd></button>
-                <span className={`rail-lint ${model3d.members.length >= MEMBER_HARD_LIMIT_3D ? 'hard' : model3d.members.length >= MEMBER_SOFT_LIMIT_3D ? 'soft' : ''}`}>
+                <button
+                  type="button"
+                  className="history-button"
+                  onClick={undo3d}
+                  disabled={past3d.length === 0}
+                >
+                  Undo <kbd>⌘Z</kbd>
+                </button>
+                <button
+                  type="button"
+                  className="history-button"
+                  onClick={redo3d}
+                  disabled={future3d.length === 0}
+                >
+                  Redo <kbd>⇧⌘Z</kbd>
+                </button>
+                <span
+                  className={`rail-lint ${model3d.members.length >= MEMBER_HARD_LIMIT_3D ? 'hard' : model3d.members.length >= MEMBER_SOFT_LIMIT_3D ? 'soft' : ''}`}
+                >
                   {model3d.members.length}/{MEMBER_HARD_LIMIT_3D} members
-                  {analysis3d.kind === 'mechanism' ? ' · mechanism' : analysis3d.kind === 'invalid' ? ' · invalid' : ''}
+                  {analysis3d.kind === 'mechanism'
+                    ? ' · mechanism'
+                    : analysis3d.kind === 'invalid'
+                      ? ' · invalid'
+                      : ''}
                 </span>
               </div>
             </>
           ) : (
             <>
-          <span className="rail-label">Tools</span>
-          {TOOLS.map((candidate) => <button key={candidate.id} type="button" className={tool === candidate.id ? 'tool active' : 'tool'} title={`${candidate.description} (${candidate.key})`} onClick={() => setTool(candidate.id)}><span>{candidate.label}</span><kbd>{candidate.key}</kbd></button>)}
-          <div className="rail-bottom">
-            <label className="snap-toggle"><input type="checkbox" checked={gridSnap} onChange={(event) => setGridSnap(event.target.checked)} /> Snap 0.5 m</label>
-            <button type="button" className="history-button" onClick={undo}>Undo <kbd>⌘Z</kbd></button>
-            <button type="button" className="history-button" onClick={redo}>Redo <kbd>⇧⌘Z</kbd></button>
-          </div>
+              <span className="rail-label">Tools</span>
+              {TOOLS.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  className={tool === candidate.id ? 'tool active' : 'tool'}
+                  title={`${candidate.description} (${candidate.key})`}
+                  onClick={() => setTool(candidate.id)}
+                >
+                  <span>{candidate.label}</span>
+                  <kbd>{candidate.key}</kbd>
+                </button>
+              ))}
+              <div className="rail-bottom">
+                <label className="snap-toggle">
+                  <input
+                    type="checkbox"
+                    checked={gridSnap}
+                    onChange={(event) => setGridSnap(event.target.checked)}
+                  />{' '}
+                  Snap 0.5 m
+                </label>
+                <button type="button" className="history-button" onClick={undo}>
+                  Undo <kbd>⌘Z</kbd>
+                </button>
+                <button type="button" className="history-button" onClick={redo}>
+                  Redo <kbd>⇧⌘Z</kbd>
+                </button>
+              </div>
             </>
           )}
         </nav>
@@ -906,20 +1251,26 @@ export function EditorApp(): React.JSX.Element {
                     ? trafficFrame3dActive.analysis
                     : analysis3d
               }
-              showDeformed={showDeformed
-                || Boolean(windFrame3d)
-                || Boolean(earthquakeFrame3d)
-                || Boolean(trafficFrame3dActive?.analysis.kind === 'stable')
-                || Boolean(rampFrame3d?.analysis.kind === 'stable')}
+              showDeformed={
+                showDeformed ||
+                Boolean(windFrame3d) ||
+                Boolean(earthquakeFrame3d) ||
+                Boolean(trafficFrame3dActive?.analysis.kind === 'stable') ||
+                Boolean(rampFrame3d?.analysis.kind === 'stable')
+              }
               modeGhost={modeGhost3d}
               dynamicDisplacement={
-                windFrame3d?.u
-                ?? earthquakeFrame3d?.u
-                ?? (failurePhase3d !== undefined && rampFrame3d?.analysis.kind === 'stable'
+                windFrame3d?.u ??
+                earthquakeFrame3d?.u ??
+                (failurePhase3d !== undefined && rampFrame3d?.analysis.kind === 'stable'
                   ? scaleDisplacement3d(rampFrame3d.analysis.result.u, 0.25 + failurePhase3d * 0.75)
+                  : undefined) ??
+                (trafficFrame3dActive?.analysis.kind === 'stable'
+                  ? trafficFrame3dActive.analysis.result.u
+                  : undefined) ??
+                (rampFrame3d?.analysis.kind === 'stable'
+                  ? rampFrame3d.analysis.result.u
                   : undefined)
-                ?? (trafficFrame3dActive?.analysis.kind === 'stable' ? trafficFrame3dActive.analysis.result.u : undefined)
-                ?? (rampFrame3d?.analysis.kind === 'stable' ? rampFrame3d.analysis.result.u : undefined)
               }
               trafficAxles={trafficFrame3dActive?.axles}
               workplane={workplane}
@@ -960,7 +1311,8 @@ export function EditorApp(): React.JSX.Element {
                 }
                 if (tool3d === 'delete') {
                   if (hitNodeId !== null) setSelection3d({ kind: 'node', id: hitNodeId });
-                  else if (hitMemberId !== null) setSelection3d({ kind: 'member', id: hitMemberId });
+                  else if (hitMemberId !== null)
+                    setSelection3d({ kind: 'member', id: hitMemberId });
                   deleteSelection3d();
                   return;
                 }
@@ -969,18 +1321,20 @@ export function EditorApp(): React.JSX.Element {
               }}
             />
           ) : (
-          <StructureCanvas
-            analysis={analysis}
-            diagram={resultDiagram}
-            showDeformed={showDeformed}
-            modeGhost={modeGhost}
-            trafficAxles={trafficFrame?.axles}
-            momentEnvelope={envelopeEnabled ? momentEnvelope : undefined}
-            dynamicDisplacement={windFrame?.u ?? earthquakeFrame?.u}
-            failureCinematic={failurePhase !== undefined && rampFrame?.analysis.kind === 'stable'
-              ? { u: rampFrame.analysis.result.u, phase: failurePhase, reducedMotion }
-              : undefined}
-          />
+            <StructureCanvas
+              analysis={analysis}
+              diagram={resultDiagram}
+              showDeformed={showDeformed}
+              modeGhost={modeGhost}
+              trafficAxles={trafficFrame?.axles}
+              momentEnvelope={envelopeEnabled ? momentEnvelope : undefined}
+              dynamicDisplacement={windFrame?.u ?? earthquakeFrame?.u}
+              failureCinematic={
+                failurePhase !== undefined && rampFrame?.analysis.kind === 'stable'
+                  ? { u: rampFrame.analysis.result.u, phase: failurePhase, reducedMotion }
+                  : undefined
+              }
+            />
           )}
           {viewDimension === '3d' && model3d.members.length === 0 && (
             <div className="landing-invite" role="status">
@@ -990,13 +1344,18 @@ export function EditorApp(): React.JSX.Element {
           )}
           {viewDimension === '3d' && model3d.members.length > 0 && (
             <div className="demo3d-note" role="note">
-              Extrude/Replicate to go spatial · Deck paints a traffic polyline · Stories: wind / traffic / EQ / ramp / pushover
+              Extrude/Replicate to go spatial · Deck paints a traffic polyline · Stories: wind /
+              traffic / EQ / ramp / pushover
             </div>
           )}
           {viewDimension === '3d' && (
             <TestConsole3d
               model={model3d}
-              modalFreqHz={eigen3d?.modal.values[0] !== undefined ? eigen3d.modal.values[0]! / (Math.PI * 2) : undefined}
+              modalFreqHz={
+                eigen3d?.modal.values[0] !== undefined
+                  ? eigen3d.modal.values[0]! / (Math.PI * 2)
+                  : undefined
+              }
               bucklingLambda={eigen3d?.buckling.values[0]}
               playing={storyPlaying3d}
               storyTime={storyTime3d}
@@ -1005,14 +1364,20 @@ export function EditorApp(): React.JSX.Element {
               rampCapacity={capacity3d}
               pushover={pushover3d}
               earthquake={earthquakeFrame3d}
-              wind={windFrame3d ? {
-                daf: windFrame3d.daf,
-                resonanceMode: windFrame3d.resonanceMode,
-                coordinates: windFrame3d.coordinates,
-                modalFrequenciesHz: eigen3d?.modal.values ? Array.from(eigen3d.modal.values).map((w) => w / (Math.PI * 2)) : undefined,
-              } : undefined}
+              wind={
+                windFrame3d
+                  ? {
+                      daf: windFrame3d.daf,
+                      resonanceMode: windFrame3d.resonanceMode,
+                      coordinates: windFrame3d.coordinates,
+                      modalFrequenciesHz: eigen3d?.modal.values
+                        ? Array.from(eigen3d.modal.values).map((w) => w / (Math.PI * 2))
+                        : undefined,
+                    }
+                  : undefined
+              }
               onTogglePlayback={() => {
-                if (model3d.story?.kind === 'traffic' && !(model3d.deck?.length)) {
+                if (model3d.story?.kind === 'traffic' && !model3d.deck?.length) {
                   setTrafficStory({});
                   return;
                 }
@@ -1042,15 +1407,25 @@ export function EditorApp(): React.JSX.Element {
               onReplayFailure={() => setFailureReplay3d((n) => n + 1)}
             />
           )}
-          {viewDimension === '3d' && notice3d && <div className="canvas-notice" role="status">{notice3d}</div>}
+          {viewDimension === '3d' && notice3d && (
+            <div className="canvas-notice" role="status">
+              {notice3d}
+            </div>
+          )}
           {viewDimension === '3d' && windFrame3d && analysis3d.kind === 'stable' && (
             <div className="dynamic-badge">
-              3D Newmark wind — display scale ×{formatScale(deformationDisplay3d(analysis3d.mesh, windFrame3d.u, 44).scale)} · direction {(model3d.story?.kind === 'wind' ? model3d.story.directionDeg : 0).toFixed(0)}° · warping torsion still out of scope
+              3D Newmark wind — display scale ×
+              {formatScale(deformationDisplay3d(analysis3d.mesh, windFrame3d.u, 44).scale)} ·
+              direction{' '}
+              {(model3d.story?.kind === 'wind' ? model3d.story.directionDeg : 0).toFixed(0)}° ·
+              warping torsion still out of scope
             </div>
           )}
           {viewDimension === '3d' && earthquakeFrame3d && analysis3d.kind === 'stable' && (
             <div className="dynamic-badge">
-              3D Newmark earthquake — display scale ×{formatScale(deformationDisplay3d(analysis3d.mesh, earthquakeFrame3d.u, 44).scale)} · horizontal base excitation −M·ι·ü_g
+              3D Newmark earthquake — display scale ×
+              {formatScale(deformationDisplay3d(analysis3d.mesh, earthquakeFrame3d.u, 44).scale)} ·
+              horizontal base excitation −M·ι·ü_g
             </div>
           )}
           {viewDimension === '3d' && trafficFrame3dActive?.analysis.kind === 'stable' && (
@@ -1062,11 +1437,19 @@ export function EditorApp(): React.JSX.Element {
           )}
           {viewDimension === '3d' && failurePhase3d !== undefined && (
             <div className="failure-cinematic-badge">
-              failure animation ×{reducedMotion ? 'static' : formatScale(0.25 + failurePhase3d * 0.75)} — illustrative, computed onset and mechanism · quasi-static sequence — inertia not modeled
+              failure animation ×
+              {reducedMotion ? 'static' : formatScale(0.25 + failurePhase3d * 0.75)} — illustrative,
+              computed onset and mechanism · quasi-static sequence — inertia not modeled
             </div>
           )}
-          {viewDimension === '2d' && <div className={`lint-badge lint-${stability.kind}`}>{stability.message}</div>}
-          {notice && viewDimension === '2d' && <div className="canvas-notice" role="status">{notice}</div>}
+          {viewDimension === '2d' && (
+            <div className={`lint-badge lint-${stability.kind}`}>{stability.message}</div>
+          )}
+          {notice && viewDimension === '2d' && (
+            <div className="canvas-notice" role="status">
+              {notice}
+            </div>
+          )}
           {viewDimension === '2d' && activeChallengeId && (
             <ChallengePanel
               challengeId={activeChallengeId}
@@ -1075,99 +1458,270 @@ export function EditorApp(): React.JSX.Element {
               onClear={() => setActiveChallenge(null)}
             />
           )}
-          {(viewDimension === '2d' ? analysis.kind === 'stable' : analysis3d.kind === 'stable') && <div className="result-controls" aria-label="Static result display">
-            {viewDimension === '2d' && (['none', 'axial', 'shear', 'moment'] as const).map((diagram) => <button key={diagram} type="button" className={resultDiagram === diagram ? 'active' : ''} onClick={() => setResultDiagram(diagram)}>{diagram === 'none' ? 'Results' : diagram[0]!.toUpperCase() + diagram.slice(1)}</button>)}
-            {viewDimension === '3d' && (['none', 'axial', 'shear', 'moment'] as const).map((diagram) => <button key={`3d-${diagram}`} type="button" className={resultDiagram3d === diagram ? 'active' : ''} onClick={() => setResultDiagram3d(diagram)}>{diagram === 'none' ? 'Results' : diagram[0]!.toUpperCase() + diagram.slice(1)}</button>)}
-            <label><input type="checkbox" checked={showDeformed} onChange={(event) => setShowDeformed(event.target.checked)} /> Deformed</label>
-            {viewDimension === '2d' && <>
-            <label><input type="checkbox" checked={shearFlexible} onChange={(event) => setShearFlexible(event.target.checked)} /> Timoshenko</label>
-            <label><input type="checkbox" checked={secondOrder} onChange={(event) => setSecondOrder(event.target.checked)} /> P-Δ</label>
-            </>}
-          </div>}
-          {viewDimension === '2d' && analysis.kind === 'divergent' && <div className="shear-note" role="alert">{analysis.message}</div>}
-          {viewDimension === '2d' && stockyMembers.length > 0 && <div className="shear-note" role="note">Shear flexibility matters when L/h &lt; 10 — {stockyMembers.length === 1 ? `member ${stockyMembers[0]} is` : `${stockyMembers.length} members are`} stocky{shearFlexible ? '' : '; enable Timoshenko to include it'}.</div>}
-          {viewDimension === '2d' && analysis.kind === 'stable' && analysis.secondOrder && <div className="pdelta-badge" role="status">P-Δ ×{analysis.secondOrder.momentAmplification.toFixed(2)} moment · ×{analysis.secondOrder.displacementAmplification.toFixed(2)} disp vs linear ({analysis.secondOrder.iterations} iter)</div>}
-          {deformation && showDeformed && deformation.maxMeters > 0 && <div className="deformation-badge">deformation ×{formatScale(deformation.scale)} — true max {formatLength(deformation.maxMeters)}</div>}
-          {viewDimension === '2d' && windFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(windFrame.scenario.mesh, windFrame.u, 44).scale)} · simplified uniform wind field (member-normal 2D pressure)</div>}
-          {viewDimension === '2d' && earthquakeFrame && <div className="dynamic-badge">Newmark response — display scale ×{formatScale(deformationDisplay(earthquakeFrame.scenario.mesh, earthquakeFrame.u, 44).scale)} · horizontal base excitation −M·ι·ü_g</div>}
-          {viewDimension === '2d' && movingMassFrame?.movingMass && <div className="dynamic-badge">Moving-mass Newmark — amp ×{movingMassFrame.movingMass.amplification.toFixed(2)} vs static at this station · vehicle mass lumped at axle contacts</div>}
-          {viewDimension === '2d' && failurePhase !== undefined && <div className="failure-cinematic-badge">failure animation ×{reducedMotion ? 'static' : formatScale(0.25 + failurePhase * 0.75)} — illustrative, computed onset and mechanism</div>}
-          {viewDimension === '2d' && model.members.length >= MEMBER_SOFT_LIMIT && <div className="member-limit-badge">{model.members.length}/{MEMBER_HARD_LIMIT} members — performance warning at {MEMBER_SOFT_LIMIT}; hard cap {MEMBER_HARD_LIMIT}</div>}
-          {viewDimension === '3d' && model3d.members.length >= MEMBER_SOFT_LIMIT_3D && <div className="member-limit-badge">{model3d.members.length}/{MEMBER_HARD_LIMIT_3D} members — line LOD forced above 64; eigen skipped above ~1.5k DOF</div>}
-          {viewDimension === '3d' && analysis3d.kind === 'stable' && analysis3d.mesh.ndof > 1500 && <div className="member-limit-badge">Modal/buckling deferred — {analysis3d.mesh.ndof} DOF (cap 1500 for live Build)</div>}
-          {(viewDimension === '3d' ? analysis3d.kind === 'stable' : analysis.kind === 'stable') && <div className="eigen-panel" aria-live="polite">
-            <span>Modal + Buckling{viewDimension === '3d' ? ' (3D)' : ''}</span>
-            {viewDimension === '2d' && eigen.kind === 'loading' && <p>Solving in worker…</p>}
-            {viewDimension === '2d' && eigen.kind === 'error' && <p className="eigen-error">{eigen.message}</p>}
-            {((viewDimension === '2d' && eigen.kind === 'ready') || (viewDimension === '3d' && eigen3d)) && activeEigen && <>
-              <div className="mode-family" aria-label="Mode shape family">
-                <button type="button" className={modeFamily === 'modal' ? 'active' : ''} onClick={() => { setModeFamily('modal'); setSelectedMode(0); }}>Modal</button>
-                <button type="button" className={modeFamily === 'buckling' ? 'active' : ''} onClick={() => { setModeFamily('buckling'); setSelectedMode(0); }}>Buckling</button>
-              </div>
-              <div className="mode-list" aria-label="Animated mode shapes">
-                {Array.from(activeEigen.values, (value, index) => <button key={index} type="button" className={selectedMode === index ? 'active' : ''} onClick={() => setSelectedMode(index)}>{modeFamily === 'modal' ? `f${index + 1} ${(value / (Math.PI * 2)).toFixed(2)} Hz` : `λ${index + 1} ${value.toFixed(2)}`}</button>)}
-              </div>
-              <p>{modeFamily === 'modal'
-                ? `mode shape normalized — ${reducedMotion ? 'static (reduced motion)' : `animating at ${(animationHz ?? 0).toFixed(2)} Hz${nativeAnimationHz && nativeAnimationHz > 2 ? ' (display slowed ×4)' : ''}`}`
-                : `buckling mode normalized — ${reducedMotion ? 'static (reduced motion)' : 'illustrative animation, not displacement'}`}</p>
-              {viewDimension === '3d' && model3d.name === 'Slender deck' && modeFamily === 'modal' && selectedMode === 1 && (
-                <p className="honesty-note">f₂ is St. Venant torsion (girders out of phase) — not aeroelastic flutter; warping torsion out of scope.</p>
+          {(viewDimension === '2d' ? analysis.kind === 'stable' : analysis3d.kind === 'stable') && (
+            <div className="result-controls" aria-label="Static result display">
+              {viewDimension === '2d' &&
+                (['none', 'axial', 'shear', 'moment'] as const).map((diagram) => (
+                  <button
+                    key={diagram}
+                    type="button"
+                    className={resultDiagram === diagram ? 'active' : ''}
+                    onClick={() => setResultDiagram(diagram)}
+                  >
+                    {diagram === 'none' ? 'Results' : diagram[0]!.toUpperCase() + diagram.slice(1)}
+                  </button>
+                ))}
+              {viewDimension === '3d' &&
+                (['none', 'axial', 'shear', 'moment'] as const).map((diagram) => (
+                  <button
+                    key={`3d-${diagram}`}
+                    type="button"
+                    className={resultDiagram3d === diagram ? 'active' : ''}
+                    onClick={() => setResultDiagram3d(diagram)}
+                  >
+                    {diagram === 'none' ? 'Results' : diagram[0]!.toUpperCase() + diagram.slice(1)}
+                  </button>
+                ))}
+              <label>
+                <input
+                  type="checkbox"
+                  checked={showDeformed}
+                  onChange={(event) => setShowDeformed(event.target.checked)}
+                />{' '}
+                Deformed
+              </label>
+              {viewDimension === '2d' && (
+                <>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={shearFlexible}
+                      onChange={(event) => setShearFlexible(event.target.checked)}
+                    />{' '}
+                    Timoshenko
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={secondOrder}
+                      onChange={(event) => setSecondOrder(event.target.checked)}
+                    />{' '}
+                    P-Δ
+                  </label>
+                </>
               )}
-              <p>{(viewDimension === '3d' ? eigen3d?.buckling.values[0] : eigen.kind === 'ready' ? eigen.buckling.values[0] : undefined)
-                ? `λcr ${(viewDimension === '3d' ? eigen3d!.buckling.values[0]! : (eigen as { kind: 'ready'; buckling: EigenResult }).buckling.values[0]!).toFixed(2)} × reference load`
-                : 'No buckling under this load direction.'}</p>
-            </>}
-          </div>}
-          {viewDimension === '2d' && mode === 'test' && <TestConsole
-            model={model}
-            modal={modal}
-            buckling={eigen.kind === 'ready' ? eigen.buckling : undefined}
-            analysisOptions={analysisOptions}
-            playing={storyPlaying}
-            storyTime={storyTime}
-            traffic={trafficFrame}
-            trafficYieldCapacity={trafficYieldCapacity}
-            envelopeEnabled={envelopeEnabled}
-            onEnvelopeEnabled={(enabled) => {
-              setEnvelopeEnabled(enabled);
-              if (!enabled) {
-                setInfluenceEnvelope(false);
-                setMomentEnvelope(new Map());
-              }
-            }}
-            influenceEnvelope={influenceEnvelope}
-            onInfluenceEnvelope={(enabled) => {
-              setInfluenceEnvelope(enabled);
-              if (!enabled) setMomentEnvelope(new Map());
-            }}
-            ramp={rampFrame}
-            rampCapacity={capacity}
-            pushover={pushover}
-            wind={windFrame}
-            earthquake={earthquakeFrame}
-            onTogglePlayback={() => setStoryPlaying((playing) => !playing)}
-            onRestart={() => {
-              setStoryTime(0);
-              setWindFrame(undefined);
-              setEarthquakeFrame(undefined);
-              setMovingMassFrame(undefined);
-              setStoryPlaying(false);
-              if (influenceEnvelope && model.story.kind === 'traffic' && model.deck.length > 0) {
-                try { setMomentEnvelope(memberMomentEnvelopeFromInfluence(model, analysisOptions)); }
-                catch { setMomentEnvelope(new Map()); }
-              } else {
-                setMomentEnvelope(new Map());
-              }
-            }}
-            onSeekTrafficStation={(station) => {
-              if (model.story.kind !== 'traffic') return;
-              setStoryPlaying(false);
-              setMovingMassFrame(undefined);
-              setStoryTime(station / Math.max(0.1, model.story.speed));
-            }}
-            onReplayFailure={() => { setStoryPlaying(false); setStoryTime(8); setFailureReplay((value) => value + 1); }}
-            onReturn={() => setMode('build')}
-          />}
+            </div>
+          )}
+          {viewDimension === '2d' && analysis.kind === 'divergent' && (
+            <div className="shear-note" role="alert">
+              {analysis.message}
+            </div>
+          )}
+          {viewDimension === '2d' && stockyMembers.length > 0 && (
+            <div className="shear-note" role="note">
+              Shear flexibility matters when L/h &lt; 10 —{' '}
+              {stockyMembers.length === 1
+                ? `member ${stockyMembers[0]} is`
+                : `${stockyMembers.length} members are`}{' '}
+              stocky{shearFlexible ? '' : '; enable Timoshenko to include it'}.
+            </div>
+          )}
+          {viewDimension === '2d' && analysis.kind === 'stable' && analysis.secondOrder && (
+            <div className="pdelta-badge" role="status">
+              P-Δ ×{analysis.secondOrder.momentAmplification.toFixed(2)} moment · ×
+              {analysis.secondOrder.displacementAmplification.toFixed(2)} disp vs linear (
+              {analysis.secondOrder.iterations} iter)
+            </div>
+          )}
+          {deformation && showDeformed && deformation.maxMeters > 0 && (
+            <div className="deformation-badge">
+              deformation ×{formatScale(deformation.scale)} — true max{' '}
+              {formatLength(deformation.maxMeters)}
+            </div>
+          )}
+          {viewDimension === '2d' && windFrame && (
+            <div className="dynamic-badge">
+              Newmark response — display scale ×
+              {formatScale(deformationDisplay(windFrame.scenario.mesh, windFrame.u, 44).scale)} ·
+              simplified uniform wind field (member-normal 2D pressure)
+            </div>
+          )}
+          {viewDimension === '2d' && earthquakeFrame && (
+            <div className="dynamic-badge">
+              Newmark response — display scale ×
+              {formatScale(
+                deformationDisplay(earthquakeFrame.scenario.mesh, earthquakeFrame.u, 44).scale,
+              )}{' '}
+              · horizontal base excitation −M·ι·ü_g
+            </div>
+          )}
+          {viewDimension === '2d' && movingMassFrame?.movingMass && (
+            <div className="dynamic-badge">
+              Moving-mass Newmark — amp ×{movingMassFrame.movingMass.amplification.toFixed(2)} vs
+              static at this station · vehicle mass lumped at axle contacts
+            </div>
+          )}
+          {viewDimension === '2d' && failurePhase !== undefined && (
+            <div className="failure-cinematic-badge">
+              failure animation ×
+              {reducedMotion ? 'static' : formatScale(0.25 + failurePhase * 0.75)} — illustrative,
+              computed onset and mechanism
+            </div>
+          )}
+          {viewDimension === '2d' && model.members.length >= MEMBER_SOFT_LIMIT && (
+            <div className="member-limit-badge">
+              {model.members.length}/{MEMBER_HARD_LIMIT} members — performance warning at{' '}
+              {MEMBER_SOFT_LIMIT}; hard cap {MEMBER_HARD_LIMIT}
+            </div>
+          )}
+          {viewDimension === '3d' && model3d.members.length >= MEMBER_SOFT_LIMIT_3D && (
+            <div className="member-limit-badge">
+              {model3d.members.length}/{MEMBER_HARD_LIMIT_3D} members — line LOD forced above 64;
+              eigen skipped above ~1.5k DOF
+            </div>
+          )}
+          {viewDimension === '3d' &&
+            analysis3d.kind === 'stable' &&
+            analysis3d.mesh.ndof > 1500 && (
+              <div className="member-limit-badge">
+                Modal/buckling deferred — {analysis3d.mesh.ndof} DOF (cap 1500 for live Build)
+              </div>
+            )}
+          {(viewDimension === '3d' ? analysis3d.kind === 'stable' : analysis.kind === 'stable') && (
+            <div className="eigen-panel" aria-live="polite">
+              <span>Modal + Buckling{viewDimension === '3d' ? ' (3D)' : ''}</span>
+              {viewDimension === '2d' && eigen.kind === 'loading' && <p>Solving in worker…</p>}
+              {viewDimension === '2d' && eigen.kind === 'error' && (
+                <p className="eigen-error">{eigen.message}</p>
+              )}
+              {((viewDimension === '2d' && eigen.kind === 'ready') ||
+                (viewDimension === '3d' && eigen3d)) &&
+                activeEigen && (
+                  <>
+                    <div className="mode-family" aria-label="Mode shape family">
+                      <button
+                        type="button"
+                        className={modeFamily === 'modal' ? 'active' : ''}
+                        onClick={() => {
+                          setModeFamily('modal');
+                          setSelectedMode(0);
+                        }}
+                      >
+                        Modal
+                      </button>
+                      <button
+                        type="button"
+                        className={modeFamily === 'buckling' ? 'active' : ''}
+                        onClick={() => {
+                          setModeFamily('buckling');
+                          setSelectedMode(0);
+                        }}
+                      >
+                        Buckling
+                      </button>
+                    </div>
+                    <div className="mode-list" aria-label="Animated mode shapes">
+                      {Array.from(activeEigen.values, (value, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          className={selectedMode === index ? 'active' : ''}
+                          onClick={() => setSelectedMode(index)}
+                        >
+                          {modeFamily === 'modal'
+                            ? `f${index + 1} ${(value / (Math.PI * 2)).toFixed(2)} Hz`
+                            : `λ${index + 1} ${value.toFixed(2)}`}
+                        </button>
+                      ))}
+                    </div>
+                    <p>
+                      {modeFamily === 'modal'
+                        ? `mode shape normalized — ${reducedMotion ? 'static (reduced motion)' : `animating at ${(animationHz ?? 0).toFixed(2)} Hz${nativeAnimationHz && nativeAnimationHz > 2 ? ' (display slowed ×4)' : ''}`}`
+                        : `buckling mode normalized — ${reducedMotion ? 'static (reduced motion)' : 'illustrative animation, not displacement'}`}
+                    </p>
+                    {viewDimension === '3d' &&
+                      model3d.name === 'Slender deck' &&
+                      modeFamily === 'modal' &&
+                      selectedMode === 1 && (
+                        <p className="honesty-note">
+                          f₂ is St. Venant torsion (girders out of phase) — not aeroelastic flutter;
+                          warping torsion out of scope.
+                        </p>
+                      )}
+                    <p>
+                      {(
+                        viewDimension === '3d'
+                          ? eigen3d?.buckling.values[0]
+                          : eigen.kind === 'ready'
+                            ? eigen.buckling.values[0]
+                            : undefined
+                      )
+                        ? `λcr ${(viewDimension === '3d' ? eigen3d!.buckling.values[0]! : (eigen as { kind: 'ready'; buckling: EigenResult }).buckling.values[0]!).toFixed(2)} × reference load`
+                        : 'No buckling under this load direction.'}
+                    </p>
+                  </>
+                )}
+            </div>
+          )}
+          {viewDimension === '2d' && mode === 'test' && (
+            <TestConsole
+              model={model}
+              modal={modal}
+              buckling={eigen.kind === 'ready' ? eigen.buckling : undefined}
+              analysisOptions={analysisOptions}
+              playing={storyPlaying}
+              storyTime={storyTime}
+              traffic={trafficFrame}
+              trafficYieldCapacity={trafficYieldCapacity}
+              envelopeEnabled={envelopeEnabled}
+              onEnvelopeEnabled={(enabled) => {
+                setEnvelopeEnabled(enabled);
+                if (!enabled) {
+                  setInfluenceEnvelope(false);
+                  setMomentEnvelope(new Map());
+                }
+              }}
+              influenceEnvelope={influenceEnvelope}
+              onInfluenceEnvelope={(enabled) => {
+                setInfluenceEnvelope(enabled);
+                if (!enabled) setMomentEnvelope(new Map());
+              }}
+              ramp={rampFrame}
+              rampCapacity={capacity}
+              pushover={pushover}
+              wind={windFrame}
+              earthquake={earthquakeFrame}
+              onTogglePlayback={() => setStoryPlaying((playing) => !playing)}
+              onRestart={() => {
+                setStoryTime(0);
+                setWindFrame(undefined);
+                setEarthquakeFrame(undefined);
+                setMovingMassFrame(undefined);
+                setStoryPlaying(false);
+                if (influenceEnvelope && model.story.kind === 'traffic' && model.deck.length > 0) {
+                  try {
+                    setMomentEnvelope(memberMomentEnvelopeFromInfluence(model, analysisOptions));
+                  } catch {
+                    setMomentEnvelope(new Map());
+                  }
+                } else {
+                  setMomentEnvelope(new Map());
+                }
+              }}
+              onSeekTrafficStation={(station) => {
+                if (model.story.kind !== 'traffic') return;
+                setStoryPlaying(false);
+                setMovingMassFrame(undefined);
+                setStoryTime(station / Math.max(0.1, model.story.speed));
+              }}
+              onReplayFailure={() => {
+                setStoryPlaying(false);
+                setStoryTime(8);
+                setFailureReplay((value) => value + 1);
+              }}
+              onReturn={() => setMode('build')}
+            />
+          )}
         </section>
         {viewDimension === '2d' && <Inspector />}
       </section>

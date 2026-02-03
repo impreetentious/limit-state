@@ -5,7 +5,12 @@ import { MATERIALS, sectionProps } from '../fem/materials';
 import type { AnalysisOptions, EditorModel, MemberSpec, NodeSpec } from '../fem/types';
 import { rampCapacity } from '../stories/ramp';
 import { prepareTraffic, trafficYieldWeightAt } from '../stories/traffic';
-import type { ChallengeCheck, ChallengeConstraints, ChallengeSpec, ChallengeVerdict } from './types';
+import type {
+  ChallengeCheck,
+  ChallengeConstraints,
+  ChallengeSpec,
+  ChallengeVerdict,
+} from './types';
 
 /** Steel mass of every `steel-s355` member (kg). */
 export function steelMassKg(model: EditorModel): number {
@@ -55,7 +60,10 @@ export function abutmentsOnly(model: EditorModel): boolean {
 }
 
 /** Mid-deck traffic yield capacity in kN, or undefined when the deck is missing/invalid. */
-export function midspanTruckCapacitykN(model: EditorModel, options: AnalysisOptions = {}): number | undefined {
+export function midspanTruckCapacitykN(
+  model: EditorModel,
+  options: AnalysisOptions = {},
+): number | undefined {
   if (model.deck.length === 0) return undefined;
   try {
     const scenario = prepareTraffic(model, options);
@@ -76,7 +84,10 @@ export function evaluateChallenge(
   const steel = steelMassKg(model);
   const span = clearSpanM(model);
   const height = structureHeightM(model);
-  const truck = constraints.minTruckCapacitykN !== undefined ? midspanTruckCapacitykN(model, options) : undefined;
+  const truck =
+    constraints.minTruckCapacitykN !== undefined
+      ? midspanTruckCapacitykN(model, options)
+      : undefined;
   const ramp = constraints.minRampLambda !== undefined ? rampCapacity(probed, options) : undefined;
 
   const checks: ChallengeCheck[] = [
@@ -90,51 +101,65 @@ export function evaluateChallenge(
   ];
 
   if (constraints.minClearSpanM !== undefined) {
-    checks.push(check(
-      'clear-span',
-      'Clear span',
-      span + 1e-9 >= constraints.minClearSpanM,
-      formatLength(span),
-      `≥ ${formatLength(constraints.minClearSpanM)}`,
-    ));
+    checks.push(
+      check(
+        'clear-span',
+        'Clear span',
+        span + 1e-9 >= constraints.minClearSpanM,
+        formatLength(span),
+        `≥ ${formatLength(constraints.minClearSpanM)}`,
+      ),
+    );
   }
   if (constraints.minHeightM !== undefined) {
-    checks.push(check(
-      'height',
-      'Height',
-      height + 1e-9 >= constraints.minHeightM,
-      formatLength(height),
-      `≥ ${formatLength(constraints.minHeightM)}`,
-    ));
+    checks.push(
+      check(
+        'height',
+        'Height',
+        height + 1e-9 >= constraints.minHeightM,
+        formatLength(height),
+        `≥ ${formatLength(constraints.minHeightM)}`,
+      ),
+    );
   }
   if (constraints.abutmentsOnly) {
-    checks.push(check(
-      'abutments-only',
-      'Abutments only',
-      abutmentsOnly(model),
-      abutmentsOnly(model) ? 'ends only' : 'intermediate support',
-      'supports only at span ends',
-    ));
+    checks.push(
+      check(
+        'abutments-only',
+        'Abutments only',
+        abutmentsOnly(model),
+        abutmentsOnly(model) ? 'ends only' : 'intermediate support',
+        'supports only at span ends',
+      ),
+    );
   }
   if (constraints.minTruckCapacitykN !== undefined) {
-    const ok = truck !== undefined && Number.isFinite(truck) && truck + 1e-9 >= constraints.minTruckCapacitykN;
-    checks.push(check(
-      'truck-capacity',
-      'Truck capacity',
-      ok,
-      truck === undefined ? 'no deck / unstable' : `${truck.toFixed(0)} kN`,
-      `≥ ${constraints.minTruckCapacitykN} kN at midspan`,
-    ));
+    const ok =
+      truck !== undefined &&
+      Number.isFinite(truck) &&
+      truck + 1e-9 >= constraints.minTruckCapacitykN;
+    checks.push(
+      check(
+        'truck-capacity',
+        'Truck capacity',
+        ok,
+        truck === undefined ? 'no deck / unstable' : `${truck.toFixed(0)} kN`,
+        `≥ ${constraints.minTruckCapacitykN} kN at midspan`,
+      ),
+    );
   }
   if (constraints.minRampLambda !== undefined) {
-    const ok = ramp !== undefined && Number.isFinite(ramp) && ramp + 1e-9 >= constraints.minRampLambda;
-    checks.push(check(
-      'ramp-lambda',
-      'Ramp capacity',
-      ok,
-      ramp === undefined ? 'unstable / no limit' : `λ ${ramp.toFixed(2)}`,
-      `λ ≥ ${constraints.minRampLambda}`,
-    ));
+    const ok =
+      ramp !== undefined && Number.isFinite(ramp) && ramp + 1e-9 >= constraints.minRampLambda;
+    checks.push(
+      check(
+        'ramp-lambda',
+        'Ramp capacity',
+        ok,
+        ramp === undefined ? 'unstable / no limit' : `λ ${ramp.toFixed(2)}`,
+        `λ ≥ ${constraints.minRampLambda}`,
+      ),
+    );
   }
 
   return {
@@ -149,7 +174,13 @@ export function evaluateChallenge(
   };
 }
 
-function check(id: string, label: string, ok: boolean, actual: string, required: string): ChallengeCheck {
+function check(
+  id: string,
+  label: string,
+  ok: boolean,
+  actual: string,
+  required: string,
+): ChallengeCheck {
   return { id, label, ok, actual, required };
 }
 
@@ -162,7 +193,10 @@ function withProbeLoads(model: EditorModel, constraints: ChallengeConstraints): 
   }
   return {
     ...model,
-    loads: { gravity: model.loads.gravity, points: [{ node: tip.id, fx: constraints.probeTipLoadN, fy: 0 }] },
+    loads: {
+      gravity: model.loads.gravity,
+      points: [{ node: tip.id, fx: constraints.probeTipLoadN, fy: 0 }],
+    },
     story: { kind: 'ramp' },
   };
 }

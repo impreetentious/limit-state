@@ -29,8 +29,10 @@ export function newmarkSdofRelative(
   ugDdot: Float64Array,
   dt: number,
 ): Float64Array {
-  if (!(omega > 0) || !Number.isFinite(omega)) throw new Error('SDOF ω must be finite and positive.');
-  if (!(zeta >= 0) || !Number.isFinite(zeta)) throw new Error('SDOF ζ must be finite and non-negative.');
+  if (!(omega > 0) || !Number.isFinite(omega))
+    throw new Error('SDOF ω must be finite and positive.');
+  if (!(zeta >= 0) || !Number.isFinite(zeta))
+    throw new Error('SDOF ζ must be finite and non-negative.');
   if (!(dt > 0) || !Number.isFinite(dt)) throw new Error('SDOF Δt must be finite and positive.');
   const u = new Float64Array(ugDdot.length);
   let disp = 0;
@@ -97,7 +99,8 @@ export function responseSpectrum(
 
 /** Default log-spaced sweep 0.1–10 Hz (81 points). */
 export function spectrumFrequencies(minHz = 0.1, maxHz = 10, count = 81): number[] {
-  if (!(minHz > 0) || !(maxHz > minHz) || !(count >= 2)) throw new Error('Invalid spectrum frequency grid.');
+  if (!(minHz > 0) || !(maxHz > minHz) || !(count >= 2))
+    throw new Error('Invalid spectrum frequency grid.');
   const out: number[] = [];
   const logMin = Math.log(minHz);
   const logMax = Math.log(maxHz);

@@ -13,14 +13,17 @@ export interface VehicleContact {
 
 /** Total vehicle mass from weight in kN: m = W·1000 / g. */
 export function vehicleMassKg(weightkN: number): number {
-  return Math.max(0, weightkN) * 1000 / STANDARD_GRAVITY;
+  return (Math.max(0, weightkN) * 1000) / STANDARD_GRAVITY;
 }
 
 /**
  * Copy of the structure mass with vehicle point masses added to translational
  * diagonals (ux, uy) at element ends, linearly split by ξ.
  */
-export function assembleMassWithVehicle(mesh: AnalysisMesh, contacts: readonly VehicleContact[]): Float64Array {
+export function assembleMassWithVehicle(
+  mesh: AnalysisMesh,
+  contacts: readonly VehicleContact[],
+): Float64Array {
   const M = assembleM(mesh);
   addLumpedVehicleMass(M, mesh, contacts);
   return M;
@@ -40,7 +43,8 @@ export function addLumpedVehicleMass(
   for (const contact of contacts) {
     const element = mesh.elements[contact.element];
     if (!element) throw new Error(`Vehicle contact references missing element ${contact.element}.`);
-    if (!(contact.xi >= 0 && contact.xi <= 1)) throw new Error('Vehicle contact ξ must be within [0, 1].');
+    if (!(contact.xi >= 0 && contact.xi <= 1))
+      throw new Error('Vehicle contact ξ must be within [0, 1].');
     if (!(contact.massKg >= 0) || !Number.isFinite(contact.massKg)) {
       throw new Error('Vehicle contact mass must be finite and non-negative.');
     }

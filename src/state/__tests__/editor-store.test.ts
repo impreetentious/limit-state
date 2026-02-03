@@ -25,7 +25,12 @@ describe('editor store — M2 snapshots and build semantics', () => {
 
   it('only extends deck paths from an endpoint', () => {
     const store = useEditorStore.getState();
-    const nodes = [store.addNode(0, 0), store.addNode(2, 0), store.addNode(4, 0), store.addNode(6, 0)];
+    const nodes = [
+      store.addNode(0, 0),
+      store.addNode(2, 0),
+      store.addNode(4, 0),
+      store.addNode(6, 0),
+    ];
     const first = useEditorStore.getState().addMember(nodes[0]!, nodes[1]!)!;
     const second = useEditorStore.getState().addMember(nodes[1]!, nodes[2]!)!;
     const third = useEditorStore.getState().addMember(nodes[2]!, nodes[3]!)!;
@@ -73,17 +78,24 @@ describe('editor structural edits', () => {
     const state = useEditorStore.getState();
     expect(nodeId).toBe(4);
     expect(state.model.nodes.find((node) => node.id === nodeId)).toMatchObject({ x: 4, y: 0 });
-    expect(state.model.members).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 1, a: 1, b: 4, releaseB: false }),
-      expect.objectContaining({ id: 3, a: 4, b: 2, releaseA: false }),
-    ]));
+    expect(state.model.members).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 1, a: 1, b: 4, releaseB: false }),
+        expect.objectContaining({ id: 3, a: 4, b: 2, releaseA: false }),
+      ]),
+    );
     expect(state.model.deck).toEqual([1, 3, 2]);
     expect(prepareTraffic(state.model).length).toBe(16);
     expect(state.selection).toEqual({ kind: 'node', id: 4 });
   });
 
   it('retains a reversed traffic route when its member is split', () => {
-    useEditorStore.setState({ model: deckModel([2, 1]), past: [], future: [], selection: { kind: 'none' } });
+    useEditorStore.setState({
+      model: deckModel([2, 1]),
+      past: [],
+      future: [],
+      selection: { kind: 'none' },
+    });
     useEditorStore.getState().splitMember(1, 4, 0);
     const model = useEditorStore.getState().model;
     expect(model.deck).toEqual([2, 3, 1]);
@@ -106,10 +118,32 @@ function deckModel(deck: number[]): EditorModel {
     v: 1,
     name: 'deck fixture',
     seed: 1,
-    nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 8, y: 0 }, { id: 3, x: 16, y: 0 }],
+    nodes: [
+      { id: 1, x: 0, y: 0 },
+      { id: 2, x: 8, y: 0 },
+      { id: 3, x: 16, y: 0 },
+    ],
     members: [
-      { id: 1, a: 1, b: 2, material: 'steel-s355', section: defaultSection('box'), releaseA: false, releaseB: false, cableOnly: false },
-      { id: 2, a: 2, b: 3, material: 'steel-s355', section: defaultSection('box'), releaseA: false, releaseB: false, cableOnly: false },
+      {
+        id: 1,
+        a: 1,
+        b: 2,
+        material: 'steel-s355',
+        section: defaultSection('box'),
+        releaseA: false,
+        releaseB: false,
+        cableOnly: false,
+      },
+      {
+        id: 2,
+        a: 2,
+        b: 3,
+        material: 'steel-s355',
+        section: defaultSection('box'),
+        releaseA: false,
+        releaseB: false,
+        cableOnly: false,
+      },
     ],
     supports: [],
     loads: { gravity: false, points: [] },

@@ -113,7 +113,11 @@ function summarize(
   };
 }
 
-function solveScaled3d(model: EditorModel3d, loadFactor: number, options: AnalysisOptions3d): StaticAnalysis3d {
+function solveScaled3d(
+  model: EditorModel3d,
+  loadFactor: number,
+  options: AnalysisOptions3d,
+): StaticAnalysis3d {
   try {
     const mesh = buildMesh3d(model, options);
     const nodeIndex = new Map<number, number>();
@@ -125,13 +129,26 @@ function solveScaled3d(model: EditorModel3d, loadFactor: number, options: Analys
       const meshNode = nodeIndex.get(point.node);
       return meshNode === undefined
         ? []
-        : [{ meshNode, fx: point.fx, fy: point.fy, fz: point.fz, mx: point.mx, my: point.my, mz: point.mz }];
+        : [
+            {
+              meshNode,
+              fx: point.fx,
+              fy: point.fy,
+              fz: point.fz,
+              mx: point.mx,
+              my: point.my,
+              mz: point.mz,
+            },
+          ];
     });
     const base = assembleLoadCase3d(mesh, { gravity: model.loads.gravity, points });
     const loads = scaleLoadAssembly3d(base, loadFactor);
     return solveStatic3d(mesh, loads.F, undefined, loads.elementFixedEnd);
   } catch (error) {
-    return { kind: 'invalid', message: error instanceof Error ? error.message : 'Cable analysis could not run.' };
+    return {
+      kind: 'invalid',
+      message: error instanceof Error ? error.message : 'Cable analysis could not run.',
+    };
   }
 }
 
@@ -139,7 +156,8 @@ export function scaleLoadAssembly3d(loads: LoadAssembly3d, factor: number): Load
   const F = new Float64Array(loads.F.length);
   const elementFixedEnd = new Float64Array(loads.elementFixedEnd.length);
   for (let index = 0; index < F.length; index++) F[index] = loads.F[index]! * factor;
-  for (let index = 0; index < elementFixedEnd.length; index++) elementFixedEnd[index] = loads.elementFixedEnd[index]! * factor;
+  for (let index = 0; index < elementFixedEnd.length; index++)
+    elementFixedEnd[index] = loads.elementFixedEnd[index]! * factor;
   return { F, elementFixedEnd };
 }
 
@@ -156,7 +174,10 @@ function withActiveCables3d(model: EditorModel3d, active: ReadonlySet<number>): 
 }
 
 /** Tension-positive axial from end-A convention N = −Fx. */
-function memberAxial3d(analysis: Extract<StaticAnalysis3d, { kind: 'stable' }>, memberId: number): number {
+function memberAxial3d(
+  analysis: Extract<StaticAnalysis3d, { kind: 'stable' }>,
+  memberId: number,
+): number {
   let N = 0;
   let found = false;
   for (let index = 0; index < analysis.mesh.elements.length; index++) {

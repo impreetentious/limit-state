@@ -31,7 +31,12 @@ export function modalAssembled(
 ): EigenResult {
   const prepared = prepareAssembled(layout, Kfull, nModes);
   const M = freeMatrix(Mfull, layout.ndof, layout.freeDofs);
-  let basis = orthonormalizeMetric(initialBasis(prepared.n, prepared.p), M, prepared.n, prepared.p).basis;
+  let basis = orthonormalizeMetric(
+    initialBasis(prepared.n, prepared.p),
+    M,
+    prepared.n,
+    prepared.p,
+  ).basis;
   let previous = new Float64Array(0);
   let iterations = 0;
   let ritz: GeneralizedEigen | undefined;
@@ -56,13 +61,22 @@ export function modalAssembled(
   const values = new Float64Array(prepared.modes);
   for (let index = 0; index < prepared.modes; index++) {
     const value = ritz.values[index]!;
-    if (!(value > 0) || !Number.isFinite(value)) throw new Error('Modal analysis produced a non-positive eigenvalue.');
+    if (!(value > 0) || !Number.isFinite(value))
+      throw new Error('Modal analysis produced a non-positive eigenvalue.');
     values[index] = Math.sqrt(value);
   }
   return {
     kind: 'modal',
     values,
-    vectors: expandModeVectors(layout, ritzBasis, prepared.n, prepared.p, range(prepared.modes), M, true),
+    vectors: expandModeVectors(
+      layout,
+      ritzBasis,
+      prepared.n,
+      prepared.p,
+      range(prepared.modes),
+      M,
+      true,
+    ),
     iterations,
   };
 }
@@ -89,7 +103,12 @@ export function bucklingAssembled(
   const B = new Float64Array(kg.length);
   for (let index = 0; index < kg.length; index++) B[index] = -kg[index]!;
 
-  let basis = orthonormalizeMetric(initialBasis(prepared.n, prepared.p), prepared.K, prepared.n, prepared.p).basis;
+  let basis = orthonormalizeMetric(
+    initialBasis(prepared.n, prepared.p),
+    prepared.K,
+    prepared.n,
+    prepared.p,
+  ).basis;
   let previous = new Float64Array(0);
   let iterations = 0;
   let ritz: GeneralizedEigen | undefined;
@@ -119,7 +138,15 @@ export function bucklingAssembled(
   return {
     kind: 'buckling',
     values: factors,
-    vectors: expandModeVectors(layout, ritzBasis, prepared.n, prepared.p, positive.indices, undefined, false),
+    vectors: expandModeVectors(
+      layout,
+      ritzBasis,
+      prepared.n,
+      prepared.p,
+      positive.indices,
+      undefined,
+      false,
+    ),
     iterations,
   };
 }
@@ -138,13 +165,21 @@ interface PreparedProblem {
   modes: number;
 }
 
-function prepareAssembled(layout: EigenDofLayout, Kfull: Float64Array, requestedModes: number): PreparedProblem {
-  if (!Number.isInteger(requestedModes) || requestedModes < 1) throw new Error('Eigenanalysis needs at least one mode.');
+function prepareAssembled(
+  layout: EigenDofLayout,
+  Kfull: Float64Array,
+  requestedModes: number,
+): PreparedProblem {
+  if (!Number.isInteger(requestedModes) || requestedModes < 1)
+    throw new Error('Eigenanalysis needs at least one mode.');
   const n = layout.freeDofs.length;
   if (n === 0) throw new Error('Eigenanalysis needs at least one unconstrained degree of freedom.');
   const K = freeMatrix(Kfull, layout.ndof, layout.freeDofs);
   const factor = factorLDLT(K, n);
-  if (!factor.ok) throw new Error(`Eigenanalysis cannot run: mechanism at free DOF ${factor.mechanism.freeDofIndex}.`);
+  if (!factor.ok)
+    throw new Error(
+      `Eigenanalysis cannot run: mechanism at free DOF ${factor.mechanism.freeDofIndex}.`,
+    );
   const modes = Math.min(requestedModes, n);
   const p = Math.min(n, Math.max(modes, Math.min(14, modes + 6)));
   return { K, factor, n, p, modes };
@@ -156,13 +191,26 @@ interface OrthonormalBasis {
 }
 
 /** Modified Gram–Schmidt in the M (or K) inner product. */
-function orthonormalizeMetric(input: Float64Array, metric: Float64Array, n: number, columns: number): OrthonormalBasis {
+function orthonormalizeMetric(
+  input: Float64Array,
+  metric: Float64Array,
+  n: number,
+  columns: number,
+): OrthonormalBasis {
   const basis = new Float64Array(n * columns);
   const metricBasis = new Float64Array(n * columns);
   for (let column = 0; column < columns; column++) {
     let vector = columnSlice(input, n, columns, column);
     let metricVector = multiplyMatrixVector(metric, n, vector);
-    let squaredNorm = removeMetricComponents(vector, metricVector, basis, metricBasis, n, columns, column);
+    let squaredNorm = removeMetricComponents(
+      vector,
+      metricVector,
+      basis,
+      metricBasis,
+      n,
+      columns,
+      column,
+    );
     // K_g has zero axial rows, so buckling iteration can legitimately lose a
     // direction. Retain a deterministic complementary direction for the Ritz
     // space instead of treating that physical zero root as an algorithm error.
@@ -170,7 +218,15 @@ function orthonormalizeMetric(input: Float64Array, metric: Float64Array, n: numb
       vector = new Float64Array(n);
       vector[(column + candidate) % n] = 1;
       metricVector = multiplyMatrixVector(metric, n, vector);
-      squaredNorm = removeMetricComponents(vector, metricVector, basis, metricBasis, n, columns, column);
+      squaredNorm = removeMetricComponents(
+        vector,
+        metricVector,
+        basis,
+        metricBasis,
+        n,
+        columns,
+        column,
+      );
     }
     if (!(squaredNorm > 1e-20) || !Number.isFinite(squaredNorm)) {
       throw new Error('Eigenanalysis basis lost rank; revise the structural model.');
@@ -209,7 +265,8 @@ function initialBasis(n: number, columns: number): Float64Array {
   const out = new Float64Array(n * columns);
   for (let row = 0; row < n; row++) {
     for (let column = 0; column < columns; column++) {
-      out[row * columns + column] = Math.sin((row + 1) * (column + 1) * 0.719) + Math.cos((row + 2) * (column + 1) * 0.311);
+      out[row * columns + column] =
+        Math.sin((row + 1) * (column + 1) * 0.719) + Math.cos((row + 2) * (column + 1) * 0.311);
     }
   }
   return out;
@@ -229,12 +286,18 @@ function solveColumns(
   return out;
 }
 
-function matrixTimesColumns(matrix: Float64Array, n: number, basis: Float64Array, columns: number): Float64Array {
+function matrixTimesColumns(
+  matrix: Float64Array,
+  n: number,
+  basis: Float64Array,
+  columns: number,
+): Float64Array {
   const out = new Float64Array(n * columns);
   for (let row = 0; row < n; row++) {
     for (let column = 0; column < columns; column++) {
       let value = 0;
-      for (let index = 0; index < n; index++) value += matrix[row * n + index]! * basis[index * columns + column]!;
+      for (let index = 0; index < n; index++)
+        value += matrix[row * n + index]! * basis[index * columns + column]!;
       out[row * columns + column] = value;
     }
   }
@@ -242,24 +305,36 @@ function matrixTimesColumns(matrix: Float64Array, n: number, basis: Float64Array
 }
 
 /** XᵀAX for a column-major-by-row basis encoded as [row * p + column]. */
-function project(left: Float64Array, right: Float64Array, n: number, columns: number): Float64Array {
+function project(
+  left: Float64Array,
+  right: Float64Array,
+  n: number,
+  columns: number,
+): Float64Array {
   const out = new Float64Array(columns * columns);
   for (let row = 0; row < columns; row++) {
     for (let column = 0; column < columns; column++) {
       let value = 0;
-      for (let index = 0; index < n; index++) value += left[index * columns + row]! * right[index * columns + column]!;
+      for (let index = 0; index < n; index++)
+        value += left[index * columns + row]! * right[index * columns + column]!;
       out[row * columns + column] = value;
     }
   }
   return out;
 }
 
-function rotateColumns(basis: Float64Array, coordinates: Float64Array, n: number, columns: number): Float64Array {
+function rotateColumns(
+  basis: Float64Array,
+  coordinates: Float64Array,
+  n: number,
+  columns: number,
+): Float64Array {
   const out = new Float64Array(n * columns);
   for (let row = 0; row < n; row++) {
     for (let column = 0; column < columns; column++) {
       let value = 0;
-      for (let index = 0; index < columns; index++) value += basis[row * columns + index]! * coordinates[index * columns + column]!;
+      for (let index = 0; index < columns; index++)
+        value += basis[row * columns + index]! * coordinates[index * columns + column]!;
       out[row * columns + column] = value;
     }
   }
@@ -287,9 +362,11 @@ function cholesky(matrix: Float64Array, n: number): Float64Array {
   for (let row = 0; row < n; row++) {
     for (let column = 0; column <= row; column++) {
       let value = matrix[row * n + column]!;
-      for (let index = 0; index < column; index++) value -= L[row * n + index]! * L[column * n + index]!;
+      for (let index = 0; index < column; index++)
+        value -= L[row * n + index]! * L[column * n + index]!;
       if (row === column) {
-        if (!(value > 1e-18) || !Number.isFinite(value)) throw new Error('Eigenanalysis metric is not positive definite.');
+        if (!(value > 1e-18) || !Number.isFinite(value))
+          throw new Error('Eigenanalysis metric is not positive definite.');
         L[row * n + column] = Math.sqrt(value);
       } else {
         L[row * n + column] = value / L[column * n + column]!;
@@ -304,7 +381,8 @@ function invertLower(L: Float64Array, n: number): Float64Array {
   for (let column = 0; column < n; column++) {
     for (let row = 0; row < n; row++) {
       let value = row === column ? 1 : 0;
-      for (let index = 0; index < row; index++) value -= L[row * n + index]! * inverse[index * n + column]!;
+      for (let index = 0; index < row; index++)
+        value -= L[row * n + index]! * inverse[index * n + column]!;
       inverse[row * n + column] = value / L[row * n + row]!;
     }
   }
@@ -383,12 +461,16 @@ function expandModeVectors(
       for (const value of vector) maximum = Math.max(maximum, Math.abs(value));
       scale = maximum > 0 ? 1 / maximum : 1;
     }
-    for (let row = 0; row < n; row++) out[layout.freeDofs[row]! * indices.length + outputColumn] = vector[row]! * scale;
+    for (let row = 0; row < n; row++)
+      out[layout.freeDofs[row]! * indices.length + outputColumn] = vector[row]! * scale;
   }
   return out;
 }
 
-function positiveBucklingRoots(values: Float64Array, maximum: number): { values: Float64Array; indices: number[] } {
+function positiveBucklingRoots(
+  values: Float64Array,
+  maximum: number,
+): { values: Float64Array; indices: number[] } {
   const indices: number[] = [];
   for (let index = 0; index < values.length && indices.length < maximum; index++) {
     if (values[index]! > 1e-12 && Number.isFinite(values[index]!)) indices.push(index);
@@ -400,7 +482,8 @@ function hasConverged(previous: Float64Array, current: Float64Array): boolean {
   if (previous.length !== current.length || current.length === 0) return false;
   for (let index = 0; index < current.length; index++) {
     const denominator = Math.max(Math.abs(current[index]!), 1e-16);
-    if (Math.abs(current[index]! - previous[index]!) / denominator >= RELATIVE_TOLERANCE) return false;
+    if (Math.abs(current[index]! - previous[index]!) / denominator >= RELATIVE_TOLERANCE)
+      return false;
   }
   return true;
 }
@@ -422,7 +505,9 @@ function orderAscending(values: Float64Array): number[] {
 }
 
 function orderByMagnitude(values: Float64Array): number[] {
-  return range(values.length).sort((left, right) => Math.abs(values[right]!) - Math.abs(values[left]!));
+  return range(values.length).sort(
+    (left, right) => Math.abs(values[right]!) - Math.abs(values[left]!),
+  );
 }
 
 function range(length: number): number[] {
@@ -437,7 +522,8 @@ function identity(n: number): Float64Array {
 
 function transpose(input: Float64Array, n: number): Float64Array {
   const out = new Float64Array(n * n);
-  for (let row = 0; row < n; row++) for (let column = 0; column < n; column++) out[column * n + row] = input[row * n + column]!;
+  for (let row = 0; row < n; row++)
+    for (let column = 0; column < n; column++) out[column * n + row] = input[row * n + column]!;
   return out;
 }
 
@@ -446,7 +532,8 @@ function multiplySquare(left: Float64Array, right: Float64Array, n: number): Flo
   for (let row = 0; row < n; row++) {
     for (let column = 0; column < n; column++) {
       let value = 0;
-      for (let index = 0; index < n; index++) value += left[row * n + index]! * right[index * n + column]!;
+      for (let index = 0; index < n; index++)
+        value += left[row * n + index]! * right[index * n + column]!;
       out[row * n + column] = value;
     }
   }
@@ -463,7 +550,12 @@ function multiplyMatrixVector(matrix: Float64Array, n: number, vector: Float64Ar
   return out;
 }
 
-function columnSlice(input: Float64Array, rows: number, columns: number, column: number): Float64Array {
+function columnSlice(
+  input: Float64Array,
+  rows: number,
+  columns: number,
+  column: number,
+): Float64Array {
   const out = new Float64Array(rows);
   for (let row = 0; row < rows; row++) out[row] = input[row * columns + column]!;
   return out;

@@ -41,19 +41,25 @@ export function buildDeckRoute3d(model: EditorModel3d, mesh: AnalysisMesh3d): De
     const member = members.get(id);
     if (!member) throw new Error('Deck references a missing member.');
     const reversed = member.b === current;
-    if (!reversed && member.a !== current) throw new Error('Deck members must form one continuous route.');
+    if (!reversed && member.a !== current)
+      throw new Error('Deck members must form one continuous route.');
     const startNode = current;
     const endNode = reversed ? member.a : member.b;
     const start = nodeById.get(startNode);
     const end = nodeById.get(endNode);
     if (!start || !end) throw new Error('Deck references a missing node.');
-    const elementIndices = mesh.elements.flatMap((element, index) => (element.memberId === id ? [index] : []));
+    const elementIndices = mesh.elements.flatMap((element, index) =>
+      element.memberId === id ? [index] : [],
+    );
     route.push({
       memberId: id,
       startNode,
       endNode,
       length: Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z),
-      elements: (reversed ? [...elementIndices].reverse() : elementIndices).map((index) => ({ index, reversed })),
+      elements: (reversed ? [...elementIndices].reverse() : elementIndices).map((index) => ({
+        index,
+        reversed,
+      })),
     });
     current = endNode;
   }
@@ -83,14 +89,16 @@ export function mapDeckStation3d(
       const element = mesh.elements[item.index]!;
       if (withinMember <= element.L || item === segment.elements.at(-1)) {
         const localFraction = Math.max(0, Math.min(1, withinMember / element.L));
-        return [{
-          station,
-          element: item.index,
-          xi: item.reversed ? 1 - localFraction : localFraction,
-          x: start.x + (end.x - start.x) * fraction,
-          y: start.y + (end.y - start.y) * fraction,
-          z: start.z + (end.z - start.z) * fraction,
-        }];
+        return [
+          {
+            station,
+            element: item.index,
+            xi: item.reversed ? 1 - localFraction : localFraction,
+            x: start.x + (end.x - start.x) * fraction,
+            y: start.y + (end.y - start.y) * fraction,
+            z: start.z + (end.z - start.z) * fraction,
+          },
+        ];
       }
       withinMember -= element.L;
     }

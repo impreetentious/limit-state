@@ -24,14 +24,14 @@ export interface GallerySource3d {
 
 /** Authored gallery scenes — presets plus challenge reference solutions. */
 export function gallerySources(): GallerySource[] {
-  const presets: GallerySource[] = PRESETS
-    .filter((preset) => preset.id !== 'blank')
-    .map((preset) => ({
+  const presets: GallerySource[] = PRESETS.filter((preset) => preset.id !== 'blank').map(
+    (preset) => ({
       id: `preset-${preset.id}`,
       title: preset.label.replace(/^\d+\s·\s/, ''),
       blurb: `Teaching preset — open in the editor and run its default story.`,
       model: preset.model,
-    }));
+    }),
+  );
 
   const solutions: GallerySource[] = CHALLENGES.map((challenge) => ({
     id: `solution-${challenge.id}`,
@@ -45,12 +45,10 @@ export function gallerySources(): GallerySource[] {
 
 /** 3D gallery sources — the spatial teaching presets. */
 export function gallerySources3d(): GallerySource3d[] {
-  return PRESETS_3D
-    .filter((preset) => preset.id !== 'blank')
-    .map((preset) => ({
-      id: `preset3d-${preset.id}`,
-      title: `${preset.label.replace(/^\d+\s·\s/, '')} (3D)`,
-      blurb: 'Spatial teaching preset — open in the 3D editor and run its default story.',
-      model: preset.build(),
-    }));
+  return PRESETS_3D.filter((preset) => preset.id !== 'blank').map((preset) => ({
+    id: `preset3d-${preset.id}`,
+    title: `${preset.label.replace(/^\d+\s·\s/, '')} (3D)`,
+    blurb: 'Spatial teaching preset — open in the 3D editor and run its default story.',
+    model: preset.build(),
+  }));
 }

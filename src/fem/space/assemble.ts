@@ -2,7 +2,13 @@
  * 12-DOF space-frame element matrices and assembly.
  * Local DOF order: [u, v, w, θx, θy, θz] × 2.
  */
-import { createSkyline, profileFromDofGroups, skylineAdd, skylineToDense, type SkylineMatrix } from '../skyline';
+import {
+  createSkyline,
+  profileFromDofGroups,
+  skylineAdd,
+  skylineToDense,
+  type SkylineMatrix,
+} from '../skyline';
 import type { AnalysisMesh3d, Element3d, EndReleases3d } from './types';
 
 const N = 12;
@@ -130,8 +136,7 @@ export function mLocal3d(rho: number, A: number, Iy: number, Iz: number, L: numb
     [-13 * L, -3 * L * L, -22 * L, 4 * L * L],
   ];
   const iz = [1, 5, 7, 11];
-  for (let i = 0; i < 4; i++)
-    for (let j = 0; j < 4; j++) m[iz[i]! * N + iz[j]!] = c * bend[i]![j]!;
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) m[iz[i]! * N + iz[j]!] = c * bend[i]![j]!;
 
   // RH for θy: flip signs on terms odd in L (w–θ couplings).
   const bendY = [
@@ -249,10 +254,20 @@ export function transformToGlobal3d(kLoc: Float64Array, R: Float64Array): Float6
 
 /** Local element stiffness after rotational end-release condensation. */
 export function elementLocalStiffness3d(element: Element3d, shearFlexible = false): Float64Array {
-  const shear = shearFlexible && element.As !== undefined && element.As > 0
-    ? { AsY: element.As, AsZ: element.As }
-    : undefined;
-  const elastic = kLocal3d(element.E, element.G, element.A, element.Iy, element.Iz, element.J, element.L, shear);
+  const shear =
+    shearFlexible && element.As !== undefined && element.As > 0
+      ? { AsY: element.As, AsZ: element.As }
+      : undefined;
+  const elastic = kLocal3d(
+    element.E,
+    element.G,
+    element.A,
+    element.Iy,
+    element.Iz,
+    element.J,
+    element.L,
+    shear,
+  );
   return condenseWithElementReleases(elastic, element, shear);
 }
 
@@ -309,7 +324,15 @@ export interface LoadAssembly3d {
 /** Nodal point loads (forces + optional moments) into the global vector. */
 export function assembleF3d(
   mesh: AnalysisMesh3d,
-  points: { meshNode: number; fx: number; fy: number; fz: number; mx?: number; my?: number; mz?: number }[],
+  points: {
+    meshNode: number;
+    fx: number;
+    fy: number;
+    fz: number;
+    mx?: number;
+    my?: number;
+    mz?: number;
+  }[],
 ): LoadAssembly3d {
   return assembleLoadCase3d(mesh, { points });
 }
@@ -323,7 +346,15 @@ export function assembleLoadCase3d(
   mesh: AnalysisMesh3d,
   opts: {
     gravity?: boolean;
-    points?: { meshNode: number; fx: number; fy: number; fz: number; mx?: number; my?: number; mz?: number }[];
+    points?: {
+      meshNode: number;
+      fx: number;
+      fy: number;
+      fz: number;
+      mx?: number;
+      my?: number;
+      mz?: number;
+    }[];
     inElement?: { element: number; xi: number; fx: number; fy: number; fz: number }[];
   },
 ): LoadAssembly3d {
@@ -340,12 +371,22 @@ export function assembleLoadCase3d(
       const wx = R[2]! * -w;
       const wy = R[5]! * -w;
       const wz = R[8]! * -w;
-      addEquivalentLocalLoad3d(F, mesh, index, uniformFixedEnd3d(wx, wy, wz, element.L), elementFixedEnd);
+      addEquivalentLocalLoad3d(
+        F,
+        mesh,
+        index,
+        uniformFixedEnd3d(wx, wy, wz, element.L),
+        elementFixedEnd,
+      );
     }
   }
 
   for (const point of opts.points ?? []) {
-    if (!Number.isInteger(point.meshNode) || point.meshNode < 0 || point.meshNode * 6 >= mesh.ndof) {
+    if (
+      !Number.isInteger(point.meshNode) ||
+      point.meshNode < 0 ||
+      point.meshNode * 6 >= mesh.ndof
+    ) {
       throw new Error(`Point load references missing mesh node ${point.meshNode}.`);
     }
     const base = 6 * point.meshNode;
@@ -360,13 +401,20 @@ export function assembleLoadCase3d(
   for (const axle of opts.inElement ?? []) {
     const element = mesh.elements[axle.element];
     if (!element) throw new Error(`In-element load references missing element ${axle.element}.`);
-    if (!(axle.xi >= 0 && axle.xi <= 1)) throw new Error('In-element load position xi must be within [0, 1].');
+    if (!(axle.xi >= 0 && axle.xi <= 1))
+      throw new Error('In-element load position xi must be within [0, 1].');
     const R = element.R;
     // local = R · global
     const px = R[0]! * axle.fx + R[1]! * axle.fy + R[2]! * axle.fz;
     const py = R[3]! * axle.fx + R[4]! * axle.fy + R[5]! * axle.fz;
     const pz = R[6]! * axle.fx + R[7]! * axle.fy + R[8]! * axle.fz;
-    addEquivalentLocalLoad3d(F, mesh, axle.element, pointFixedEnd3d(px, py, pz, axle.xi, element.L), elementFixedEnd);
+    addEquivalentLocalLoad3d(
+      F,
+      mesh,
+      axle.element,
+      pointFixedEnd3d(px, py, pz, axle.xi, element.L),
+      elementFixedEnd,
+    );
   }
 
   return { F, elementFixedEnd };
@@ -378,16 +426,16 @@ export function assembleLoadCase3d(
  */
 export function uniformFixedEnd3d(wx: number, wy: number, wz: number, L: number): Float64Array {
   const f = new Float64Array(12);
-  f[0] = -wx * L / 2;
-  f[6] = -wx * L / 2;
-  f[1] = -wy * L / 2;
-  f[5] = -wy * L * L / 12;
-  f[7] = -wy * L / 2;
-  f[11] = wy * L * L / 12;
-  f[2] = -wz * L / 2;
-  f[4] = wz * L * L / 12; // RH flip vs θz
-  f[8] = -wz * L / 2;
-  f[10] = -wz * L * L / 12;
+  f[0] = (-wx * L) / 2;
+  f[6] = (-wx * L) / 2;
+  f[1] = (-wy * L) / 2;
+  f[5] = (-wy * L * L) / 12;
+  f[7] = (-wy * L) / 2;
+  f[11] = (wy * L * L) / 12;
+  f[2] = (-wz * L) / 2;
+  f[4] = (wz * L * L) / 12; // RH flip vs θz
+  f[8] = (-wz * L) / 2;
+  f[10] = (-wz * L * L) / 12;
   return f;
 }
 
@@ -395,7 +443,13 @@ export function uniformFixedEnd3d(wx: number, wy: number, wz: number, L: number)
  * Hermite fixed-end for a local point force at ξ.
  * v/θz block matches 2D; w/θy uses the RH moment sign flip of k_y.
  */
-export function pointFixedEnd3d(px: number, py: number, pz: number, xi: number, L: number): Float64Array {
+export function pointFixedEnd3d(
+  px: number,
+  py: number,
+  pz: number,
+  xi: number,
+  L: number,
+): Float64Array {
   const oneMinusXi = 1 - xi;
   const n1 = 1 - 3 * xi ** 2 + 2 * xi ** 3;
   const n2 = xi - 2 * xi ** 2 + xi ** 3;
@@ -442,7 +496,12 @@ function addEquivalentLocalLoad3d(
   }
 }
 
-function addElementMatrix3d(global: Float64Array, ndof: number, local: Float64Array, element: Element3d): void {
+function addElementMatrix3d(
+  global: Float64Array,
+  ndof: number,
+  local: Float64Array,
+  element: Element3d,
+): void {
   const dofs = elementDofs3d(element);
   for (let i = 0; i < N; i++) {
     const row = dofs[i]!;
@@ -454,7 +513,11 @@ function addElementMatrix3d(global: Float64Array, ndof: number, local: Float64Ar
 }
 
 /** Scatter a 12×12 into the symmetric skyline (lower triangle only). */
-function addElementMatrixSkyline3d(global: SkylineMatrix, local: Float64Array, element: Element3d): void {
+function addElementMatrixSkyline3d(
+  global: SkylineMatrix,
+  local: Float64Array,
+  element: Element3d,
+): void {
   const dofs = elementDofs3d(element);
   for (let i = 0; i < N; i++) {
     for (let j = 0; j <= i; j++) {
@@ -488,10 +551,23 @@ function pushReleases(out: number[], base: number, r: EndReleases3d): void {
  * Static condensation of released rotational DOFs using the element's elastic
  * release transform (Cᵀ A C).
  */
-function condenseWithElementReleases(matrix: Float64Array, element: Element3d, shear?: { AsY: number; AsZ: number }): Float64Array {
+function condenseWithElementReleases(
+  matrix: Float64Array,
+  element: Element3d,
+  shear?: { AsY: number; AsZ: number },
+): Float64Array {
   const released = releasedRotations3d(element);
   if (released.length === 0) return matrix;
-  const elastic = kLocal3d(element.E, element.G, element.A, element.Iy, element.Iz, element.J, element.L, shear);
+  const elastic = kLocal3d(
+    element.E,
+    element.G,
+    element.A,
+    element.Iy,
+    element.Iz,
+    element.J,
+    element.L,
+    shear,
+  );
   const transform = releaseTransform3d(elastic, released);
   const condensed = new Float64Array(N * N);
   for (let row = 0; row < N; row++) {
@@ -558,7 +634,8 @@ function invertSmall(a: Float64Array, n: number): Float64Array {
     for (let row = 0; row < n; row++) {
       if (row === col) continue;
       const factor = m[row * 2 * n + col]!;
-      for (let j = 0; j < 2 * n; j++) m[row * 2 * n + j] = m[row * 2 * n + j]! - factor * m[col * 2 * n + j]!;
+      for (let j = 0; j < 2 * n; j++)
+        m[row * 2 * n + j] = m[row * 2 * n + j]! - factor * m[col * 2 * n + j]!;
     }
   }
   const inv = new Float64Array(n * n);

@@ -3,7 +3,14 @@
  * Slender deck is a twin-girder ladder so modal f₂ is St. Venant torsion
  * (the Tacoma cousin). Warping / aeroelastic flutter remain out of scope.
  */
-import { NO_RELEASES, type EditorModel3d, type EndReleases3d, type MemberSpec3d, type NodeSpec3d, type SupportSpec3d } from '../fem/space';
+import {
+  NO_RELEASES,
+  type EditorModel3d,
+  type EndReleases3d,
+  type MemberSpec3d,
+  type NodeSpec3d,
+  type SupportSpec3d,
+} from '../fem/space';
 import type { MaterialId, SectionSpec } from '../fem/types';
 
 const STEEL: MaterialId = 'steel-s355';
@@ -26,16 +33,41 @@ function frame(
   section: SectionSpec = BOX,
   material: MaterialId = STEEL,
 ): MemberSpec3d {
-  return { id, a, b, material, section: { ...section }, releaseA: NO_RELEASES, releaseB: NO_RELEASES, roll: 0, cableOnly: false };
+  return {
+    id,
+    a,
+    b,
+    material,
+    section: { ...section },
+    releaseA: NO_RELEASES,
+    releaseB: NO_RELEASES,
+    roll: 0,
+    cableOnly: false,
+  };
 }
 
 function truss(id: number, a: number, b: number, section: SectionSpec = TRUSS_BAR): MemberSpec3d {
   // Release bending (θy, θz); keep torsion so condensation stays nonsingular on open sections.
   const bendingOnly: EndReleases3d = { tx: false, ty: true, tz: true };
-  return { id, a, b, material: STEEL, section: { ...section }, releaseA: bendingOnly, releaseB: bendingOnly, roll: 0, cableOnly: false };
+  return {
+    id,
+    a,
+    b,
+    material: STEEL,
+    section: { ...section },
+    releaseA: bendingOnly,
+    releaseB: bendingOnly,
+    roll: 0,
+    cableOnly: false,
+  };
 }
 
-function cable(id: number, a: number, b: number, section: SectionSpec = { kind: 'rect', b: 0.02, h: 0.02 }): MemberSpec3d {
+function cable(
+  id: number,
+  a: number,
+  b: number,
+  section: SectionSpec = { kind: 'rect', b: 0.02, h: 0.02 },
+): MemberSpec3d {
   // Keep St. Venant torsion (tx) so condensation stays nonsingular at pin anchors.
   const bendingOnly: EndReleases3d = { tx: false, ty: true, tz: true };
   return {
@@ -318,10 +350,7 @@ export function radioMast3d(): EditorModel3d {
       { id: 2, x: 0, y: 0, z: 15 },
       { id: 3, x: 0, y: 0, z: 30 },
     ],
-    members: [
-      frame(1, 1, 2, SLENDER_MAST, 'spaghetti'),
-      frame(2, 2, 3, SLENDER_MAST, 'spaghetti'),
-    ],
+    members: [frame(1, 1, 2, SLENDER_MAST, 'spaghetti'), frame(2, 2, 3, SLENDER_MAST, 'spaghetti')],
     supports: [{ node: 1, kind: 'fixed' }],
     loads: {
       gravity: false,

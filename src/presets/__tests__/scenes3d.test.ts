@@ -15,7 +15,15 @@ import {
 
 describe('3D presets (Phase 3 polish)', () => {
   it('builds every teaching preset without a mechanism', () => {
-    for (const build of [simpleBeam3d, prattTruss3d, cantileverBridge3d, slenderDeck3d, slenderMastDemo, spacePortalDemo, spaceDeckDemo]) {
+    for (const build of [
+      simpleBeam3d,
+      prattTruss3d,
+      cantileverBridge3d,
+      slenderDeck3d,
+      slenderMastDemo,
+      spacePortalDemo,
+      spaceDeckDemo,
+    ]) {
       const model = build();
       const mesh = buildMesh3d(model);
       expect(mesh.elements.length).toBeGreaterThan(0);
@@ -38,7 +46,8 @@ describe('3D presets (Phase 3 polish)', () => {
     expect(rightIdx).toBeGreaterThanOrEqual(0);
 
     const count = result.values.length;
-    const uz = (nodeIndex: number, mode: number) => result.vectors[(nodeIndex * 6 + 2) * count + mode]!;
+    const uz = (nodeIndex: number, mode: number) =>
+      result.vectors[(nodeIndex * 6 + 2) * count + mode]!;
 
     const f1 = result.values[0]! / (2 * Math.PI);
     const f2 = result.values[1]! / (2 * Math.PI);

@@ -69,8 +69,7 @@ export function kgLocal(N: number, L: number): Float64Array {
     [-6 / 5, -L / 10, 6 / 5, -L / 10],
     [L / 10, (-L * L) / 30, -L / 10, (2 * L * L) / 15],
   ];
-  for (let i = 0; i < 4; i++)
-    for (let j = 0; j < 4; j++) g[idx[i]! * 6 + idx[j]!] = c * m[i]![j]!;
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) g[idx[i]! * 6 + idx[j]!] = c * m[i]![j]!;
   return g;
 }
 
@@ -90,8 +89,7 @@ export function mLocal(rho: number, A: number, L: number): Float64Array {
     [-13 * L, -3 * L * L, -22 * L, 4 * L * L],
   ];
   const idx = [1, 2, 4, 5];
-  for (let i = 0; i < 4; i++)
-    for (let j = 0; j < 4; j++) m[idx[i]! * 6 + idx[j]!] = c * b[i]![j]!;
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) m[idx[i]! * 6 + idx[j]!] = c * b[i]![j]!;
   return m;
 }
 
@@ -202,7 +200,11 @@ export function assembleLoadCase(
   const F = new Float64Array(mesh.ndof);
   const elementFixedEnd = new Float64Array(mesh.elements.length * 6);
   for (const point of opts.points) {
-    if (!Number.isInteger(point.meshNode) || point.meshNode < 0 || point.meshNode * 3 >= mesh.ndof) {
+    if (
+      !Number.isInteger(point.meshNode) ||
+      point.meshNode < 0 ||
+      point.meshNode * 3 >= mesh.ndof
+    ) {
       throw new Error(`Point load references missing mesh node ${point.meshNode}.`);
     }
     const xDof = 3 * point.meshNode;
@@ -216,24 +218,43 @@ export function assembleLoadCase(
       const element = mesh.elements[index]!;
       const weight = element.rho * element.A * STANDARD_GRAVITY;
       // Global gravity (0, -rho*A*g) resolved into local x/y components.
-      addEquivalentLocalLoad(F, mesh, index, uniformFixedEnd(-weight * element.sin, -weight * element.cos, element.L), elementFixedEnd);
+      addEquivalentLocalLoad(
+        F,
+        mesh,
+        index,
+        uniformFixedEnd(-weight * element.sin, -weight * element.cos, element.L),
+        elementFixedEnd,
+      );
     }
   }
 
   for (const udl of opts.elementUdls ?? []) {
     const element = mesh.elements[udl.element];
     if (!element) throw new Error(`UDL references missing element ${udl.element}.`);
-    addEquivalentLocalLoad(F, mesh, udl.element, uniformFixedEnd(0, -udl.w, element.L), elementFixedEnd);
+    addEquivalentLocalLoad(
+      F,
+      mesh,
+      udl.element,
+      uniformFixedEnd(0, -udl.w, element.L),
+      elementFixedEnd,
+    );
   }
 
   for (const axle of opts.inElement ?? []) {
     const element = mesh.elements[axle.element];
     if (!element) throw new Error(`In-element load references missing element ${axle.element}.`);
-    if (!(axle.xi >= 0 && axle.xi <= 1)) throw new Error('In-element load position xi must be within [0, 1].');
+    if (!(axle.xi >= 0 && axle.xi <= 1))
+      throw new Error('In-element load position xi must be within [0, 1].');
     // The force is global downward, resolved to the element's local axes.
     const localX = -axle.p * element.sin;
     const localY = -axle.p * element.cos;
-    addEquivalentLocalLoad(F, mesh, axle.element, pointFixedEnd(localX, localY, axle.xi, element.L), elementFixedEnd);
+    addEquivalentLocalLoad(
+      F,
+      mesh,
+      axle.element,
+      pointFixedEnd(localX, localY, axle.xi, element.L),
+      elementFixedEnd,
+    );
   }
 
   return { F, elementFixedEnd };
@@ -242,7 +263,12 @@ export function assembleLoadCase(
 /** Standard gravity in m/s² for self-weight assembly. */
 export const STANDARD_GRAVITY = 9.80665;
 
-function addElementMatrix(global: Float64Array, ndof: number, local: Float64Array, element: Element): void {
+function addElementMatrix(
+  global: Float64Array,
+  ndof: number,
+  local: Float64Array,
+  element: Element,
+): void {
   const dofs = elementDofs(element);
   for (let i = 0; i < 6; i++) {
     const row = dofs[i]!;
@@ -291,7 +317,11 @@ function condenseReleased(local: Float64Array, element: Element, phi: number): F
  * Coordinate transform for a rotational end release:
  * q_r = -k_rr⁻¹ k_rk q_k, so every compatible matrix is Cᵀ A C.
  */
-function releaseTransform(element: Element, phi: number, released = releasedRotations(element)): Float64Array {
+function releaseTransform(
+  element: Element,
+  phi: number,
+  released = releasedRotations(element),
+): Float64Array {
   const transform = new Float64Array(36);
   const kept = [0, 1, 2, 3, 4, 5].filter((dof) => !released.includes(dof));
   for (const dof of kept) transform[dof * 6 + dof] = 1;
@@ -329,7 +359,8 @@ function condenseFixedEnd(fixedEnd: Float64Array, element: Element, phi: number)
       for (let s = 0; s < released.length; s++) {
         const releasedR = released[r]!;
         const releasedS = released[s]!;
-        value -= local[i * 6 + releasedR]! * inverse[r * released.length + s]! * fixedEnd[releasedS]!;
+        value -=
+          local[i * 6 + releasedR]! * inverse[r * released.length + s]! * fixedEnd[releasedS]!;
       }
     }
     condensed[i] = value;

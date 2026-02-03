@@ -14,7 +14,10 @@ export interface RampFrame {
 }
 
 /** Exact first-limit capacity under proportional static loading. */
-export function rampCapacity(model: EditorModel, options: AnalysisOptions = {}): number | undefined {
+export function rampCapacity(
+  model: EditorModel,
+  options: AnalysisOptions = {},
+): number | undefined {
   try {
     const report = evaluateFailure(model, 1, options);
     if (report.kind === 'stable') return report.capacityFactor;
@@ -27,17 +30,26 @@ export function rampCapacity(model: EditorModel, options: AnalysisOptions = {}):
 }
 
 /** Analyze, classify, and (once failure occurs) build the deterministic cascade. */
-export function analyzeRamp(model: EditorModel, factor: number, includeCascade = false, options: AnalysisOptions = {}): RampFrame {
+export function analyzeRamp(
+  model: EditorModel,
+  factor: number,
+  includeCascade = false,
+  options: AnalysisOptions = {},
+): RampFrame {
   const safeFactor = Math.max(0.001, factor);
   const analysis = analyzeAtFactor(model, safeFactor, options);
-  if (analysis.kind === 'invalid' || analysis.kind === 'mechanism' || analysis.kind === 'divergent') return { factor: safeFactor, analysis };
+  if (analysis.kind === 'invalid' || analysis.kind === 'mechanism' || analysis.kind === 'divergent')
+    return { factor: safeFactor, analysis };
   try {
     const report = evaluateFailure(model, safeFactor, options);
     return {
       factor: safeFactor,
       analysis,
       report,
-      cascade: includeCascade && report.kind !== 'stable' ? collapseCascade(model, safeFactor, options) : undefined,
+      cascade:
+        includeCascade && report.kind !== 'stable'
+          ? collapseCascade(model, safeFactor, options)
+          : undefined,
     };
   } catch {
     return { factor: safeFactor, analysis };

@@ -6,7 +6,15 @@ import { assembleK, assembleLoadCase, elementLocalStiffness, type LoadAssembly }
 import { modelHasCables, solveTensionOnly } from './cables';
 import { buildMesh } from './mesh';
 import { solveSecondOrderStatic, type SecondOrderAnalysis } from './second-order';
-import { expandFreeVector, factorLDLT, freeMatrix, freeVector, mechanismEditorNode, solveFactored, type Factor } from './solve';
+import {
+  expandFreeVector,
+  factorLDLT,
+  freeMatrix,
+  freeVector,
+  mechanismEditorNode,
+  solveFactored,
+  type Factor,
+} from './solve';
 import type { AnalysisMesh, AnalysisOptions, EditorModel, StaticResult } from './types';
 
 export type StaticAnalysis =
@@ -47,14 +55,27 @@ export function prepareStaticSystem(mesh: AnalysisMesh): StaticSystem {
 }
 
 /** Solve one assembled static load case and recover all displayed result values. */
-export function solveStatic(mesh: AnalysisMesh, loads: LoadAssembly, cachedSystem?: StaticSystem): StaticAnalysis {
+export function solveStatic(
+  mesh: AnalysisMesh,
+  loads: LoadAssembly,
+  cachedSystem?: StaticSystem,
+): StaticAnalysis {
   const system = cachedSystem ?? prepareStaticSystem(mesh);
-  if (system.ndof !== mesh.ndof) return { kind: 'invalid', message: 'Static system does not match this analysis mesh.' };
+  if (system.ndof !== mesh.ndof)
+    return { kind: 'invalid', message: 'Static system does not match this analysis mesh.' };
   if ('mechanismFreeDof' in system) {
     const nodeId = mechanismEditorNode(mesh, system.mechanismFreeDof);
-    return { kind: 'mechanism', nodeId, message: `Node ${nodeId} can move freely — add a support or member.` };
+    return {
+      kind: 'mechanism',
+      nodeId,
+      message: `Node ${nodeId} can move freely — add a support or member.`,
+    };
   }
-  const u = expandFreeVector(mesh.ndof, mesh.freeDofs, solveFactored(system.factor, freeVector(loads.F, mesh.freeDofs)));
+  const u = expandFreeVector(
+    mesh.ndof,
+    mesh.freeDofs,
+    solveFactored(system.factor, freeVector(loads.F, mesh.freeDofs)),
+  );
   const elementForces = recoverElementForces(mesh, u, loads.elementFixedEnd);
   return {
     kind: 'stable',
@@ -70,11 +91,17 @@ export function solveStatic(mesh: AnalysisMesh, loads: LoadAssembly, cachedSyste
 }
 
 /** Build the model's base static load case (self-weight plus editor point loads). */
-export function analyzeStaticModel(model: EditorModel, options: AnalysisOptions = {}): StaticAnalysis {
+export function analyzeStaticModel(
+  model: EditorModel,
+  options: AnalysisOptions = {},
+): StaticAnalysis {
   try {
     if (modelHasCables(model)) {
       if (options.secondOrder) {
-        return { kind: 'invalid', message: 'P-Δ second-order is not combined with tension-only cables in v1.' };
+        return {
+          kind: 'invalid',
+          message: 'P-Δ second-order is not combined with tension-only cables in v1.',
+        };
       }
       return solveTensionOnly(model, options).analysis;
     }
@@ -92,7 +119,10 @@ export function analyzeStaticModel(model: EditorModel, options: AnalysisOptions 
     if (options.secondOrder) return asStaticAnalysis(solveSecondOrderStatic(mesh, loads));
     return solveStatic(mesh, loads);
   } catch (error) {
-    return { kind: 'invalid', message: error instanceof Error ? error.message : 'Static analysis could not run.' };
+    return {
+      kind: 'invalid',
+      message: error instanceof Error ? error.message : 'Static analysis could not run.',
+    };
   }
 }
 
@@ -115,7 +145,11 @@ function asStaticAnalysis(second: SecondOrderAnalysis): StaticAnalysis {
 }
 
 /** Honest display amplification sized to a legible 28 px maximum displacement. */
-export function deformationDisplay(mesh: AnalysisMesh, u: Float64Array, pixelsPerMeter: number): DeformationDisplay {
+export function deformationDisplay(
+  mesh: AnalysisMesh,
+  u: Float64Array,
+  pixelsPerMeter: number,
+): DeformationDisplay {
   let maxMeters = 0;
   for (let node = 0; mesh.coords.length > node * 2; node++) {
     maxMeters = Math.max(maxMeters, Math.hypot(u[3 * node]!, u[3 * node + 1]!));
@@ -125,21 +159,35 @@ export function deformationDisplay(mesh: AnalysisMesh, u: Float64Array, pixelsPe
 }
 
 /** Recover combined-stress utilization from a prescribed displacement state. */
-export function utilizationAtDisplacement(mesh: AnalysisMesh, u: Float64Array, fixedEnd: Float64Array): Map<number, number> {
+export function utilizationAtDisplacement(
+  mesh: AnalysisMesh,
+  u: Float64Array,
+  fixedEnd: Float64Array,
+): Map<number, number> {
   if (u.length !== mesh.ndof) throw new Error('Displacement vector does not match the mesh.');
-  if (fixedEnd.length !== mesh.elements.length * 6) throw new Error('Fixed-end vector does not match the mesh.');
+  if (fixedEnd.length !== mesh.elements.length * 6)
+    throw new Error('Fixed-end vector does not match the mesh.');
   return recoverUtilization(mesh, recoverElementForces(mesh, u, fixedEnd));
 }
 
 /** Recover element end forces from a prescribed displacement state. */
-export function elementForcesAtDisplacement(mesh: AnalysisMesh, u: Float64Array, fixedEnd: Float64Array): Float64Array {
+export function elementForcesAtDisplacement(
+  mesh: AnalysisMesh,
+  u: Float64Array,
+  fixedEnd: Float64Array,
+): Float64Array {
   if (u.length !== mesh.ndof) throw new Error('Displacement vector does not match the mesh.');
-  if (fixedEnd.length !== mesh.elements.length * 6) throw new Error('Fixed-end vector does not match the mesh.');
+  if (fixedEnd.length !== mesh.elements.length * 6)
+    throw new Error('Fixed-end vector does not match the mesh.');
   return recoverElementForces(mesh, u, fixedEnd);
 }
 
 /** Element force recovery f_local = k_cond(Tu_e) − f_fixedEnd. */
-function recoverElementForces(mesh: AnalysisMesh, u: Float64Array, fixedEnd: Float64Array): Float64Array {
+function recoverElementForces(
+  mesh: AnalysisMesh,
+  u: Float64Array,
+  fixedEnd: Float64Array,
+): Float64Array {
   const out = new Float64Array(mesh.elements.length * 5);
   for (let index = 0; index < mesh.elements.length; index++) {
     const element = mesh.elements[index]!;
@@ -148,7 +196,8 @@ function recoverElementForces(mesh: AnalysisMesh, u: Float64Array, fixedEnd: Flo
     const localForce = new Float64Array(6);
     for (let row = 0; row < 6; row++) {
       let value = -fixedEnd[index * 6 + row]!;
-      for (let column = 0; column < 6; column++) value += stiffness[row * 6 + column]! * localU[column]!;
+      for (let column = 0; column < 6; column++)
+        value += stiffness[row * 6 + column]! * localU[column]!;
       localForce[row] = value;
     }
     const offset = index * 5;
@@ -176,12 +225,22 @@ function recoverUtilization(mesh: AnalysisMesh, forces: Float64Array): Map<numbe
       fiberUtilization(N, ma, element.A, element.I, element.c, element.fy),
       fiberUtilization(N, mb, element.A, element.I, element.c, element.fy),
     );
-    utilization.set(element.memberId, Math.max(utilization.get(element.memberId) ?? 0, endpointUtilization));
+    utilization.set(
+      element.memberId,
+      Math.max(utilization.get(element.memberId) ?? 0, endpointUtilization),
+    );
   }
   return utilization;
 }
 
-function fiberUtilization(N: number, M: number, A: number, I: number, c: number, fy: number): number {
+function fiberUtilization(
+  N: number,
+  M: number,
+  A: number,
+  I: number,
+  c: number,
+  fy: number,
+): number {
   const axial = N / A;
   const bending = (M * c) / I;
   return Math.max(Math.abs(axial + bending), Math.abs(axial - bending)) / fy;
@@ -197,13 +256,19 @@ function recoverReactions(
   const residual = new Float64Array(mesh.ndof);
   for (let row = 0; row < mesh.ndof; row++) {
     let value = -F[row]!;
-    for (let column = 0; column < mesh.ndof; column++) value += K[row * mesh.ndof + column]! * u[column]!;
+    for (let column = 0; column < mesh.ndof; column++)
+      value += K[row * mesh.ndof + column]! * u[column]!;
     residual[row] = value;
   }
   const reactions = new Map<number, { fx: number; fy: number; m: number }>();
   for (let node = 0; node < mesh.editorNode.length; node++) {
     const id = mesh.editorNode[node]!;
-    if (id >= 0) reactions.set(id, { fx: residual[3 * node]!, fy: residual[3 * node + 1]!, m: residual[3 * node + 2]! });
+    if (id >= 0)
+      reactions.set(id, {
+        fx: residual[3 * node]!,
+        fy: residual[3 * node + 1]!,
+        m: residual[3 * node + 2]!,
+      });
   }
   return reactions;
 }
@@ -217,7 +282,10 @@ function localElementDisplacement(
   sin: number,
 ): Float64Array {
   const local = new Float64Array(6);
-  for (const [offset, node] of [[0, na], [3, nb]] as const) {
+  for (const [offset, node] of [
+    [0, na],
+    [3, nb],
+  ] as const) {
     const x = u[3 * node]!;
     const y = u[3 * node + 1]!;
     local[offset] = cos * x + sin * y;

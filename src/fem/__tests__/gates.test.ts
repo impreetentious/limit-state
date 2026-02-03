@@ -4,7 +4,17 @@
  * Each milestone converts its `it.todo` rows into real tests.
  */
 import { describe, expect, it } from 'vitest';
-import { assembleF, assembleK, assembleLoadCase, elementLocalStiffness, kLocal, kgLocal, mLocal, shearFactor, transformToGlobal } from '../assemble';
+import {
+  assembleF,
+  assembleK,
+  assembleLoadCase,
+  elementLocalStiffness,
+  kLocal,
+  kgLocal,
+  mLocal,
+  shearFactor,
+  transformToGlobal,
+} from '../assemble';
 import { solveTensionOnly } from '../cables';
 import { buckling, modal } from '../eigen';
 import { newmarkStep, rayleighDampingRatio, rayleighFit, type NewmarkState } from '../dynamics';
@@ -12,15 +22,31 @@ import { decodeModel, encodeModel } from '../../share/serialize';
 import { collapseCascade, evaluateFailure } from '../failure';
 import { computeInfluenceLine } from '../influence';
 import { MATERIALS, plasticMoment, sectionProps } from '../materials';
-import { assembleMassWithVehicle, lumpedVehicleTranslationalTrace, vehicleMassKg } from '../moving-mass';
+import {
+  assembleMassWithVehicle,
+  lumpedVehicleTranslationalTrace,
+  vehicleMassKg,
+} from '../moving-mass';
 import { buildMesh } from '../mesh';
 import { runPushover } from '../pushover';
 import { earthquakeRecord } from '../records';
 import { solveSecondOrderStatic } from '../second-order';
 import { newmarkSdofRelative, peakAbs, responseSpectrum } from '../spectrum';
-import { expandFreeVector, factorLDLT, freeMatrix, freeVector, mechanismEditorNode, solveFactored } from '../solve';
+import {
+  expandFreeVector,
+  factorLDLT,
+  freeMatrix,
+  freeVector,
+  mechanismEditorNode,
+  solveFactored,
+} from '../solve';
 import { analyzeStaticModel } from '../statics';
-import { analyzeTrafficAt, initialMovingMassState, prepareTraffic, vehicleContactsAt } from '../../stories/traffic';
+import {
+  analyzeTrafficAt,
+  initialMovingMassState,
+  prepareTraffic,
+  vehicleContactsAt,
+} from '../../stories/traffic';
 import type { AnalysisMesh, EditorModel, MemberSpec, SectionSpec, SupportSpec } from '../types';
 
 const E = 1,
@@ -34,7 +60,7 @@ describe('element matrices (implemented — scaffold anchor)', () => {
     const k = kLocal(E, A, I, L);
     for (let i = 0; i < 6; i++)
       for (let j = 0; j < 6; j++) expect(k[i * 6 + j]).toBeCloseTo(k[j * 6 + i]!, 12);
-    expect(k[0]).toBeCloseTo(E * A / L, 12); // EA/L
+    expect(k[0]).toBeCloseTo((E * A) / L, 12); // EA/L
     expect(k[7]).toBeCloseTo(12, 12); // 12EI/L³
     expect(k[14]).toBeCloseTo(4, 12); // 4EI/L
     expect(k[17]).toBeCloseTo(2, 12); // 2EI/L
@@ -103,24 +129,26 @@ describe('Phase 2A — Timoshenko shear-flexible beams', () => {
     // uses two subdivisions and is checked below for consistency.
     const mesh: AnalysisMesh = {
       coords: Float64Array.of(0, 0, 1, 0),
-      elements: [{
-        memberId: 1,
-        na: 0,
-        nb: 1,
-        L: 1,
-        E: 1,
-        G: 1,
-        A: 1,
-        As: 1,
-        I: 1,
-        c: 1,
-        rho: 1,
-        fy: 1,
-        cos: 1,
-        sin: 0,
-        releaseA: false,
-        releaseB: false,
-      }],
+      elements: [
+        {
+          memberId: 1,
+          na: 0,
+          nb: 1,
+          L: 1,
+          E: 1,
+          G: 1,
+          A: 1,
+          As: 1,
+          I: 1,
+          c: 1,
+          rho: 1,
+          fy: 1,
+          cos: 1,
+          sin: 0,
+          releaseA: false,
+          releaseB: false,
+        },
+      ],
       editorNode: Int32Array.of(1, 2),
       freeDofs: Int32Array.of(3, 4, 5),
       ndof: 6,
@@ -146,16 +174,20 @@ describe('Phase 2A — Timoshenko shear-flexible beams', () => {
     model.members[0]!.section = { kind: 'rect', b: 0.4, h: 0.4 }; // L/h = 5
 
     const analysis = analyzeStaticModel(model, { shearFlexible: true });
-    if (analysis.kind !== 'stable') throw new Error(`Expected stable Timoshenko cantilever, received ${analysis.kind}.`);
+    if (analysis.kind !== 'stable')
+      throw new Error(`Expected stable Timoshenko cantilever, received ${analysis.kind}.`);
     const sample = analysis.mesh.elements[0]!;
     const siExpected = -((P * span ** 3) / (3 * sample.E * sample.I) + P / (sample.G * sample.As));
     expect(relativeError(analysis.result.u[3 * 1 + 1]!, siExpected)).toBeLessThan(1e-6);
 
     const euler = analyzeStaticModel(model, { shearFlexible: false });
-    if (euler.kind !== 'stable') throw new Error(`Expected stable Euler cantilever, received ${euler.kind}.`);
+    if (euler.kind !== 'stable')
+      throw new Error(`Expected stable Euler cantilever, received ${euler.kind}.`);
     const bendingOnly = -((P * span ** 3) / (3 * sample.E * sample.I));
     expect(relativeError(euler.result.u[3 * 1 + 1]!, bendingOnly)).toBeLessThan(1e-10);
-    expect(Math.abs(analysis.result.u[3 * 1 + 1]!)).toBeGreaterThan(Math.abs(euler.result.u[3 * 1 + 1]!));
+    expect(Math.abs(analysis.result.u[3 * 1 + 1]!)).toBeGreaterThan(
+      Math.abs(euler.result.u[3 * 1 + 1]!),
+    );
   });
 
   it('kLocal(φ) tip block recovers PL³/3EI + PL/(G As) exactly', () => {
@@ -197,7 +229,8 @@ describe('Phase 2B — P-Δ second-order statics', () => {
       points: [{ meshNode: 1, fx: H, fy: -P }],
     });
     const second = solveSecondOrderStatic(mesh, loads);
-    if (second.kind !== 'stable') throw new Error(`Expected converged P-Δ, received ${second.kind}.`);
+    if (second.kind !== 'stable')
+      throw new Error(`Expected converged P-Δ, received ${second.kind}.`);
     const mu = L * Math.sqrt(P / (E * I));
     const exact = Math.tan(mu) / mu;
     const approximate = 1 / (1 - P / Pcr);
@@ -233,10 +266,17 @@ describe('Phase 2D — influence lines', () => {
         { id: 1, x: 0, y: 0 },
         { id: 2, x: L, y: 0 },
       ],
-      [{ node: 1, kind: 'pin' }, { node: 2, kind: 'roller' }],
+      [
+        { node: 1, kind: 'pin' },
+        { node: 2, kind: 'roller' },
+      ],
     );
     model.deck = [1];
-    const line = computeInfluenceLine(model, { kind: 'moment', memberId: 1, at: 'mid' }, { step: L / 40 });
+    const line = computeInfluenceLine(
+      model,
+      { kind: 'moment', memberId: 1, at: 'mid' },
+      { step: L / 40 },
+    );
     expect(line.samples.length).toBeGreaterThan(10);
     expect(relativeError(line.peak.value, L / 4)).toBeLessThan(1e-12);
     expect(Math.abs(line.peak.station - L / 2)).toBeLessThan(L / 40 + 1e-12);
@@ -265,22 +305,41 @@ describe('Phase 2E — tension-only cables', () => {
         { id: 3, x: -12, y: 0 },
         { id: 4, x: 12, y: 0 },
       ],
-      [{ node: 1, kind: 'fixed' }, { node: 3, kind: 'pin' }, { node: 4, kind: 'pin' }],
+      [
+        { node: 1, kind: 'fixed' },
+        { node: 3, kind: 'pin' },
+        { node: 4, kind: 'pin' },
+      ],
       [
         {
-          id: 1, a: 1, b: 2, material: 'steel-s355',
+          id: 1,
+          a: 1,
+          b: 2,
+          material: 'steel-s355',
           section: { kind: 'tube', d: 0.2, t: 0.01 },
-          releaseA: false, releaseB: false, cableOnly: false,
+          releaseA: false,
+          releaseB: false,
+          cableOnly: false,
         },
         {
-          id: 2, a: 3, b: 2, material: 'steel-s355',
+          id: 2,
+          a: 3,
+          b: 2,
+          material: 'steel-s355',
           section: { kind: 'rect', b: 0.02, h: 0.02 },
-          releaseA: true, releaseB: true, cableOnly: true,
+          releaseA: true,
+          releaseB: true,
+          cableOnly: true,
         },
         {
-          id: 3, a: 4, b: 2, material: 'steel-s355',
+          id: 3,
+          a: 4,
+          b: 2,
+          material: 'steel-s355',
           section: { kind: 'rect', b: 0.02, h: 0.02 },
-          releaseA: true, releaseB: true, cableOnly: true,
+          releaseA: true,
+          releaseB: true,
+          cableOnly: true,
         },
       ],
     );
@@ -291,9 +350,10 @@ describe('Phase 2E — tension-only cables', () => {
     expect(result.activeCables).toEqual([2]);
     expect(result.slackCables).toEqual([3]);
     if (result.analysis.kind !== 'stable') throw new Error('expected stable');
-    const leftN = result.analysis.result.elementForces[
-      result.analysis.mesh.elements.findIndex((element) => element.memberId === 2) * 5
-    ]!;
+    const leftN =
+      result.analysis.result.elementForces[
+        result.analysis.mesh.elements.findIndex((element) => element.memberId === 2) * 5
+      ]!;
     expect(leftN).toBeGreaterThan(0);
   });
 });
@@ -310,11 +370,41 @@ describe('Phase 2F — plastic pushover', () => {
         { id: 3, x: 0, y: h },
         { id: 4, x: 8, y: h },
       ],
-      [{ node: 1, kind: 'fixed' }, { node: 2, kind: 'fixed' }],
       [
-        { id: 1, a: 1, b: 3, material: 'steel-s355', section, releaseA: false, releaseB: false, cableOnly: false },
-        { id: 2, a: 2, b: 4, material: 'steel-s355', section, releaseA: false, releaseB: false, cableOnly: false },
-        { id: 3, a: 3, b: 4, material: 'steel-s355', section, releaseA: false, releaseB: false, cableOnly: false },
+        { node: 1, kind: 'fixed' },
+        { node: 2, kind: 'fixed' },
+      ],
+      [
+        {
+          id: 1,
+          a: 1,
+          b: 3,
+          material: 'steel-s355',
+          section,
+          releaseA: false,
+          releaseB: false,
+          cableOnly: false,
+        },
+        {
+          id: 2,
+          a: 2,
+          b: 4,
+          material: 'steel-s355',
+          section,
+          releaseA: false,
+          releaseB: false,
+          cableOnly: false,
+        },
+        {
+          id: 3,
+          a: 3,
+          b: 4,
+          material: 'steel-s355',
+          section,
+          releaseA: false,
+          releaseB: false,
+          cableOnly: false,
+        },
       ],
     );
     model.loads = { gravity: false, points: [{ node: 3, fx: 1_000, fy: 0 }] };
@@ -334,9 +424,16 @@ describe('Phase 2H — moving-mass traffic', () => {
       v: 1,
       name: 'Moving-mass gate',
       seed: 21,
-      nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 8, y: 0 }, { id: 3, x: 16, y: 0 }],
+      nodes: [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 8, y: 0 },
+        { id: 3, x: 16, y: 0 },
+      ],
       members: [member(1, 1, 2), member(2, 2, 3)],
-      supports: [{ node: 1, kind: 'pin' }, { node: 3, kind: 'roller' }],
+      supports: [
+        { node: 1, kind: 'pin' },
+        { node: 3, kind: 'roller' },
+      ],
       loads: { gravity: false, points: [] },
       deck: [1, 2],
       story: { kind: 'traffic', weightkN: 200, speed: 0.5, movingMass: true },
@@ -382,14 +479,20 @@ describe('M1 gates — statics', () => {
         { id: 1, x: 0, y: 0 },
         { id: 2, x: span, y: 0 },
       ],
-      [{ node: 1, kind: 'pin' }, { node: 2, kind: 'roller' }],
+      [
+        { node: 1, kind: 'pin' },
+        { node: 2, kind: 'roller' },
+      ],
     );
     const mesh = buildMesh(model);
-    const result = solveMesh(mesh, assembleF(mesh, {
-      gravity: false,
-      points: [],
-      elementUdls: mesh.elements.map((_, element) => ({ element, w })),
-    }));
+    const result = solveMesh(
+      mesh,
+      assembleF(mesh, {
+        gravity: false,
+        points: [],
+        elementUdls: mesh.elements.map((_, element) => ({ element, w })),
+      }),
+    );
     const E = mesh.elements[0]!.E;
     const I = mesh.elements[0]!.I;
     const expected = (-5 * w * span ** 4) / (384 * E * I);
@@ -402,19 +505,20 @@ describe('M1 gates — statics', () => {
     for (let frame = 0; frame < 5; frame++) {
       const width = 4 + 3 * random();
       const height = 2 + 3 * random();
-      const mesh = buildMesh(modelFor(
-        [
-          { id: 1, x: 0, y: 0 },
-          { id: 2, x: width, y: 0 },
-          { id: 3, x: width / 2 + (random() - 0.5), y: height },
-        ],
-        [{ node: 1, kind: 'fixed' }, { node: 2, kind: 'fixed' }],
-        [
-          member(1, 1, 3),
-          member(2, 3, 2),
-          member(3, 1, 2),
-        ],
-      ));
+      const mesh = buildMesh(
+        modelFor(
+          [
+            { id: 1, x: 0, y: 0 },
+            { id: 2, x: width, y: 0 },
+            { id: 3, x: width / 2 + (random() - 0.5), y: height },
+          ],
+          [
+            { node: 1, kind: 'fixed' },
+            { node: 2, kind: 'fixed' },
+          ],
+          [member(1, 1, 3), member(2, 3, 2), member(3, 1, 2)],
+        ),
+      );
       const K = assembleK(mesh);
       for (let i = 0; i < mesh.ndof; i++) {
         for (let j = 0; j < mesh.ndof; j++) {
@@ -435,13 +539,15 @@ describe('M1 gates — statics', () => {
     const unsupported = buildMesh(modelFor([{ id: 1, x: 0, y: 0 }], [], []));
     expect(mechanismNode(unsupported)).toBe(1);
 
-    const underbraced = buildMesh(modelFor(
-      [
-        { id: 1, x: 0, y: 0 },
-        { id: 2, x: 4, y: 0 },
-      ],
-      [{ node: 1, kind: 'pin' }],
-    ));
+    const underbraced = buildMesh(
+      modelFor(
+        [
+          { id: 1, x: 0, y: 0 },
+          { id: 2, x: 4, y: 0 },
+        ],
+        [{ node: 1, kind: 'pin' }],
+      ),
+    );
     expect(mechanismNode(underbraced)).toBe(2);
   });
 
@@ -452,20 +558,31 @@ describe('M1 gates — statics', () => {
       releaseB: true,
       cableOnly: false,
     });
-    const mesh = buildMesh(modelFor(
-      [
-        { id: 1, x: 0, y: 0 },
-        { id: 2, x: 4, y: 0 },
-        { id: 3, x: 2, y: 3 },
-      ],
-      [{ node: 1, kind: 'pin' }, { node: 2, kind: 'roller' }],
-      [trussMember(1, 1, 2), trussMember(2, 1, 3), trussMember(3, 3, 2)],
-    ));
+    const mesh = buildMesh(
+      modelFor(
+        [
+          { id: 1, x: 0, y: 0 },
+          { id: 2, x: 4, y: 0 },
+          { id: 3, x: 2, y: 3 },
+        ],
+        [
+          { node: 1, kind: 'pin' },
+          { node: 2, kind: 'roller' },
+        ],
+        [trussMember(1, 1, 2), trussMember(2, 1, 3), trussMember(3, 3, 2)],
+      ),
+    );
     const apex = mesh.editorNode.findIndex((id) => id === 3);
     const result = solveMesh(mesh, pointLoad(mesh.ndof, 3 * apex + 1, -100_000));
 
     for (const element of mesh.elements) {
-      const localU = localElementDisplacement(result.u, element.na, element.nb, element.cos, element.sin);
+      const localU = localElementDisplacement(
+        result.u,
+        element.na,
+        element.nb,
+        element.cos,
+        element.sin,
+      );
       const stiffness = elementLocalStiffness(element);
       const endForces = multiplyMatrixVector(stiffness, localU);
       expect(Math.abs(endForces[2]!)).toBeLessThan(1e-8);
@@ -474,13 +591,18 @@ describe('M1 gates — statics', () => {
   });
 
   it('G13: in-element point loads conserve reaction and are continuous at a mesh node', () => {
-    const mesh = buildMesh(modelFor(
-      [
-        { id: 1, x: 0, y: 0 },
-        { id: 2, x: 8, y: 0 },
-      ],
-      [{ node: 1, kind: 'pin' }, { node: 2, kind: 'roller' }],
-    ));
+    const mesh = buildMesh(
+      modelFor(
+        [
+          { id: 1, x: 0, y: 0 },
+          { id: 2, x: 8, y: 0 },
+        ],
+        [
+          { node: 1, kind: 'pin' },
+          { node: 2, kind: 'roller' },
+        ],
+      ),
+    );
     const P = 42_000;
     const interiorLoad = assembleF(mesh, {
       gravity: false,
@@ -493,16 +615,22 @@ describe('M1 gates — statics', () => {
     for (let node = 0; mesh.ndof > node * 3; node++) verticalReaction += reactions[3 * node + 1]!;
     expect(relativeError(verticalReaction, P)).toBeLessThan(1e-10);
 
-    const fromLeft = solveMesh(mesh, assembleF(mesh, {
-      gravity: false,
-      points: [],
-      inElement: [{ element: 0, xi: 1, p: P }],
-    }));
-    const fromRight = solveMesh(mesh, assembleF(mesh, {
-      gravity: false,
-      points: [],
-      inElement: [{ element: 1, xi: 0, p: P }],
-    }));
+    const fromLeft = solveMesh(
+      mesh,
+      assembleF(mesh, {
+        gravity: false,
+        points: [],
+        inElement: [{ element: 0, xi: 1, p: P }],
+      }),
+    );
+    const fromRight = solveMesh(
+      mesh,
+      assembleF(mesh, {
+        gravity: false,
+        points: [],
+        inElement: [{ element: 1, xi: 0, p: P }],
+      }),
+    );
     for (let dof = 0; dof < mesh.ndof; dof++) {
       expect(relativeError(fromLeft.u[dof]!, fromRight.u[dof]!)).toBeLessThan(1e-12);
     }
@@ -543,7 +671,8 @@ describe('M3 static result recovery', () => {
     model.loads.gravity = false;
     model.loads.points = [{ node: 2, fx: 0, fy: -1_000 }];
     const analysis = analyzeStaticModel(model);
-    if (analysis.kind !== 'stable') throw new Error(`Expected a stable model, received ${analysis.kind}.`);
+    if (analysis.kind !== 'stable')
+      throw new Error(`Expected a stable model, received ${analysis.kind}.`);
 
     const E = analysis.mesh.elements[0]!.E;
     const I = analysis.mesh.elements[0]!.I;
@@ -558,16 +687,27 @@ describe('M5 gates — dynamics', () => {
   it('G8: Newmark SDOF at resonance, ζ=2%: steady amplitude = static × 25, within 2% after 50 cycles', () => {
     const mesh = unitSdofMesh();
     const damping = rayleighFit(0.02, 1, 1);
-    let state: NewmarkState = { u: new Float64Array(6), v: new Float64Array(6), a: new Float64Array(6), t: 0, damping };
+    let state: NewmarkState = {
+      u: new Float64Array(6),
+      v: new Float64Array(6),
+      a: new Float64Array(6),
+      t: 0,
+      damping,
+    };
     const dt = 0.01;
     const end = 50 * Math.PI * 2;
     let amplitude = 0;
     while (state.t < end) {
-      state = newmarkStep(mesh, state, (time) => {
-        const force = new Float64Array(6);
-        force[3] = Math.sin(time); // unit harmonic force at ω = ω_n = 1 rad/s
-        return force;
-      }, dt);
+      state = newmarkStep(
+        mesh,
+        state,
+        (time) => {
+          const force = new Float64Array(6);
+          force[3] = Math.sin(time); // unit harmonic force at ω = ω_n = 1 rad/s
+          return force;
+        },
+        dt,
+      );
       if (state.t > end - Math.PI * 2) amplitude = Math.max(amplitude, Math.abs(state.u[3]!));
     }
     expect(relativeError(amplitude, 25)).toBeLessThan(0.02);
@@ -587,7 +727,13 @@ describe('M6/M7 gates — failure & sharing', () => {
     expect(evaluateFailure(overloadedRadioMast(), 1)).toMatchObject({ kind: 'buckling' });
     const cascade = collapseCascade(overloadedRadioMast());
     expect(cascade).toEqual({
-      steps: [{ action: 'remove', memberId: 1, detail: 'Member 1 buckled/was axial-governing and was removed.' }],
+      steps: [
+        {
+          action: 'remove',
+          memberId: 1,
+          detail: 'Member 1 buckled/was axial-governing and was removed.',
+        },
+      ],
       outcome: 'collapse',
     });
   });
@@ -710,25 +856,27 @@ function simplySupportedBendingBeam(): AnalysisMesh {
 function unitSdofMesh(): AnalysisMesh {
   return {
     coords: Float64Array.of(0, 0, 1, 0),
-    elements: [{
-      memberId: 1,
-      na: 0,
-      nb: 1,
-      L: 1,
-      E: 1,
-      G: 1e12,
-      A: 1,
-      As: 1,
-      I: 1,
-      c: 1,
-      // Consistent axial mass at free node is ρAL / 3 = 1.
-      rho: 3,
-      fy: 1,
-      cos: 1,
-      sin: 0,
-      releaseA: false,
-      releaseB: false,
-    }],
+    elements: [
+      {
+        memberId: 1,
+        na: 0,
+        nb: 1,
+        L: 1,
+        E: 1,
+        G: 1e12,
+        A: 1,
+        As: 1,
+        I: 1,
+        c: 1,
+        // Consistent axial mass at free node is ρAL / 3 = 1.
+        rho: 3,
+        fy: 1,
+        cos: 1,
+        sin: 0,
+        releaseA: false,
+        releaseB: false,
+      },
+    ],
     editorNode: Int32Array.of(1, 2),
     freeDofs: Int32Array.of(3),
     ndof: 6,
@@ -743,12 +891,27 @@ function shareModel(id: number, random: () => number): EditorModel {
     v: 1,
     name: `Shared ${id}`,
     seed: id,
-    nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: span, y: 0 }, { id: 3, x: span / 2, y: height }],
+    nodes: [
+      { id: 1, x: 0, y: 0 },
+      { id: 2, x: span, y: 0 },
+      { id: 3, x: span / 2, y: height },
+    ],
     members: [member(1, 1, 3), member(2, 3, 2), member(3, 1, 2)],
-    supports: [{ node: 1, kind: 'pin' }, { node: 2, kind: 'roller' }],
-    loads: { gravity: random() > 0.5, points: [{ node: 3, fx: (random() - 0.5) * 1_000, fy: -random() * 5_000 }] },
+    supports: [
+      { node: 1, kind: 'pin' },
+      { node: 2, kind: 'roller' },
+    ],
+    loads: {
+      gravity: random() > 0.5,
+      points: [{ node: 3, fx: (random() - 0.5) * 1_000, fy: -random() * 5_000 }],
+    },
     deck: [3],
-    story: { kind: 'traffic', weightkN: 100 + random() * 300, speed: 5 + random() * 20, movingMass: false },
+    story: {
+      kind: 'traffic',
+      weightkN: 100 + random() * 300,
+      speed: 5 + random() * 20,
+      movingMass: false,
+    },
   };
 }
 
@@ -757,17 +920,22 @@ function overloadedRadioMast(): EditorModel {
     v: 1,
     name: 'Radio mast overload',
     seed: 4,
-    nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 0, y: 10 }],
-    members: [{
-      id: 1,
-      a: 1,
-      b: 2,
-      material: 'spaghetti',
-      section: { kind: 'rect', b: 0.02, h: 0.02 },
-      releaseA: false,
-      releaseB: false,
-      cableOnly: false,
-    }],
+    nodes: [
+      { id: 1, x: 0, y: 0 },
+      { id: 2, x: 0, y: 10 },
+    ],
+    members: [
+      {
+        id: 1,
+        a: 1,
+        b: 2,
+        material: 'spaghetti',
+        section: { kind: 'rect', b: 0.02, h: 0.02 },
+        releaseA: false,
+        releaseB: false,
+        cableOnly: false,
+      },
+    ],
     supports: [{ node: 1, kind: 'fixed' }],
     loads: { gravity: false, points: [{ node: 2, fx: 0, fy: -100 }] },
     deck: [],
@@ -782,13 +950,26 @@ function base64url(bytes: Uint8Array): string {
 }
 
 function solveMesh(mesh: AnalysisMesh, F: Float64Array): { u: Float64Array } {
-  const factored = factorLDLT(freeMatrix(assembleK(mesh), mesh.ndof, mesh.freeDofs), mesh.freeDofs.length);
-  if (!factored.ok) throw new Error(`Unexpected mechanism at free DOF ${factored.mechanism.freeDofIndex}.`);
-  return { u: expandFreeVector(mesh.ndof, mesh.freeDofs, solveFactored(factored.factor, freeVector(F, mesh.freeDofs))) };
+  const factored = factorLDLT(
+    freeMatrix(assembleK(mesh), mesh.ndof, mesh.freeDofs),
+    mesh.freeDofs.length,
+  );
+  if (!factored.ok)
+    throw new Error(`Unexpected mechanism at free DOF ${factored.mechanism.freeDofIndex}.`);
+  return {
+    u: expandFreeVector(
+      mesh.ndof,
+      mesh.freeDofs,
+      solveFactored(factored.factor, freeVector(F, mesh.freeDofs)),
+    ),
+  };
 }
 
 function mechanismNode(mesh: AnalysisMesh): number {
-  const factored = factorLDLT(freeMatrix(assembleK(mesh), mesh.ndof, mesh.freeDofs), mesh.freeDofs.length);
+  const factored = factorLDLT(
+    freeMatrix(assembleK(mesh), mesh.ndof, mesh.freeDofs),
+    mesh.freeDofs.length,
+  );
   if (factored.ok) throw new Error('Expected a structural mechanism.');
   return mechanismEditorNode(mesh, factored.mechanism.freeDofIndex);
 }
@@ -817,7 +998,10 @@ function localElementDisplacement(
   sin: number,
 ): Float64Array {
   const local = new Float64Array(6);
-  for (const [localOffset, node] of [[0, na], [3, nb]] as const) {
+  for (const [localOffset, node] of [
+    [0, na],
+    [3, nb],
+  ] as const) {
     const x = u[3 * node]!;
     const y = u[3 * node + 1]!;
     local[localOffset] = cos * x + sin * y;

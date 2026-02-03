@@ -14,7 +14,12 @@ import {
   structureHeightM,
 } from '../evaluate';
 import { gallerySources, gallerySources3d } from '../../gallery/catalog';
-import { decodeModel, decodeModel3d, encodeModelUncompressed, encodeModelUncompressed3d } from '../../share/serialize';
+import {
+  decodeModel,
+  decodeModel3d,
+  encodeModelUncompressed,
+  encodeModelUncompressed3d,
+} from '../../share/serialize';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -66,7 +71,12 @@ describe('G20 — challenges & gallery (Phase 2G)', () => {
 
   it('G20d: curated gallery.json 2D hashes decode to the authored gallery models', async () => {
     const raw = readFileSync(join(ROOT, 'public/gallery.json'), 'utf8');
-    const entries = JSON.parse(raw) as Array<{ id: string; title: string; blurb: string; hash: string }>;
+    const entries = JSON.parse(raw) as Array<{
+      id: string;
+      title: string;
+      blurb: string;
+      hash: string;
+    }>;
     const sources = gallerySources();
     const twoD = entries.filter((entry) => !entry.id.startsWith('preset3d-'));
     expect(twoD.length).toBe(sources.length);
@@ -83,7 +93,12 @@ describe('G20 — challenges & gallery (Phase 2G)', () => {
 
   it('Phase 4J: curated 3D gallery hashes round-trip through decodeModel3d', async () => {
     const raw = readFileSync(join(ROOT, 'public/gallery.json'), 'utf8');
-    const entries = JSON.parse(raw) as Array<{ id: string; title: string; blurb: string; hash: string }>;
+    const entries = JSON.parse(raw) as Array<{
+      id: string;
+      title: string;
+      blurb: string;
+      hash: string;
+    }>;
     const sources = gallerySources3d();
     const threeD = entries.filter((entry) => entry.id.startsWith('preset3d-'));
     expect(threeD.length).toBe(sources.length);

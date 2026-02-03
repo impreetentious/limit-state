@@ -6,7 +6,13 @@
  * Gate G28: golden v1 URLs decode identically; migrateV1toV2 is deterministic.
  */
 import { buildMesh } from '../fem/mesh';
-import { buildMesh3d, NO_RELEASES, type EditorModel3d, type EndReleases3d, type SupportKind3d } from '../fem/space';
+import {
+  buildMesh3d,
+  NO_RELEASES,
+  type EditorModel3d,
+  type EndReleases3d,
+  type SupportKind3d,
+} from '../fem/space';
 import type { EditorModel, MemberSpec, SectionSpec, StorySpec } from '../fem/types';
 
 /** Encode a validated model as a URL fragment, compressing when the platform provides CompressionStream. */
@@ -15,7 +21,9 @@ export async function encodeModel(model: EditorModel): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify(valid));
   if (typeof CompressionStream === 'undefined') return `#mu=${base64urlEncode(bytes)}`;
   try {
-    const compressed = await streamBytes(blobFromBytes(bytes).stream().pipeThrough(new CompressionStream('deflate-raw')));
+    const compressed = await streamBytes(
+      blobFromBytes(bytes).stream().pipeThrough(new CompressionStream('deflate-raw')),
+    );
     return `#m=${base64urlEncode(compressed)}`;
   } catch {
     // The uncompressed form is deliberately a valid, portable fallback.
@@ -37,9 +45,12 @@ export async function decodeModel(hash: string): Promise<EditorModel> {
   const encoded = base64urlDecode(match[2]!);
   let bytes = encoded;
   if (match[1] === 'm') {
-    if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot decompress #m share URLs.');
+    if (typeof DecompressionStream === 'undefined')
+      throw new Error('This browser cannot decompress #m share URLs.');
     try {
-      bytes = await streamBytes(blobFromBytes(encoded).stream().pipeThrough(new DecompressionStream('deflate-raw')));
+      bytes = await streamBytes(
+        blobFromBytes(encoded).stream().pipeThrough(new DecompressionStream('deflate-raw')),
+      );
     } catch {
       throw new Error('Shared model compression data is invalid.');
     }
@@ -66,13 +77,16 @@ function base64urlEncode(bytes: Uint8Array): string {
   let binary = '';
   const chunkSize = 0x8000;
   for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+    binary += String.fromCharCode(
+      ...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)),
+    );
   }
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
 function base64urlDecode(value: string): Uint8Array {
-  const base64 = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4);
+  const base64 =
+    value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4);
   let binary: string;
   try {
     binary = atob(base64);
@@ -83,13 +97,27 @@ function base64urlDecode(value: string): Uint8Array {
 }
 
 function validateModel(value: unknown): EditorModel {
-  if (!isRecord(value) || value.v !== 1 || typeof value.name !== 'string' || !finiteInteger(value.seed)) {
+  if (
+    !isRecord(value) ||
+    value.v !== 1 ||
+    typeof value.name !== 'string' ||
+    !finiteInteger(value.seed)
+  ) {
     throw new Error('Shared model does not match Limit State schema v1.');
   }
-  if (!Array.isArray(value.nodes) || !Array.isArray(value.members) || !Array.isArray(value.supports) || !Array.isArray(value.deck)) {
+  if (
+    !Array.isArray(value.nodes) ||
+    !Array.isArray(value.members) ||
+    !Array.isArray(value.supports) ||
+    !Array.isArray(value.deck)
+  ) {
     throw new Error('Shared model has malformed collections.');
   }
-  if (!isRecord(value.loads) || typeof value.loads.gravity !== 'boolean' || !Array.isArray(value.loads.points)) {
+  if (
+    !isRecord(value.loads) ||
+    typeof value.loads.gravity !== 'boolean' ||
+    !Array.isArray(value.loads.points)
+  ) {
     throw new Error('Shared model has malformed loads.');
   }
   const model: EditorModel = {
@@ -112,12 +140,21 @@ function validateModel(value: unknown): EditorModel {
 }
 
 function parseNode(value: unknown): EditorModel['nodes'][number] {
-  if (!isRecord(value) || !finiteInteger(value.id) || !finite(value.x) || !finite(value.y)) throw new Error('Shared model has an invalid node.');
+  if (!isRecord(value) || !finiteInteger(value.id) || !finite(value.x) || !finite(value.y))
+    throw new Error('Shared model has an invalid node.');
   return { id: value.id, x: value.x, y: value.y };
 }
 
 function parseMember(value: unknown): MemberSpec {
-  if (!isRecord(value) || !finiteInteger(value.id) || !finiteInteger(value.a) || !finiteInteger(value.b) || !validMaterial(value.material) || typeof value.releaseA !== 'boolean' || typeof value.releaseB !== 'boolean') {
+  if (
+    !isRecord(value) ||
+    !finiteInteger(value.id) ||
+    !finiteInteger(value.a) ||
+    !finiteInteger(value.b) ||
+    !validMaterial(value.material) ||
+    typeof value.releaseA !== 'boolean' ||
+    typeof value.releaseB !== 'boolean'
+  ) {
     throw new Error('Shared model has an invalid member.');
   }
   const cableOnly = value.cableOnly === undefined ? false : value.cableOnly === true;
@@ -138,7 +175,8 @@ function parseMember(value: unknown): MemberSpec {
 }
 
 function parseSection(value: unknown): SectionSpec {
-  if (!isRecord(value) || typeof value.kind !== 'string') throw new Error('Shared model has an invalid section.');
+  if (!isRecord(value) || typeof value.kind !== 'string')
+    throw new Error('Shared model has an invalid section.');
   switch (value.kind) {
     case 'rect':
       if (!finitePositive(value.b) || !finitePositive(value.h)) break;
@@ -147,7 +185,13 @@ function parseSection(value: unknown): SectionSpec {
       if (!finitePositive(value.b) || !finitePositive(value.h) || !finitePositive(value.t)) break;
       return { kind: 'box', b: value.b, h: value.h, t: value.t };
     case 'ibeam':
-      if (!finitePositive(value.b) || !finitePositive(value.h) || !finitePositive(value.tf) || !finitePositive(value.tw)) break;
+      if (
+        !finitePositive(value.b) ||
+        !finitePositive(value.h) ||
+        !finitePositive(value.tf) ||
+        !finitePositive(value.tw)
+      )
+        break;
       return { kind: 'ibeam', b: value.b, h: value.h, tf: value.tf, tw: value.tw };
     case 'tube':
       if (!finitePositive(value.d) || !finitePositive(value.t)) break;
@@ -157,19 +201,25 @@ function parseSection(value: unknown): SectionSpec {
 }
 
 function parseSupport(value: unknown): EditorModel['supports'][number] {
-  if (!isRecord(value) || !finiteInteger(value.node) || (value.kind !== 'pin' && value.kind !== 'roller' && value.kind !== 'fixed')) {
+  if (
+    !isRecord(value) ||
+    !finiteInteger(value.node) ||
+    (value.kind !== 'pin' && value.kind !== 'roller' && value.kind !== 'fixed')
+  ) {
     throw new Error('Shared model has an invalid support.');
   }
   return { node: value.node, kind: value.kind };
 }
 
 function parsePoint(value: unknown): EditorModel['loads']['points'][number] {
-  if (!isRecord(value) || !finiteInteger(value.node) || !finite(value.fx) || !finite(value.fy)) throw new Error('Shared model has an invalid point load.');
+  if (!isRecord(value) || !finiteInteger(value.node) || !finite(value.fx) || !finite(value.fy))
+    throw new Error('Shared model has an invalid point load.');
   return { node: value.node, fx: value.fx, fy: value.fy };
 }
 
 function parseStory(value: unknown): StorySpec {
-  if (!isRecord(value) || typeof value.kind !== 'string') throw new Error('Shared model has an invalid story.');
+  if (!isRecord(value) || typeof value.kind !== 'string')
+    throw new Error('Shared model has an invalid story.');
   if (value.kind === 'ramp') return { kind: 'ramp' };
   if (value.kind === 'pushover') return { kind: 'pushover' };
   if (value.kind === 'traffic' && finitePositive(value.weightkN) && finitePositive(value.speed)) {
@@ -179,14 +229,26 @@ function parseStory(value: unknown): StorySpec {
     }
     return { kind: 'traffic', weightkN: value.weightkN, speed: value.speed, movingMass };
   }
-  if (value.kind === 'wind' && (value.pattern === 'steady' || value.pattern === 'sine' || value.pattern === 'gusts') && finitePositive(value.amplitudekNm) && finitePositive(value.freqHz) && finitePositive(value.zeta)) {
-    return { kind: 'wind', pattern: value.pattern, amplitudekNm: value.amplitudekNm, freqHz: value.freqHz, zeta: value.zeta };
+  if (
+    value.kind === 'wind' &&
+    (value.pattern === 'steady' || value.pattern === 'sine' || value.pattern === 'gusts') &&
+    finitePositive(value.amplitudekNm) &&
+    finitePositive(value.freqHz) &&
+    finitePositive(value.zeta)
+  ) {
+    return {
+      kind: 'wind',
+      pattern: value.pattern,
+      amplitudekNm: value.amplitudekNm,
+      freqHz: value.freqHz,
+      zeta: value.zeta,
+    };
   }
   if (
-    value.kind === 'earthquake'
-    && (value.record === 'pulse' || value.record === 'chirp' || value.record === 'elcentro-scaled')
-    && finitePositive(value.scale)
-    && finitePositive(value.zeta)
+    value.kind === 'earthquake' &&
+    (value.record === 'pulse' || value.record === 'chirp' || value.record === 'elcentro-scaled') &&
+    finitePositive(value.scale) &&
+    finitePositive(value.zeta)
   ) {
     return { kind: 'earthquake', record: value.record, scale: value.scale, zeta: value.zeta };
   }
@@ -210,7 +272,9 @@ function finiteInteger(value: unknown): value is number {
 }
 
 function validMaterial(value: unknown): value is MemberSpec['material'] {
-  return value === 'steel-s355' || value === 'alu-6061' || value === 'timber' || value === 'spaghetti';
+  return (
+    value === 'steel-s355' || value === 'alu-6061' || value === 'timber' || value === 'spaghetti'
+  );
 }
 
 /**
@@ -257,7 +321,12 @@ export function migrateV1toV2(model: EditorModel): EditorModel3d {
 /** Map a v1 story into the 3D story union (wind gains directionDeg = 0). */
 export function migrateStoryTo3d(story: StorySpec): NonNullable<EditorModel3d['story']> {
   if (story.kind === 'traffic') {
-    return { kind: 'traffic', weightkN: story.weightkN, speed: story.speed, movingMass: story.movingMass };
+    return {
+      kind: 'traffic',
+      weightkN: story.weightkN,
+      speed: story.speed,
+      movingMass: story.movingMass,
+    };
   }
   if (story.kind === 'wind') {
     return {
@@ -299,7 +368,9 @@ export async function encodeModel3d(model: EditorModel3d): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify(valid));
   if (typeof CompressionStream === 'undefined') return `#mu=${base64urlEncode(bytes)}`;
   try {
-    const compressed = await streamBytes(blobFromBytes(bytes).stream().pipeThrough(new CompressionStream('deflate-raw')));
+    const compressed = await streamBytes(
+      blobFromBytes(bytes).stream().pipeThrough(new CompressionStream('deflate-raw')),
+    );
     return `#m=${base64urlEncode(compressed)}`;
   } catch {
     return `#mu=${base64urlEncode(bytes)}`;
@@ -314,9 +385,12 @@ export async function decodeModel3d(hash: string): Promise<EditorModel3d> {
   const encoded = base64urlDecode(match[2]!);
   let bytes = encoded;
   if (match[1] === 'm') {
-    if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot decompress #m share URLs.');
+    if (typeof DecompressionStream === 'undefined')
+      throw new Error('This browser cannot decompress #m share URLs.');
     try {
-      bytes = await streamBytes(blobFromBytes(encoded).stream().pipeThrough(new DecompressionStream('deflate-raw')));
+      bytes = await streamBytes(
+        blobFromBytes(encoded).stream().pipeThrough(new DecompressionStream('deflate-raw')),
+      );
     } catch {
       throw new Error('Shared model compression data is invalid.');
     }
@@ -340,9 +414,12 @@ export async function peekShareSchemaVersion(hash: string): Promise<1 | 2> {
   const encoded = base64urlDecode(match[2]!);
   let bytes = encoded;
   if (match[1] === 'm') {
-    if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot decompress #m share URLs.');
+    if (typeof DecompressionStream === 'undefined')
+      throw new Error('This browser cannot decompress #m share URLs.');
     try {
-      bytes = await streamBytes(blobFromBytes(encoded).stream().pipeThrough(new DecompressionStream('deflate-raw')));
+      bytes = await streamBytes(
+        blobFromBytes(encoded).stream().pipeThrough(new DecompressionStream('deflate-raw')),
+      );
     } catch {
       throw new Error('Shared model compression data is invalid.');
     }
@@ -355,23 +432,39 @@ export async function peekShareSchemaVersion(hash: string): Promise<1 | 2> {
 }
 
 function validateModel3d(value: unknown): EditorModel3d {
-  if (!isRecord(value) || value.v !== 2 || typeof value.name !== 'string' || !finiteInteger(value.seed)) {
+  if (
+    !isRecord(value) ||
+    value.v !== 2 ||
+    typeof value.name !== 'string' ||
+    !finiteInteger(value.seed)
+  ) {
     throw new Error('Shared model does not match Limit State schema v2.');
   }
-  if (!Array.isArray(value.nodes) || !Array.isArray(value.members) || !Array.isArray(value.supports)) {
+  if (
+    !Array.isArray(value.nodes) ||
+    !Array.isArray(value.members) ||
+    !Array.isArray(value.supports)
+  ) {
     throw new Error('Shared model has malformed collections.');
   }
-  if (!isRecord(value.loads) || typeof value.loads.gravity !== 'boolean' || !Array.isArray(value.loads.points)) {
+  if (
+    !isRecord(value.loads) ||
+    typeof value.loads.gravity !== 'boolean' ||
+    !Array.isArray(value.loads.points)
+  ) {
     throw new Error('Shared model has malformed loads.');
   }
-  const deck = value.deck === undefined
-    ? undefined
-    : Array.isArray(value.deck)
-      ? value.deck.map((id) => {
-        if (!finiteInteger(id)) throw new Error('Deck ids must be finite integers.');
-        return id;
-      })
-      : (() => { throw new Error('Shared model has malformed deck.'); })();
+  const deck =
+    value.deck === undefined
+      ? undefined
+      : Array.isArray(value.deck)
+        ? value.deck.map((id) => {
+            if (!finiteInteger(id)) throw new Error('Deck ids must be finite integers.');
+            return id;
+          })
+        : (() => {
+            throw new Error('Shared model has malformed deck.');
+          })();
   const model: EditorModel3d = {
     v: 2,
     name: value.name,
@@ -388,7 +481,13 @@ function validateModel3d(value: unknown): EditorModel3d {
 }
 
 function parseNode3d(value: unknown): EditorModel3d['nodes'][number] {
-  if (!isRecord(value) || !finiteInteger(value.id) || !finite(value.x) || !finite(value.y) || !finite(value.z)) {
+  if (
+    !isRecord(value) ||
+    !finiteInteger(value.id) ||
+    !finite(value.x) ||
+    !finite(value.y) ||
+    !finite(value.z)
+  ) {
     throw new Error('Shared model has an invalid 3D node.');
   }
   return { id: value.id, x: value.x, y: value.y, z: value.z };
@@ -396,12 +495,12 @@ function parseNode3d(value: unknown): EditorModel3d['nodes'][number] {
 
 function parseMember3d(value: unknown): EditorModel3d['members'][number] {
   if (
-    !isRecord(value)
-    || !finiteInteger(value.id)
-    || !finiteInteger(value.a)
-    || !finiteInteger(value.b)
-    || !validMaterial(value.material)
-    || !finite(value.roll)
+    !isRecord(value) ||
+    !finiteInteger(value.id) ||
+    !finiteInteger(value.a) ||
+    !finiteInteger(value.b) ||
+    !validMaterial(value.material) ||
+    !finite(value.roll)
   ) {
     throw new Error('Shared model has an invalid 3D member.');
   }
@@ -409,12 +508,8 @@ function parseMember3d(value: unknown): EditorModel3d['members'][number] {
   if (value.cableOnly !== undefined && typeof value.cableOnly !== 'boolean') {
     throw new Error('Shared model has an invalid 3D member.');
   }
-  const releaseA = cableOnly
-    ? { tx: false, ty: true, tz: true }
-    : parseReleases(value.releaseA);
-  const releaseB = cableOnly
-    ? { tx: false, ty: true, tz: true }
-    : parseReleases(value.releaseB);
+  const releaseA = cableOnly ? { tx: false, ty: true, tz: true } : parseReleases(value.releaseA);
+  const releaseB = cableOnly ? { tx: false, ty: true, tz: true } : parseReleases(value.releaseB);
   return {
     id: value.id,
     a: value.a,
@@ -429,7 +524,12 @@ function parseMember3d(value: unknown): EditorModel3d['members'][number] {
 }
 
 function parseReleases(value: unknown): EndReleases3d {
-  if (!isRecord(value) || typeof value.tx !== 'boolean' || typeof value.ty !== 'boolean' || typeof value.tz !== 'boolean') {
+  if (
+    !isRecord(value) ||
+    typeof value.tx !== 'boolean' ||
+    typeof value.ty !== 'boolean' ||
+    typeof value.tz !== 'boolean'
+  ) {
     throw new Error('Shared model has invalid end releases.');
   }
   return { tx: value.tx, ty: value.ty, tz: value.tz };
@@ -437,14 +537,25 @@ function parseReleases(value: unknown): EndReleases3d {
 
 function parseSupport3d(value: unknown): EditorModel3d['supports'][number] {
   const kinds: SupportKind3d[] = ['pin', 'rollerX', 'rollerY', 'rollerZ', 'fixed'];
-  if (!isRecord(value) || !finiteInteger(value.node) || typeof value.kind !== 'string' || !kinds.includes(value.kind as SupportKind3d)) {
+  if (
+    !isRecord(value) ||
+    !finiteInteger(value.node) ||
+    typeof value.kind !== 'string' ||
+    !kinds.includes(value.kind as SupportKind3d)
+  ) {
     throw new Error('Shared model has an invalid 3D support.');
   }
   return { node: value.node, kind: value.kind as SupportKind3d };
 }
 
 function parsePoint3d(value: unknown): EditorModel3d['loads']['points'][number] {
-  if (!isRecord(value) || !finiteInteger(value.node) || !finite(value.fx) || !finite(value.fy) || !finite(value.fz)) {
+  if (
+    !isRecord(value) ||
+    !finiteInteger(value.node) ||
+    !finite(value.fx) ||
+    !finite(value.fy) ||
+    !finite(value.fz)
+  ) {
     throw new Error('Shared model has an invalid 3D point load.');
   }
   const point: EditorModel3d['loads']['points'][number] = {
@@ -469,7 +580,8 @@ function parsePoint3d(value: unknown): EditorModel3d['loads']['points'][number] 
 }
 
 function parseStory3d(value: unknown): NonNullable<EditorModel3d['story']> {
-  if (!isRecord(value) || typeof value.kind !== 'string') throw new Error('Shared model has an invalid 3D story.');
+  if (!isRecord(value) || typeof value.kind !== 'string')
+    throw new Error('Shared model has an invalid 3D story.');
   if (value.kind === 'ramp') return { kind: 'ramp' };
   if (value.kind === 'pushover') return { kind: 'pushover' };
   if (value.kind === 'traffic' && finitePositive(value.weightkN) && finitePositive(value.speed)) {
@@ -480,12 +592,12 @@ function parseStory3d(value: unknown): NonNullable<EditorModel3d['story']> {
     return { kind: 'traffic', weightkN: value.weightkN, speed: value.speed, movingMass };
   }
   if (
-    value.kind === 'wind'
-    && (value.pattern === 'steady' || value.pattern === 'sine' || value.pattern === 'gusts')
-    && finitePositive(value.amplitudekNm)
-    && finitePositive(value.freqHz)
-    && finitePositive(value.zeta)
-    && finite(value.directionDeg)
+    value.kind === 'wind' &&
+    (value.pattern === 'steady' || value.pattern === 'sine' || value.pattern === 'gusts') &&
+    finitePositive(value.amplitudekNm) &&
+    finitePositive(value.freqHz) &&
+    finitePositive(value.zeta) &&
+    finite(value.directionDeg)
   ) {
     return {
       kind: 'wind',
@@ -497,10 +609,10 @@ function parseStory3d(value: unknown): NonNullable<EditorModel3d['story']> {
     };
   }
   if (
-    value.kind === 'earthquake'
-    && (value.record === 'pulse' || value.record === 'chirp' || value.record === 'elcentro-scaled')
-    && finitePositive(value.scale)
-    && finitePositive(value.zeta)
+    value.kind === 'earthquake' &&
+    (value.record === 'pulse' || value.record === 'chirp' || value.record === 'elcentro-scaled') &&
+    finitePositive(value.scale) &&
+    finitePositive(value.zeta)
   ) {
     return { kind: 'earthquake', record: value.record, scale: value.scale, zeta: value.zeta };
   }

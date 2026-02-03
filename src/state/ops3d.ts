@@ -6,11 +6,7 @@
  * onto each new layer, and add strut members connecting corresponding nodes.
  * Replicate: same copy without the connecting struts (array / bay repeat).
  */
-import type {
-  EditorModel3d,
-  MemberSpec3d,
-  NodeSpec3d,
-} from '../fem/space';
+import type { EditorModel3d, MemberSpec3d, NodeSpec3d } from '../fem/space';
 
 export interface Vec3 {
   x: number;
@@ -45,8 +41,7 @@ export interface ExtrudeResult {
 
 function makeAllocator(model: EditorModel3d, override?: () => number): () => number {
   if (override) return override;
-  let next =
-    Math.max(0, ...model.nodes.map((n) => n.id), ...model.members.map((m) => m.id)) + 1;
+  let next = Math.max(0, ...model.nodes.map((n) => n.id), ...model.members.map((m) => m.id)) + 1;
   return () => next++;
 }
 
@@ -67,17 +62,13 @@ export function extrudeModel3d(model: EditorModel3d, options: ExtrudeOptions): E
     return { model, nodeMap: new Map(), addedNodes: 0, addedMembers: 0 };
   }
 
-  const sourceIds = new Set(
-    options.nodeIds ?? model.nodes.map((n) => n.id),
-  );
+  const sourceIds = new Set(options.nodeIds ?? model.nodes.map((n) => n.id));
   if (sourceIds.size === 0) {
     return { model, nodeMap: new Map(), addedNodes: 0, addedMembers: 0 };
   }
 
   const sourceNodes = model.nodes.filter((n) => sourceIds.has(n.id));
-  const sourceMembers = model.members.filter(
-    (m) => sourceIds.has(m.a) && sourceIds.has(m.b),
-  );
+  const sourceMembers = model.members.filter((m) => sourceIds.has(m.a) && sourceIds.has(m.b));
 
   const alloc = makeAllocator(model, options.allocId);
   const nodes: NodeSpec3d[] = [...model.nodes];

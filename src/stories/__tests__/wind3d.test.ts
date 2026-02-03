@@ -98,7 +98,12 @@ describe('Phase 4C — 3D wind DAF + resonance helpers', () => {
   });
 
   it('detectResonance3d fires only inside the ±10 % / 1.5× / ζ<5 % window', () => {
-    const modal: EigenResult = { kind: 'modal', values: new Float64Array([Math.PI * 2]), vectors: new Float64Array(), iterations: 0 };
+    const modal: EigenResult = {
+      kind: 'modal',
+      values: new Float64Array([Math.PI * 2]),
+      vectors: new Float64Array(),
+      iterations: 0,
+    };
     // Same forcing, quiet history — no growth → no fire.
     expect(detectResonance3d(1, modal, 0.02, [1, 1, 1, 1, 1, 1, 1, 1, 2], 2)).toBeUndefined();
     // Growth exceeds 1.5× over five cycles → fires.

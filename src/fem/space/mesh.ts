@@ -4,7 +4,15 @@
  */
 import { MATERIALS, sectionProps } from '../materials';
 import { memberTriad } from './assemble';
-import type { AnalysisMesh3d, AnalysisOptions3d, EditorModel3d, Element3d, EndReleases3d, MemberSpec3d, SupportSpec3d } from './types';
+import type {
+  AnalysisMesh3d,
+  AnalysisOptions3d,
+  EditorModel3d,
+  Element3d,
+  EndReleases3d,
+  MemberSpec3d,
+  SupportSpec3d,
+} from './types';
 import { NO_RELEASES, TRUSS_RELEASES } from './types';
 
 /** Build the 3D analysis mesh. */
@@ -64,12 +72,11 @@ export function buildMesh3d(model: EditorModel3d, options: AnalysisOptions3d = {
       As: props.As,
     };
 
-    const truss = member.cableOnly || (isFullRelease(member.releaseA) && isFullRelease(member.releaseB));
+    const truss =
+      member.cableOnly || (isFullRelease(member.releaseA) && isFullRelease(member.releaseB));
     if (truss) {
       // Cables / axial bars: release bending; keep torsion unless both ends fully released.
-      const releases = member.cableOnly
-        ? { tx: false, ty: true, tz: true }
-        : TRUSS_RELEASES;
+      const releases = member.cableOnly ? { tx: false, ty: true, tz: true } : TRUSS_RELEASES;
       elements.push({
         ...common,
         na: a.index,
@@ -191,8 +198,10 @@ function validateSupports(
 ): void {
   const supported = new Set<number>();
   for (const support of supports) {
-    if (!nodes.has(support.node)) throw new Error(`Support references missing node ${support.node}.`);
-    if (supported.has(support.node)) throw new Error(`Node ${support.node} has more than one support.`);
+    if (!nodes.has(support.node))
+      throw new Error(`Support references missing node ${support.node}.`);
+    if (supported.has(support.node))
+      throw new Error(`Node ${support.node} has more than one support.`);
     supported.add(support.node);
   }
 }

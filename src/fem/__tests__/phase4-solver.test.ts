@@ -22,15 +22,18 @@ function stubbyCantilever(L = 1.5): EditorModel3d {
       { id: 1, x: 0, y: 0, z: 0 },
       { id: 2, x: L, y: 0, z: 0 },
     ],
-    members: [{
-      id: 1,
-      a: 1, b: 2,
-      material: 'steel-s355',
-      section: { kind: 'rect', b: 0.3, h: 0.5 },
-      releaseA: NO_RELEASES,
-      releaseB: NO_RELEASES,
-      roll: 0,
-    }],
+    members: [
+      {
+        id: 1,
+        a: 1,
+        b: 2,
+        material: 'steel-s355',
+        section: { kind: 'rect', b: 0.3, h: 0.5 },
+        releaseA: NO_RELEASES,
+        releaseB: NO_RELEASES,
+        roll: 0,
+      },
+    ],
     supports: [{ node: 1, kind: 'fixed' }],
     loads: { gravity: false, points: [{ node: 2, fx: 0, fy: 0, fz: -1000 }] },
   };
@@ -64,7 +67,8 @@ describe('Phase 4E — 3D P-Δ amplification', () => {
     // Beam-column along +X: axial compression P at free tip, transverse H at tip.
     // Iy is the bending-plane inertia (about local y, load in local z direction).
     const L = 4;
-    const b = 0.1, h = 0.2;
+    const b = 0.1,
+      h = 0.2;
     const section = { kind: 'rect' as const, b, h };
     const mat = MATERIALS['steel-s355'];
     const props = sectionProps(section);
@@ -85,12 +89,18 @@ describe('Phase 4E — 3D P-Δ amplification', () => {
         { id: 1, x: 0, y: 0, z: 0 },
         { id: 2, x: L, y: 0, z: 0 },
       ],
-      members: [{
-        id: 1, a: 1, b: 2,
-        material: 'steel-s355', section,
-        releaseA: NO_RELEASES, releaseB: NO_RELEASES,
-        roll: 0,
-      }],
+      members: [
+        {
+          id: 1,
+          a: 1,
+          b: 2,
+          material: 'steel-s355',
+          section,
+          releaseA: NO_RELEASES,
+          releaseB: NO_RELEASES,
+          roll: 0,
+        },
+      ],
       supports: [{ node: 1, kind: 'fixed' }],
       loads: {
         gravity: false,
@@ -109,13 +119,25 @@ describe('Phase 4E — 3D P-Δ amplification', () => {
   it('recovers the linear solution when axial load is zero', () => {
     const L = 4;
     const model: EditorModel3d = {
-      v: 2, name: 'linear check', seed: 0,
-      nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: L, y: 0, z: 0 }],
-      members: [{
-        id: 1, a: 1, b: 2, material: 'steel-s355',
-        section: { kind: 'rect', b: 0.1, h: 0.2 },
-        releaseA: NO_RELEASES, releaseB: NO_RELEASES, roll: 0,
-      }],
+      v: 2,
+      name: 'linear check',
+      seed: 0,
+      nodes: [
+        { id: 1, x: 0, y: 0, z: 0 },
+        { id: 2, x: L, y: 0, z: 0 },
+      ],
+      members: [
+        {
+          id: 1,
+          a: 1,
+          b: 2,
+          material: 'steel-s355',
+          section: { kind: 'rect', b: 0.1, h: 0.2 },
+          releaseA: NO_RELEASES,
+          releaseB: NO_RELEASES,
+          roll: 0,
+        },
+      ],
       supports: [{ node: 1, kind: 'fixed' }],
       loads: { gravity: false, points: [{ node: 2, fx: 0, fy: 0, fz: -1000 }] },
     };

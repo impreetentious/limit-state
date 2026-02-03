@@ -6,7 +6,14 @@
  * Phase 3 space-frame stories reuse the same integrator.
  */
 import { assembleK, assembleM } from './assemble';
-import { expandFreeVector, factorLDLT, freeMatrix, freeVector, solveFactored, type Factor } from './solve';
+import {
+  expandFreeVector,
+  factorLDLT,
+  freeMatrix,
+  freeVector,
+  solveFactored,
+  type Factor,
+} from './solve';
 import type { AnalysisMesh } from './types';
 
 /** Minimal DOF layout shared by 2D and 3D meshes. */
@@ -49,7 +56,8 @@ export interface NewmarkSystem {
 
 /** Fit a and b from a target damping ratio at two circular frequencies. Gate G9. */
 export function rayleighFit(zeta: number, w1: number, w2: number): RayleighParams {
-  if (!(zeta >= 0) || !Number.isFinite(zeta)) throw new Error('Rayleigh damping ratio must be finite and non-negative.');
+  if (!(zeta >= 0) || !Number.isFinite(zeta))
+    throw new Error('Rayleigh damping ratio must be finite and non-negative.');
   if (!(w1 > 0) || !(w2 > 0) || !Number.isFinite(w1) || !Number.isFinite(w2)) {
     throw new Error('Rayleigh fit needs two finite positive circular frequencies.');
   }
@@ -61,7 +69,8 @@ export function rayleighFit(zeta: number, w1: number, w2: number): RayleighParam
 
 /** ζ(ω) = ½(a/ω + bω) for a Rayleigh-damped mode. */
 export function rayleighDampingRatio(params: RayleighParams, omega: number): number {
-  if (!(omega > 0) || !Number.isFinite(omega)) throw new Error('Modal circular frequency must be finite and positive.');
+  if (!(omega > 0) || !Number.isFinite(omega))
+    throw new Error('Modal circular frequency must be finite and positive.');
   return 0.5 * (params.a / omega + params.b * omega);
 }
 
@@ -76,7 +85,8 @@ export function prepareNewmarkSystemAssembled(
   dt: number,
   damping: RayleighParams,
 ): NewmarkSystem {
-  if (!(dt > 0) || !Number.isFinite(dt)) throw new Error('Newmark time step must be finite and positive.');
+  if (!(dt > 0) || !Number.isFinite(dt))
+    throw new Error('Newmark time step must be finite and positive.');
   if (K.length !== layout.ndof * layout.ndof || M.length !== layout.ndof * layout.ndof) {
     throw new Error('Newmark matrices must be ndof×ndof.');
   }
@@ -92,8 +102,24 @@ export function prepareNewmarkSystemAssembled(
   const Khat = linearCombination(K, M, 1, a0);
   addScaled(Khat, C, a1);
   const result = factorLDLT(freeMatrix(Khat, layout.ndof, layout.freeDofs), layout.freeDofs.length);
-  if (!result.ok) throw new Error(`Dynamic effective stiffness is singular at free DOF ${result.mechanism.freeDofIndex}.`);
-  return { ndof: layout.ndof, dt, damping: { ...damping }, M, C, factor: result.factor, a0, a1, a2, a3, a4, a5 };
+  if (!result.ok)
+    throw new Error(
+      `Dynamic effective stiffness is singular at free DOF ${result.mechanism.freeDofIndex}.`,
+    );
+  return {
+    ndof: layout.ndof,
+    dt,
+    damping: { ...damping },
+    M,
+    C,
+    factor: result.factor,
+    a0,
+    a1,
+    a2,
+    a3,
+    a4,
+    a5,
+  };
 }
 
 /** Assemble and factor K̂ once for a fixed 2D Newmark run. */
@@ -118,7 +144,8 @@ export function newmarkStepAssembled(
   damping: RayleighParams,
   system: NewmarkSystem,
 ): NewmarkState {
-  if (!(dt > 0) || !Number.isFinite(dt)) throw new Error('Newmark time step must be finite and positive.');
+  if (!(dt > 0) || !Number.isFinite(dt))
+    throw new Error('Newmark time step must be finite and positive.');
   validateState(layout, state);
   if (system.ndof !== layout.ndof || system.dt !== dt) {
     throw new Error('Newmark system does not match this layout / time step.');
@@ -126,16 +153,24 @@ export function newmarkStepAssembled(
 
   const nextTime = state.t + dt;
   const effectiveLoad = new Float64Array(loadAt(nextTime));
-  if (effectiveLoad.length !== layout.ndof) throw new Error('Dynamic load vector length does not match the mesh.');
+  if (effectiveLoad.length !== layout.ndof)
+    throw new Error('Dynamic load vector length does not match the mesh.');
   const massState = combination3(state.u, state.v, state.a, system.a0, system.a2, system.a3);
   const dampingState = combination3(state.u, state.v, state.a, system.a1, system.a4, system.a5);
   addScaledVector(effectiveLoad, multiplyMatrixVector(system.M, layout.ndof, massState), 1);
   addScaledVector(effectiveLoad, multiplyMatrixVector(system.C, layout.ndof, dampingState), 1);
-  const u = expandFreeVector(layout.ndof, layout.freeDofs, solveFactored(system.factor, freeVector(effectiveLoad, layout.freeDofs)));
+  const u = expandFreeVector(
+    layout.ndof,
+    layout.freeDofs,
+    solveFactored(system.factor, freeVector(effectiveLoad, layout.freeDofs)),
+  );
   const a = new Float64Array(layout.ndof);
   const v = new Float64Array(layout.ndof);
   for (let index = 0; index < layout.ndof; index++) {
-    a[index] = system.a0 * (u[index]! - state.u[index]!) - system.a2 * state.v[index]! - system.a3 * state.a[index]!;
+    a[index] =
+      system.a0 * (u[index]! - state.u[index]!) -
+      system.a2 * state.v[index]! -
+      system.a3 * state.a[index]!;
     v[index] = state.v[index]! + dt * (0.5 * state.a[index]! + 0.5 * a[index]!);
   }
   return { u, v, a, t: nextTime, damping: { ...damping }, system };
@@ -165,8 +200,13 @@ export function newmarkStep(
 }
 
 /** Exact SDOF DAF for a harmonic force, used by the honest live meter. */
-export function dynamicAmplificationRatio(forceOmega: number, naturalOmega: number, zeta: number): number {
-  if (!(forceOmega >= 0) || !(naturalOmega > 0) || !(zeta >= 0)) throw new Error('DAF inputs must be non-negative with a positive natural frequency.');
+export function dynamicAmplificationRatio(
+  forceOmega: number,
+  naturalOmega: number,
+  zeta: number,
+): number {
+  if (!(forceOmega >= 0) || !(naturalOmega > 0) || !(zeta >= 0))
+    throw new Error('DAF inputs must be non-negative with a positive natural frequency.');
   const ratio = forceOmega / naturalOmega;
   return 1 / Math.sqrt((1 - ratio * ratio) ** 2 + (2 * zeta * ratio) ** 2);
 }
@@ -183,7 +223,12 @@ export function influenceVectorX(mesh: AnalysisMesh): Float64Array {
 /**
  * Effective nodal load from horizontal base acceleration: −M · ι · ü_g.
  */
-export function baseExcitationLoad(mass: Float64Array, ndof: number, iota: Float64Array, ugDdot: number): Float64Array {
+export function baseExcitationLoad(
+  mass: Float64Array,
+  ndof: number,
+  iota: Float64Array,
+  ugDdot: number,
+): Float64Array {
   if (mass.length !== ndof * ndof || iota.length !== ndof) {
     throw new Error('Base-excitation load requires matching mass, ι, and ndof.');
   }
@@ -198,29 +243,47 @@ export function baseExcitationLoad(mass: Float64Array, ndof: number, iota: Float
 }
 
 function validateState(layout: DynamicDofLayout, state: NewmarkState): void {
-  if (state.u.length !== layout.ndof || state.v.length !== layout.ndof || state.a.length !== layout.ndof) {
+  if (
+    state.u.length !== layout.ndof ||
+    state.v.length !== layout.ndof ||
+    state.a.length !== layout.ndof
+  ) {
     throw new Error('Newmark state vectors must match the mesh DOF count.');
   }
   if (!Number.isFinite(state.t)) throw new Error('Newmark state time must be finite.');
 }
 
-function usableSystem(system: NewmarkSystem | undefined, mesh: AnalysisMesh, dt: number, damping: RayleighParams): system is NewmarkSystem {
-  return system !== undefined
-    && system.ndof === mesh.ndof
-    && system.dt === dt
-    && system.damping.a === damping.a
-    && system.damping.b === damping.b;
+function usableSystem(
+  system: NewmarkSystem | undefined,
+  mesh: AnalysisMesh,
+  dt: number,
+  damping: RayleighParams,
+): system is NewmarkSystem {
+  return (
+    system !== undefined &&
+    system.ndof === mesh.ndof &&
+    system.dt === dt &&
+    system.damping.a === damping.a &&
+    system.damping.b === damping.b
+  );
 }
 
-function linearCombination(first: Float64Array, second: Float64Array, firstScale: number, secondScale: number): Float64Array {
+function linearCombination(
+  first: Float64Array,
+  second: Float64Array,
+  firstScale: number,
+  secondScale: number,
+): Float64Array {
   if (first.length !== second.length) throw new Error('Matrix dimensions do not match.');
   const out = new Float64Array(first.length);
-  for (let index = 0; index < out.length; index++) out[index] = firstScale * first[index]! + secondScale * second[index]!;
+  for (let index = 0; index < out.length; index++)
+    out[index] = firstScale * first[index]! + secondScale * second[index]!;
   return out;
 }
 
 function addScaled(target: Float64Array, source: Float64Array, scale: number): void {
-  for (let index = 0; index < target.length; index++) target[index] = target[index]! + scale * source[index]!;
+  for (let index = 0; index < target.length; index++)
+    target[index] = target[index]! + scale * source[index]!;
 }
 
 function combination3(
@@ -232,7 +295,9 @@ function combination3(
   thirdScale: number,
 ): Float64Array {
   const out = new Float64Array(first.length);
-  for (let index = 0; index < out.length; index++) out[index] = firstScale * first[index]! + secondScale * second[index]! + thirdScale * third[index]!;
+  for (let index = 0; index < out.length; index++)
+    out[index] =
+      firstScale * first[index]! + secondScale * second[index]! + thirdScale * third[index]!;
   return out;
 }
 
@@ -247,5 +312,6 @@ function multiplyMatrixVector(matrix: Float64Array, n: number, vector: Float64Ar
 }
 
 function addScaledVector(target: Float64Array, source: Float64Array, scale: number): void {
-  for (let index = 0; index < target.length; index++) target[index] = target[index]! + scale * source[index]!;
+  for (let index = 0; index < target.length; index++)
+    target[index] = target[index]! + scale * source[index]!;
 }

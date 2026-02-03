@@ -2,9 +2,9 @@
 
 **A structural sandbox that tells the truth.**
 
-*Limit state design* is the foundational framework of modern structural engineering: identify the states at which a structure ceases to satisfy its criteria, and design against them. This is the interactive version.
+_Limit state design_ is the foundational framework of modern structural engineering: identify the states at which a structure ceases to satisfy its criteria, and design against them. This is the interactive version.
 
-Sketch a bridge or a tower. Watch stress flow through every member, live. Drive a truck across it. Dial wind up to a natural frequency and feel it fight back. And when it fails, Limit State doesn't play an explosion sound — it names the mechanism: *yield*, *buckling (with the eigenmode)*, *resonance (with the mode it excited)*, or *mechanism* — with the numbers that prove it.
+Sketch a bridge or a tower. Watch stress flow through every member, live. Drive a truck across it. Dial wind up to a natural frequency and feel it fight back. And when it fails, Limit State doesn't play an explosion sound — it names the mechanism: _yield_, _buckling (with the eigenmode)_, _resonance (with the mode it excited)_, or _mechanism_ — with the numbers that prove it.
 
 Construction games fake physics with springs. Real finite-element analysis lives in five-figure desktop suites. Limit State is the unclaimed middle: a **true FEM core** — direct stiffness method, eigenvalue buckling, modal analysis, Newmark time integration — under a surface you can play with in a browser tab.
 
@@ -12,7 +12,7 @@ Construction games fake physics with springs. Real finite-element analysis lives
 
 - **Build (2D + 3D)** — nodes, members, pins, rollers, hinges; steel, aluminum, timber, or spaghetti; real sections (box, I-beam, tube). In 3D: workplanes (ground / elevation / custom), extrude & replicate, deck polylines, and spatial presets from Pratt to twin-girder slender deck.
 - **Test** — load stories in both dimensions: **traffic** across a deck (2D moment envelope + influence lines; 3D quasi-static or moving-mass Newmark), **wind** (steady / sine / gusts — 3D gains a direction dial), **earthquake** base excitation, **ramp** to first limit, and **pushover** with plastic hinges.
-- **Break** — and get a straight answer. A collapse timeline shows load redistributing after the first member goes: *member 7 buckled → member 8 overstressed → hinge → mechanism.* Capacity-to-weight stays on the panel.
+- **Break** — and get a straight answer. A collapse timeline shows load redistributing after the first member goes: _member 7 buckled → member 8 overstressed → hinge → mechanism._ Capacity-to-weight stays on the panel.
 - **Share** — the whole model lives in the URL (schema v1 → 2D, v2 → 3D). No accounts, no server, no data leaves your machine.
 
 ![2D Build — Pratt truss](docs/build-2d.png)
@@ -75,4 +75,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ---
 
-**Version:** v0.7.0
+**Version:** v0.8.0

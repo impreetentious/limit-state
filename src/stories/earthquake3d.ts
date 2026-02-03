@@ -91,7 +91,10 @@ export function earthquakeLoadAt3d(scenario: EarthquakeScenario3d, time: number)
   return load;
 }
 
-export function initialEarthquakeState3d(scenario: EarthquakeScenario3d, modal?: EigenResult): NewmarkState | undefined {
+export function initialEarthquakeState3d(
+  scenario: EarthquakeScenario3d,
+  modal?: EigenResult,
+): NewmarkState | undefined {
   if (scenario.baseAnalysis.kind !== 'stable') return undefined;
   const omega1 = modal?.values[0];
   const omega2 = modal?.values[1] ?? (omega1 ? omega1 * 3 : undefined);
@@ -103,27 +106,49 @@ export function initialEarthquakeState3d(scenario: EarthquakeScenario3d, modal?:
     a: new Float64Array(scenario.mesh.ndof),
     t: 0,
     damping,
-    system: prepareNewmarkSystemAssembled(scenario.mesh, scenario.K, scenario.mass, scenario.dt, damping),
+    system: prepareNewmarkSystemAssembled(
+      scenario.mesh,
+      scenario.K,
+      scenario.mass,
+      scenario.dt,
+      damping,
+    ),
   };
 }
 
-export function stepEarthquake3d(scenario: EarthquakeScenario3d, state: NewmarkState, substeps = 4): NewmarkState {
+export function stepEarthquake3d(
+  scenario: EarthquakeScenario3d,
+  state: NewmarkState,
+  substeps = 4,
+): NewmarkState {
   let next = state;
   const damping = state.damping ?? { a: 0, b: 0 };
-  const system = state.system
-    ?? prepareNewmarkSystemAssembled(scenario.mesh, scenario.K, scenario.mass, scenario.dt, damping);
+  const system =
+    state.system ??
+    prepareNewmarkSystemAssembled(scenario.mesh, scenario.K, scenario.mass, scenario.dt, damping);
   for (let index = 0; index < substeps; index++) {
-    next = newmarkStepAssembled(scenario.mesh, next, (time) => earthquakeLoadAt3d(scenario, time), scenario.dt, damping, system);
+    next = newmarkStepAssembled(
+      scenario.mesh,
+      next,
+      (time) => earthquakeLoadAt3d(scenario, time),
+      scenario.dt,
+      damping,
+      system,
+    );
   }
   return { ...next, system };
 }
 
-export function earthquakeUtilization3d(scenario: EarthquakeScenario3d, u: Float64Array): Map<number, number> {
+export function earthquakeUtilization3d(
+  scenario: EarthquakeScenario3d,
+  u: Float64Array,
+): Map<number, number> {
   return utilizationAtDisplacement3d(scenario.mesh, u, scenario.baseFixedEnd);
 }
 
 function scaleRecord(record: GroundMotionRecord, scale: number): GroundMotionRecord {
-  if (!(scale > 0) || !Number.isFinite(scale)) throw new Error('Earthquake scale must be finite and positive.');
+  if (!(scale > 0) || !Number.isFinite(scale))
+    throw new Error('Earthquake scale must be finite and positive.');
   if (scale === 1) return record;
   const accel = new Float64Array(record.accel.length);
   for (let i = 0; i < accel.length; i++) accel[i] = record.accel[i]! * scale;

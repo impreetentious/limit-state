@@ -3,15 +3,18 @@
  * the static gravity/point-load equilibrium. Parallels the wind story.
  */
 import { assembleM } from '../fem/assemble';
-import { baseExcitationLoad, influenceVectorX, newmarkStep, prepareNewmarkSystem, rayleighFit, type NewmarkState } from '../fem/dynamics';
+import {
+  baseExcitationLoad,
+  influenceVectorX,
+  newmarkStep,
+  prepareNewmarkSystem,
+  rayleighFit,
+  type NewmarkState,
+} from '../fem/dynamics';
 import { buildMesh } from '../fem/mesh';
 import { earthquakeRecord, groundAccelAt, type GroundMotionRecord } from '../fem/records';
 import { responseSpectrum, type ResponseSpectrum } from '../fem/spectrum';
-import {
-  analyzeStaticModel,
-  utilizationAtDisplacement,
-  type StaticAnalysis,
-} from '../fem/statics';
+import { analyzeStaticModel, utilizationAtDisplacement, type StaticAnalysis } from '../fem/statics';
 import type { AnalysisMesh, AnalysisOptions, EditorModel, EigenResult } from '../fem/types';
 
 export interface EarthquakeScenario {
@@ -30,15 +33,22 @@ export interface EarthquakeScenario {
 }
 
 /** Prepare mesh, mass, influence vector, and spectrum for one earthquake run. */
-export function prepareEarthquake(model: EditorModel, options: AnalysisOptions = {}): EarthquakeScenario | undefined {
+export function prepareEarthquake(
+  model: EditorModel,
+  options: AnalysisOptions = {},
+): EarthquakeScenario | undefined {
   if (model.story.kind !== 'earthquake') return undefined;
   try {
     const mesh = buildMesh(model, options);
     const baseAnalysis = analyzeStaticModel(model, { ...options, secondOrder: false });
-    const baseLoad = baseAnalysis.kind === 'stable' ? new Float64Array(baseAnalysis.loads.F) : new Float64Array(mesh.ndof);
-    const baseFixedEnd = baseAnalysis.kind === 'stable'
-      ? new Float64Array(baseAnalysis.loads.elementFixedEnd)
-      : new Float64Array(mesh.elements.length * 6);
+    const baseLoad =
+      baseAnalysis.kind === 'stable'
+        ? new Float64Array(baseAnalysis.loads.F)
+        : new Float64Array(mesh.ndof);
+    const baseFixedEnd =
+      baseAnalysis.kind === 'stable'
+        ? new Float64Array(baseAnalysis.loads.elementFixedEnd)
+        : new Float64Array(mesh.elements.length * 6);
     const record = earthquakeRecord(model.story.record);
     const mass = assembleM(mesh);
     const iota = influenceVectorX(mesh);
@@ -72,7 +82,10 @@ export function earthquakeLoadAt(scenario: EarthquakeScenario, time: number): Fl
 }
 
 /** Zero-velocity Newmark state around static equilibrium. */
-export function initialEarthquakeState(scenario: EarthquakeScenario, modal?: EigenResult): NewmarkState | undefined {
+export function initialEarthquakeState(
+  scenario: EarthquakeScenario,
+  modal?: EigenResult,
+): NewmarkState | undefined {
   if (scenario.baseAnalysis.kind !== 'stable') return undefined;
   const omega1 = modal?.values[0];
   const omega2 = modal?.values[1] ?? (omega1 ? omega1 * 3 : undefined);
@@ -89,21 +102,34 @@ export function initialEarthquakeState(scenario: EarthquakeScenario, modal?: Eig
 }
 
 /** Advance one display frame (four 1/240 s Newmark substeps). */
-export function stepEarthquake(scenario: EarthquakeScenario, state: NewmarkState, substeps = 4): NewmarkState {
+export function stepEarthquake(
+  scenario: EarthquakeScenario,
+  state: NewmarkState,
+  substeps = 4,
+): NewmarkState {
   let next = state;
   for (let index = 0; index < substeps; index++) {
-    next = newmarkStep(scenario.mesh, next, (time) => earthquakeLoadAt(scenario, time), scenario.dt);
+    next = newmarkStep(
+      scenario.mesh,
+      next,
+      (time) => earthquakeLoadAt(scenario, time),
+      scenario.dt,
+    );
   }
   return next;
 }
 
 /** Combined-stress utilization under the dynamic displacement. */
-export function earthquakeUtilization(scenario: EarthquakeScenario, u: Float64Array): Map<number, number> {
+export function earthquakeUtilization(
+  scenario: EarthquakeScenario,
+  u: Float64Array,
+): Map<number, number> {
   return utilizationAtDisplacement(scenario.mesh, u, scenario.baseFixedEnd);
 }
 
 function scaleRecord(record: GroundMotionRecord, scale: number): GroundMotionRecord {
-  if (!(scale > 0) || !Number.isFinite(scale)) throw new Error('Earthquake scale must be finite and positive.');
+  if (!(scale > 0) || !Number.isFinite(scale))
+    throw new Error('Earthquake scale must be finite and positive.');
   if (scale === 1) return record;
   const accel = new Float64Array(record.accel.length);
   for (let i = 0; i < accel.length; i++) accel[i] = record.accel[i]! * scale;

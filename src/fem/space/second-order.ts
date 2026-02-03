@@ -33,7 +33,10 @@ export type SecondOrderAnalysis3d =
 /**
  * Iterative geometric-nonlinear static solve on a 3D model.
  */
-export function solveSecondOrderStatic3d(model: EditorModel3d, options: AnalysisOptions3d = {}): SecondOrderAnalysis3d {
+export function solveSecondOrderStatic3d(
+  model: EditorModel3d,
+  options: AnalysisOptions3d = {},
+): SecondOrderAnalysis3d {
   let mesh: AnalysisMesh3d;
   let F: Float64Array;
   let elementFixedEnd: Float64Array;
@@ -41,16 +44,25 @@ export function solveSecondOrderStatic3d(model: EditorModel3d, options: Analysis
     mesh = buildMesh3d(model, options);
     const loads = assembleLoadCase3d(mesh, {
       gravity: model.loads.gravity,
-      points: model.loads.points.map((point) => ({
-        meshNode: nodeIndex(mesh, point.node),
-        fx: point.fx, fy: point.fy, fz: point.fz,
-        mx: point.mx, my: point.my, mz: point.mz,
-      })).filter((p) => p.meshNode >= 0),
+      points: model.loads.points
+        .map((point) => ({
+          meshNode: nodeIndex(mesh, point.node),
+          fx: point.fx,
+          fy: point.fy,
+          fz: point.fz,
+          mx: point.mx,
+          my: point.my,
+          mz: point.mz,
+        }))
+        .filter((p) => p.meshNode >= 0),
     });
     F = loads.F;
     elementFixedEnd = loads.elementFixedEnd;
   } catch (error) {
-    return { kind: 'invalid', message: error instanceof Error ? error.message : 'P-Δ setup failed.' };
+    return {
+      kind: 'invalid',
+      message: error instanceof Error ? error.message : 'P-Δ setup failed.',
+    };
   }
 
   const linear = analyzeStaticModel3d(model, options);
@@ -123,11 +135,16 @@ export function elementAxial3d(result: StaticResult3d, elementCount: number): Fl
 }
 
 function nodeIndex(mesh: AnalysisMesh3d, editorId: number): number {
-  for (let node = 0; node < mesh.editorNode.length; node++) if (mesh.editorNode[node] === editorId) return node;
+  for (let node = 0; node < mesh.editorNode.length; node++)
+    if (mesh.editorNode[node] === editorId) return node;
   return -1;
 }
 
-function recoverResult(mesh: AnalysisMesh3d, u: Float64Array, elementFixedEnd: Float64Array): StaticResult3d {
+function recoverResult(
+  mesh: AnalysisMesh3d,
+  u: Float64Array,
+  elementFixedEnd: Float64Array,
+): StaticResult3d {
   const elementForces = new Float64Array(mesh.elements.length * 12);
   for (let index = 0; index < mesh.elements.length; index++) {
     const element = mesh.elements[index]!;

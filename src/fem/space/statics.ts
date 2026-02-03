@@ -48,7 +48,8 @@ export function solveStatic3d(
   elementFixedEnd?: Float64Array,
 ): StaticAnalysis3d {
   const system = cachedSystem ?? prepareStaticSystem3d(mesh);
-  if (system.ndof !== mesh.ndof) return { kind: 'invalid', message: 'Static system does not match this analysis mesh.' };
+  if (system.ndof !== mesh.ndof)
+    return { kind: 'invalid', message: 'Static system does not match this analysis mesh.' };
   if ('mechanismFreeDof' in system) {
     const nodeId = mechanismEditorNode3d(mesh, system.mechanismFreeDof, system.freePerm);
     return {
@@ -103,7 +104,10 @@ export function utilizationAtDisplacement3d(
  * wind/traffic/ramp base solves see cable slack on the live Build path
  * instead of only through the dedicated helper.
  */
-export function analyzeStaticModel3d(model: EditorModel3d, options: AnalysisOptions3d = {}): StaticAnalysis3d {
+export function analyzeStaticModel3d(
+  model: EditorModel3d,
+  options: AnalysisOptions3d = {},
+): StaticAnalysis3d {
   if (modelHasCables3d(model)) return solveTensionOnly3d(model, 1, options).analysis;
   try {
     const mesh = buildMesh3d(model, options);
@@ -116,12 +120,25 @@ export function analyzeStaticModel3d(model: EditorModel3d, options: AnalysisOpti
       const meshNode = nodeIndex.get(point.node);
       return meshNode === undefined
         ? []
-        : [{ meshNode, fx: point.fx, fy: point.fy, fz: point.fz, mx: point.mx, my: point.my, mz: point.mz }];
+        : [
+            {
+              meshNode,
+              fx: point.fx,
+              fy: point.fy,
+              fz: point.fz,
+              mx: point.mx,
+              my: point.my,
+              mz: point.mz,
+            },
+          ];
     });
     const loads = assembleLoadCase3d(mesh, { gravity: model.loads.gravity, points });
     return solveStatic3d(mesh, loads.F, undefined, loads.elementFixedEnd);
   } catch (error) {
-    return { kind: 'invalid', message: error instanceof Error ? error.message : '3D static analysis could not run.' };
+    return {
+      kind: 'invalid',
+      message: error instanceof Error ? error.message : '3D static analysis could not run.',
+    };
   }
 }
 
@@ -203,7 +220,8 @@ function fiberUtilization3d(
 ): number {
   if (!(fy > 0)) return 0;
   const axial = Math.abs(N) / A;
-  const bending = Math.abs(My) * cy / Math.max(Iy, 1e-30) + Math.abs(Mz) * cz / Math.max(Iz, 1e-30);
+  const bending =
+    (Math.abs(My) * cy) / Math.max(Iy, 1e-30) + (Math.abs(Mz) * cz) / Math.max(Iz, 1e-30);
   return Math.max(axial + bending, Math.abs(axial - bending)) / fy;
 }
 
@@ -215,10 +233,7 @@ export function deformationDisplay3d(
 ): { maxMeters: number; scale: number } {
   let maxMeters = 0;
   for (let node = 0; mesh.coords.length > node * 3; node++) {
-    maxMeters = Math.max(
-      maxMeters,
-      Math.hypot(u[6 * node]!, u[6 * node + 1]!, u[6 * node + 2]!),
-    );
+    maxMeters = Math.max(maxMeters, Math.hypot(u[6 * node]!, u[6 * node + 1]!, u[6 * node + 2]!));
   }
   if (maxMeters === 0) return { maxMeters, scale: 1 };
   return { maxMeters, scale: Math.max(1, Math.min(100_000, 28 / (maxMeters * pixelsPerMeter))) };
@@ -231,7 +246,10 @@ function recoverReactions3d(
   F: Float64Array,
 ): Map<number, { fx: number; fy: number; fz: number; mx: number; my: number; mz: number }> {
   const Ku = matvecSkyline(K, u);
-  const reactions = new Map<number, { fx: number; fy: number; fz: number; mx: number; my: number; mz: number }>();
+  const reactions = new Map<
+    number,
+    { fx: number; fy: number; fz: number; mx: number; my: number; mz: number }
+  >();
   for (let node = 0; node < mesh.editorNode.length; node++) {
     const editorId = mesh.editorNode[node]!;
     if (editorId < 0) continue;
@@ -274,7 +292,11 @@ export function externalWork3d(u: Float64Array, F: Float64Array): number {
 }
 
 /** Map a singular free-partition pivot (RCM order) back to an editor node. */
-export function mechanismEditorNode3d(mesh: AnalysisMesh3d, freeDofIndex: number, freePerm: Int32Array): number {
+export function mechanismEditorNode3d(
+  mesh: AnalysisMesh3d,
+  freeDofIndex: number,
+  freePerm: Int32Array,
+): number {
   const unordered = freePerm[freeDofIndex];
   if (unordered === undefined) return freeDofIndex;
   const fullDof = mesh.freeDofs[unordered];

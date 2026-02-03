@@ -30,7 +30,8 @@ export function addLumpedVehicleMass3d(
   for (const contact of contacts) {
     const element = mesh.elements[contact.element];
     if (!element) throw new Error(`Vehicle contact references missing element ${contact.element}.`);
-    if (!(contact.xi >= 0 && contact.xi <= 1)) throw new Error('Vehicle contact ξ must be within [0, 1].');
+    if (!(contact.xi >= 0 && contact.xi <= 1))
+      throw new Error('Vehicle contact ξ must be within [0, 1].');
     if (!(contact.massKg >= 0) || !Number.isFinite(contact.massKg)) {
       throw new Error('Vehicle contact mass must be finite and non-negative.');
     }

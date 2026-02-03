@@ -31,13 +31,22 @@ export interface WindScenario {
 }
 
 /** Prepare a repeatable uniform wind field, including its static starting state. */
-export function prepareWind(model: EditorModel, options: AnalysisOptions = {}): WindScenario | undefined {
+export function prepareWind(
+  model: EditorModel,
+  options: AnalysisOptions = {},
+): WindScenario | undefined {
   if (model.story.kind !== 'wind') return undefined;
   try {
     const mesh = buildMesh(model, options);
     const baseAnalysis = analyzeStaticModel(model, options);
-    const baseLoad = baseAnalysis.kind === 'stable' ? new Float64Array(baseAnalysis.loads.F) : new Float64Array(mesh.ndof);
-    const baseFixedEnd = baseAnalysis.kind === 'stable' ? new Float64Array(baseAnalysis.loads.elementFixedEnd) : new Float64Array(mesh.elements.length * 6);
+    const baseLoad =
+      baseAnalysis.kind === 'stable'
+        ? new Float64Array(baseAnalysis.loads.F)
+        : new Float64Array(mesh.ndof);
+    const baseFixedEnd =
+      baseAnalysis.kind === 'stable'
+        ? new Float64Array(baseAnalysis.loads.elementFixedEnd)
+        : new Float64Array(mesh.elements.length * 6);
     return {
       mesh,
       staticSystem: prepareStaticSystem(mesh),
@@ -107,7 +116,7 @@ function windIncrementForMultiplier(scenario: WindScenario, multiplier: number):
     // A horizontal member still has an exposed vertical depth (2c); without
     // it, a slender deck would receive no wind excitation in a 2D section.
     const tributary = Math.max(Math.abs(element.sin) * element.L, 2 * element.c);
-    const force = q * tributary / 2;
+    const force = (q * tributary) / 2;
     const aDof = 3 * element.na;
     const bDof = 3 * element.nb;
     const normalX = element.sin;
@@ -121,7 +130,10 @@ function windIncrementForMultiplier(scenario: WindScenario, multiplier: number):
 }
 
 /** Build a zero-velocity dynamic state around the already-solved gravity/point-load equilibrium. */
-export function initialWindState(scenario: WindScenario, modal?: EigenResult): NewmarkState | undefined {
+export function initialWindState(
+  scenario: WindScenario,
+  modal?: EigenResult,
+): NewmarkState | undefined {
   if (scenario.baseAnalysis.kind !== 'stable') return undefined;
   const omega1 = modal?.values[0];
   const omega2 = modal?.values[1] ?? (omega1 ? omega1 * 3 : undefined);
@@ -140,19 +152,26 @@ export function initialWindState(scenario: WindScenario, modal?: EigenResult): N
 /** Advance Newmark by a whole display frame (four fixed substeps). */
 export function stepWind(scenario: WindScenario, state: NewmarkState, substeps = 4): NewmarkState {
   let next = state;
-  for (let index = 0; index < substeps; index++) next = newmarkStep(scenario.mesh, next, (time) => windLoadAt(scenario, time), scenario.dt);
+  for (let index = 0; index < substeps; index++)
+    next = newmarkStep(scenario.mesh, next, (time) => windLoadAt(scenario, time), scenario.dt);
   return next;
 }
 
 /** q_i = φ_iᵀ M u for the mass-normalized modal explainer bars. */
-export function modalCoordinates(mesh: AnalysisMesh, modal: EigenResult, u: Float64Array, mass = assembleM(mesh)): Float64Array {
+export function modalCoordinates(
+  mesh: AnalysisMesh,
+  modal: EigenResult,
+  u: Float64Array,
+  mass = assembleM(mesh),
+): Float64Array {
   const count = modal.values.length;
   const output = new Float64Array(count);
   if (modal.vectors.length !== mesh.ndof * count || u.length !== mesh.ndof) return output;
   const Mu = multiply(mass, mesh.ndof, u);
   for (let mode = 0; mode < count; mode++) {
     let value = 0;
-    for (let dof = 0; dof < mesh.ndof; dof++) value += modal.vectors[dof * count + mode]! * Mu[dof]!;
+    for (let dof = 0; dof < mesh.ndof; dof++)
+      value += modal.vectors[dof * count + mode]! * Mu[dof]!;
     output[mode] = value;
   }
   return output;
@@ -219,7 +238,8 @@ function multiply(matrix: Float64Array, size: number, vector: Float64Array): Flo
   const out = new Float64Array(size);
   for (let row = 0; row < size; row++) {
     let value = 0;
-    for (let column = 0; column < size; column++) value += matrix[row * size + column]! * vector[column]!;
+    for (let column = 0; column < size; column++)
+      value += matrix[row * size + column]! * vector[column]!;
     out[row] = value;
   }
   return out;

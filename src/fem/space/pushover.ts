@@ -39,7 +39,13 @@ type SectionKey = `${number}:${'a' | 'b'}`;
 export function runPushover3d(model: EditorModel3d): PushoverResult3d {
   const reference = { ...model, loads: { gravity: false, points: model.loads.points } };
   if (reference.loads.points.length === 0) {
-    return { points: [], hinges: [], collapseLoadFactor: 0, collapseBaseShear: 0, outcome: 'stable' };
+    return {
+      points: [],
+      hinges: [],
+      collapseLoadFactor: 0,
+      collapseBaseShear: 0,
+      outcome: 'stable',
+    };
   }
 
   let current = cloneModel3d(reference);
@@ -56,7 +62,8 @@ export function runPushover3d(model: EditorModel3d): PushoverResult3d {
     const event = nextPathEvent(current, unit, moments, loadFactor);
     if (!event) {
       const state = analyzeAtFactor3d(current, Math.max(loadFactor, 1e-9));
-      if (state.kind === 'stable' && loadFactor > 0) points.push(samplePoint(state, loadFactor, hinges));
+      if (state.kind === 'stable' && loadFactor > 0)
+        points.push(samplePoint(state, loadFactor, hinges));
       return finish(points, hinges, loadFactor > 0 ? loadFactor : 1, 'stable');
     }
 
@@ -153,14 +160,22 @@ function endMoment(
   memberId: number,
   end: 'a' | 'b',
 ): number {
-  const indices = analysis.mesh.elements.flatMap((element, index) => (element.memberId === memberId ? [index] : []));
+  const indices = analysis.mesh.elements.flatMap((element, index) =>
+    element.memberId === memberId ? [index] : [],
+  );
   if (indices.length === 0) return 0;
   if (end === 'a') {
     const i = indices[0]!;
-    return Math.hypot(analysis.result.elementForces[i * 12 + 4]!, analysis.result.elementForces[i * 12 + 5]!);
+    return Math.hypot(
+      analysis.result.elementForces[i * 12 + 4]!,
+      analysis.result.elementForces[i * 12 + 5]!,
+    );
   }
   const i = indices[indices.length - 1]!;
-  return Math.hypot(analysis.result.elementForces[i * 12 + 10]!, analysis.result.elementForces[i * 12 + 11]!);
+  return Math.hypot(
+    analysis.result.elementForces[i * 12 + 10]!,
+    analysis.result.elementForces[i * 12 + 11]!,
+  );
 }
 
 function samplePoint(
@@ -176,7 +191,9 @@ function samplePoint(
   };
 }
 
-function baseShear(analysis: Extract<ReturnType<typeof analyzeAtFactor3d>, { kind: 'stable' }>): number {
+function baseShear(
+  analysis: Extract<ReturnType<typeof analyzeAtFactor3d>, { kind: 'stable' }>,
+): number {
   let shear = 0;
   for (const reaction of analysis.result.reactions.values()) {
     shear += Math.hypot(reaction.fx, reaction.fy);
@@ -184,7 +201,9 @@ function baseShear(analysis: Extract<ReturnType<typeof analyzeAtFactor3d>, { kin
   return shear;
 }
 
-function roofDisplacement(analysis: Extract<ReturnType<typeof analyzeAtFactor3d>, { kind: 'stable' }>): number {
+function roofDisplacement(
+  analysis: Extract<ReturnType<typeof analyzeAtFactor3d>, { kind: 'stable' }>,
+): number {
   let bestZ = -Infinity;
   let bestU = 0;
   for (let node = 0; node < analysis.mesh.editorNode.length; node++) {
@@ -198,16 +217,19 @@ function roofDisplacement(analysis: Extract<ReturnType<typeof analyzeAtFactor3d>
   return bestU;
 }
 
-function insertHinge(model: EditorModel3d, memberId: number, end: 'a' | 'b', analysis: Extract<ReturnType<typeof analyzeAtFactor3d>, { kind: 'stable' }>): EditorModel3d {
+function insertHinge(
+  model: EditorModel3d,
+  memberId: number,
+  end: 'a' | 'b',
+  analysis: Extract<ReturnType<typeof analyzeAtFactor3d>, { kind: 'stable' }>,
+): EditorModel3d {
   const axis = governingBendAxis(analysis, memberId, end);
   return {
     ...model,
     members: model.members.map((member) => {
       if (member.id !== memberId) return member;
       const prior = end === 'a' ? member.releaseA : member.releaseB;
-      const release: EndReleases3d = axis === 'y'
-        ? { ...prior, ty: true }
-        : { ...prior, tz: true };
+      const release: EndReleases3d = axis === 'y' ? { ...prior, ty: true } : { ...prior, tz: true };
       return end === 'a' ? { ...member, releaseA: release } : { ...member, releaseB: release };
     }),
   };
@@ -218,7 +240,9 @@ function governingBendAxis(
   memberId: number,
   end: 'a' | 'b',
 ): 'y' | 'z' {
-  const indices = analysis.mesh.elements.flatMap((element, index) => (element.memberId === memberId ? [index] : []));
+  const indices = analysis.mesh.elements.flatMap((element, index) =>
+    element.memberId === memberId ? [index] : [],
+  );
   if (indices.length === 0) return 'z';
   const i = end === 'a' ? indices[0]! : indices[indices.length - 1]!;
   const My = Math.abs(analysis.result.elementForces[i * 12 + (end === 'a' ? 4 : 10)]!);
@@ -237,7 +261,10 @@ function cloneModel3d(model: EditorModel3d): EditorModel3d {
       releaseB: { ...member.releaseB },
     })),
     supports: model.supports.map((support) => ({ ...support })),
-    loads: { gravity: model.loads.gravity, points: model.loads.points.map((point) => ({ ...point })) },
+    loads: {
+      gravity: model.loads.gravity,
+      points: model.loads.points.map((point) => ({ ...point })),
+    },
     deck: model.deck ? [...model.deck] : undefined,
     story: model.story ? { ...model.story } : undefined,
   };

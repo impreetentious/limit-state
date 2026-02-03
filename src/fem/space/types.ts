@@ -137,7 +137,10 @@ export interface StaticResult3d {
   elementForces: Float64Array;
   /** per editor member: max combined-stress utilization */
   utilization: Map<number, number>;
-  reactions: Map<number, { fx: number; fy: number; fz: number; mx: number; my: number; mz: number }>;
+  reactions: Map<
+    number,
+    { fx: number; fy: number; fz: number; mx: number; my: number; mz: number }
+  >;
 }
 
 export const NO_RELEASES: EndReleases3d = { tx: false, ty: false, tz: false };

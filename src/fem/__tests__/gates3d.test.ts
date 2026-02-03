@@ -228,7 +228,8 @@ describe('Phase 3 — G24 space corner frame', () => {
     const K = assembleK3d(mesh);
     const dense = skylineToDense(K);
     for (let i = 0; i < mesh.ndof; i++)
-      for (let j = 0; j < mesh.ndof; j++) expect(dense[i * mesh.ndof + j]).toBeCloseTo(dense[j * mesh.ndof + i]!, 9);
+      for (let j = 0; j < mesh.ndof; j++)
+        expect(dense[i * mesh.ndof + j]).toBeCloseTo(dense[j * mesh.ndof + i]!, 9);
 
     const analysis = analyzeStaticModel3d(model);
     if (analysis.kind !== 'stable') throw new Error(analysis.message);
@@ -348,14 +349,15 @@ describe('Phase 3 — G26 modal + G27 spatial buckling', () => {
 
     // Weak axis Iz=0.5 governs: P_cr = π² E Iz / L² with |N_ref|=1 ⇒ λ = π²/2.
     const weak = buckling3d(spatialPinnedColumn(2, 1, 0.5), Float64Array.of(-1, -1));
-    const expectWeak = (Math.PI ** 2) * 0.5;
+    const expectWeak = Math.PI ** 2 * 0.5;
     expect(Math.abs(weak.values[0]! - expectWeak) / expectWeak).toBeLessThan(0.008);
   });
 });
 
 describe('Phase 3 — G28 schema v2 migration', () => {
   it('G28: golden v1 decode identical; migrateV1toV2 + encode/decode3d round-trip', async () => {
-    const { decodeModel, encodeModel, encodeModel3d, decodeModel3d, migrateV1toV2 } = await import('../../share/serialize');
+    const { decodeModel, encodeModel, encodeModel3d, decodeModel3d, migrateV1toV2 } =
+      await import('../../share/serialize');
     const v1: EditorModel = {
       v: 1,
       name: 'migrate-beam',
@@ -364,16 +366,18 @@ describe('Phase 3 — G28 schema v2 migration', () => {
         { id: 1, x: 0, y: 0 },
         { id: 2, x: 8, y: 0 },
       ],
-      members: [{
-        id: 1,
-        a: 1,
-        b: 2,
-        material: 'steel-s355',
-        section: { kind: 'rect', b: 0.15, h: 0.3 },
-        releaseA: false,
-        releaseB: false,
-        cableOnly: false,
-      }],
+      members: [
+        {
+          id: 1,
+          a: 1,
+          b: 2,
+          material: 'steel-s355',
+          section: { kind: 'rect', b: 0.15, h: 0.3 },
+          releaseA: false,
+          releaseB: false,
+          cableOnly: false,
+        },
+      ],
       supports: [{ node: 1, kind: 'fixed' }],
       loads: { gravity: false, points: [{ node: 2, fx: 0, fy: -1e3 }] },
       deck: [],

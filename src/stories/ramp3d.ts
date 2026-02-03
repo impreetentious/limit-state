@@ -27,17 +27,25 @@ export function rampCapacity3d(model: EditorModel3d): number | undefined {
 }
 
 /** Analyze, classify, and optionally build the cascade. */
-export function analyzeRamp3d(model: EditorModel3d, factor: number, includeCascade = false): RampFrame3d {
+export function analyzeRamp3d(
+  model: EditorModel3d,
+  factor: number,
+  includeCascade = false,
+): RampFrame3d {
   const safeFactor = Math.max(0.001, factor);
   const analysis = analyzeAtFactor3d(model, safeFactor);
-  if (analysis.kind === 'invalid' || analysis.kind === 'mechanism') return { factor: safeFactor, analysis };
+  if (analysis.kind === 'invalid' || analysis.kind === 'mechanism')
+    return { factor: safeFactor, analysis };
   try {
     const report = evaluateFailure3d(model, safeFactor);
     return {
       factor: safeFactor,
       analysis,
       report,
-      cascade: includeCascade && report.kind !== 'stable' ? collapseCascade3d(model, safeFactor) : undefined,
+      cascade:
+        includeCascade && report.kind !== 'stable'
+          ? collapseCascade3d(model, safeFactor)
+          : undefined,
     };
   } catch {
     return { factor: safeFactor, analysis };

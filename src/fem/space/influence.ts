@@ -3,7 +3,13 @@
  * response quantity read per station. Parallel to 2D `fem/influence.ts`.
  */
 import { assembleLoadCase3d } from './assemble';
-import { buildDeckRoute3d, deckLength3d, editorNodeIndex3d, mapDeckStation3d, type DeckSegment3d } from './deck';
+import {
+  buildDeckRoute3d,
+  deckLength3d,
+  editorNodeIndex3d,
+  mapDeckStation3d,
+  type DeckSegment3d,
+} from './deck';
 import { buildMesh3d } from './mesh';
 import { prepareStaticSystem3d, solveStatic3d, type StaticSystem3d } from './statics';
 import type { AnalysisMesh3d, EditorModel3d, StaticResult3d } from './types';
@@ -87,7 +93,12 @@ export function computeInfluenceLineAt3d(
   }
   let peak = samples[0] ?? { station: 0, value: 0 };
   for (const sample of samples) if (Math.abs(sample.value) > Math.abs(peak.value)) peak = sample;
-  return { quantity, length: scenario.length, samples, peak: { station: peak.station, value: peak.value } };
+  return {
+    quantity,
+    length: scenario.length,
+    samples,
+    peak: { station: peak.station, value: peak.value },
+  };
 }
 
 /** Unit −Z-load response at one deck station. */
@@ -139,11 +150,16 @@ export function envelopeFromInfluence3d(
 /** Per-member |M| envelope from midspan-moment influence lines under the current traffic vehicle. */
 export function memberMomentEnvelopeFromInfluence3d(model: EditorModel3d): Map<number, number> {
   const weightkN = model.story?.kind === 'traffic' ? model.story.weightkN : 0;
-  const axleForce = Math.max(0, weightkN) * 1000 / 2;
+  const axleForce = (Math.max(0, weightkN) * 1000) / 2;
   const scenario = prepareInfluence3d(model);
   const envelope = new Map<number, number>();
   for (const memberId of model.deck ?? []) {
-    const line = computeInfluenceLineAt3d(scenario, { kind: 'moment', memberId, at: 'mid', axis: 'mag' });
+    const line = computeInfluenceLineAt3d(scenario, {
+      kind: 'moment',
+      memberId,
+      at: 'mid',
+      axis: 'mag',
+    });
     envelope.set(memberId, envelopeFromInfluence3d(line, axleForce).maxAbs);
   }
   return envelope;
@@ -198,7 +214,9 @@ function sectionMoment3d(
   quantity: Extract<InfluenceQuantity3d, { kind: 'moment' }>,
   loadedElement: number,
 ): number {
-  const indices = mesh.elements.flatMap((element, index) => (element.memberId === quantity.memberId ? [index] : []));
+  const indices = mesh.elements.flatMap((element, index) =>
+    element.memberId === quantity.memberId ? [index] : [],
+  );
   if (indices.length === 0) return 0;
   const axis = quantity.axis ?? 'mag';
   const pick = (index: number, end: 'a' | 'b'): number => {

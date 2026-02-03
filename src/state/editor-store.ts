@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { DEFAULT_SECTION } from '../fem/materials';
-import type { EditorModel, MemberSpec, PointLoad, SectionSpec, StorySpec, SupportKind } from '../fem/types';
+import type {
+  EditorModel,
+  MemberSpec,
+  PointLoad,
+  SectionSpec,
+  StorySpec,
+  SupportKind,
+} from '../fem/types';
 
 export type EditorTool = 'select' | 'node' | 'member' | 'support' | 'load' | 'deck' | 'delete';
 export type AppMode = 'build' | 'test';
@@ -50,7 +57,10 @@ export interface EditorStore {
   addMember: (a: number, b: number) => number | undefined;
   splitMember: (id: number, x: number, y: number) => number | undefined;
   updateMember: (id: number, patch: Partial<Omit<MemberSpec, 'id' | 'a' | 'b'>>) => void;
-  updateMembers: (ids: readonly number[], patch: Partial<Omit<MemberSpec, 'id' | 'a' | 'b'>>) => void;
+  updateMembers: (
+    ids: readonly number[],
+    patch: Partial<Omit<MemberSpec, 'id' | 'a' | 'b'>>,
+  ) => void;
   setSupport: (node: number, kind: SupportKind | undefined) => void;
   cycleSupport: (node: number) => void;
   setPointLoad: (node: number, fx: number, fy: number) => void;
@@ -120,96 +130,127 @@ export const useEditorStore = create<EditorStore>((set) => ({
   select: (selection) => set({ selection }),
   setGridSnap: (gridSnap) => set({ gridSnap }),
   setModelName: (name) => mutate(set, (model) => ({ ...model, name })),
-  loadModel: (model, options) => set((state) => ({
-    model: cloneModel(model),
-    past: [...state.past, cloneModel(state.model)].slice(-HISTORY_LIMIT),
-    future: [],
-    selection: { kind: 'none' },
-    notice: null,
-    activeChallengeId: options && 'challengeId' in options ? options.challengeId ?? null : null,
-  })),
+  loadModel: (model, options) =>
+    set((state) => ({
+      model: cloneModel(model),
+      past: [...state.past, cloneModel(state.model)].slice(-HISTORY_LIMIT),
+      future: [],
+      selection: { kind: 'none' },
+      notice: null,
+      activeChallengeId: options && 'challengeId' in options ? (options.challengeId ?? null) : null,
+    })),
   setActiveChallenge: (activeChallengeId) => set({ activeChallengeId }),
   setStory: (story) => mutate(set, (model) => ({ ...model, story })),
   addNode: (x, y) => {
     let id = 0;
-    mutate(set, (model) => {
-      id = nextId(model.nodes);
-      return { ...model, nodes: [...model.nodes, { id, x, y }] };
-    }, () => ({ kind: 'node', id }));
+    mutate(
+      set,
+      (model) => {
+        id = nextId(model.nodes);
+        return { ...model, nodes: [...model.nodes, { id, x, y }] };
+      },
+      () => ({ kind: 'node', id }),
+    );
     return id;
   },
-  updateNode: (id, x, y) => mutate(set, (model) => ({
-    ...model,
-    nodes: model.nodes.map((node) => (node.id === id ? { ...node, x, y } : node)),
-  })),
+  updateNode: (id, x, y) =>
+    mutate(set, (model) => ({
+      ...model,
+      nodes: model.nodes.map((node) => (node.id === id ? { ...node, x, y } : node)),
+    })),
   addMember: (a, b) => {
     let id: number | undefined;
     let reachedLimit = false;
-    mutate(set, (model) => {
-      if (model.members.length >= MEMBER_HARD_LIMIT) {
-        reachedLimit = true;
-        return model;
-      }
-      if (a === b) return model;
-      if (!model.nodes.some((node) => node.id === a) || !model.nodes.some((node) => node.id === b)) return model;
-      if (model.members.some((member) => (member.a === a && member.b === b) || (member.a === b && member.b === a))) {
-        return model;
-      }
-      id = nextId(model.members);
-      return {
-        ...model,
-        members: [
-          ...model.members,
-          {
-            id,
-            a,
-            b,
-            material: 'steel-s355',
-            section: { ...DEFAULT_SECTION },
-            releaseA: false,
-            releaseB: false,
-            cableOnly: false,
-          },
-        ],
-      };
-    }, () => (id === undefined ? undefined : { kind: 'member', id }));
-    if (reachedLimit) set({ notice: `Member limit reached (${MEMBER_HARD_LIMIT}). Simplify the model before adding more members.` });
+    mutate(
+      set,
+      (model) => {
+        if (model.members.length >= MEMBER_HARD_LIMIT) {
+          reachedLimit = true;
+          return model;
+        }
+        if (a === b) return model;
+        if (
+          !model.nodes.some((node) => node.id === a) ||
+          !model.nodes.some((node) => node.id === b)
+        )
+          return model;
+        if (
+          model.members.some(
+            (member) => (member.a === a && member.b === b) || (member.a === b && member.b === a),
+          )
+        ) {
+          return model;
+        }
+        id = nextId(model.members);
+        return {
+          ...model,
+          members: [
+            ...model.members,
+            {
+              id,
+              a,
+              b,
+              material: 'steel-s355',
+              section: { ...DEFAULT_SECTION },
+              releaseA: false,
+              releaseB: false,
+              cableOnly: false,
+            },
+          ],
+        };
+      },
+      () => (id === undefined ? undefined : { kind: 'member', id }),
+    );
+    if (reachedLimit)
+      set({
+        notice: `Member limit reached (${MEMBER_HARD_LIMIT}). Simplify the model before adding more members.`,
+      });
     return id;
   },
   splitMember: (id, x, y) => {
     let nodeId: number | undefined;
     let appendedMemberId: number | undefined;
     let reachedLimit = false;
-    mutate(set, (model) => {
-      const member = model.members.find((candidate) => candidate.id === id);
-      if (!member) return model;
-      if (model.members.length >= MEMBER_HARD_LIMIT) {
-        reachedLimit = true;
-        return model;
-      }
-      nodeId = nextId(model.nodes);
-      appendedMemberId = nextId(model.members);
-      const first: MemberSpec = { ...member, b: nodeId, releaseB: false };
-      const second: MemberSpec = { ...member, id: appendedMemberId, a: nodeId, releaseA: false };
-      return {
-        ...model,
-        nodes: [...model.nodes, { id: nodeId, x, y }],
-        members: model.members.flatMap((candidate) => candidate.id === id ? [first, second] : [candidate]),
-        deck: splitDeckPath(model.deck, model.members, member, appendedMemberId),
-      };
-    }, () => nodeId === undefined ? undefined : { kind: 'node', id: nodeId });
-    if (reachedLimit) set({ notice: `Member limit reached (${MEMBER_HARD_LIMIT}). Simplify the model before splitting members.` });
+    mutate(
+      set,
+      (model) => {
+        const member = model.members.find((candidate) => candidate.id === id);
+        if (!member) return model;
+        if (model.members.length >= MEMBER_HARD_LIMIT) {
+          reachedLimit = true;
+          return model;
+        }
+        nodeId = nextId(model.nodes);
+        appendedMemberId = nextId(model.members);
+        const first: MemberSpec = { ...member, b: nodeId, releaseB: false };
+        const second: MemberSpec = { ...member, id: appendedMemberId, a: nodeId, releaseA: false };
+        return {
+          ...model,
+          nodes: [...model.nodes, { id: nodeId, x, y }],
+          members: model.members.flatMap((candidate) =>
+            candidate.id === id ? [first, second] : [candidate],
+          ),
+          deck: splitDeckPath(model.deck, model.members, member, appendedMemberId),
+        };
+      },
+      () => (nodeId === undefined ? undefined : { kind: 'node', id: nodeId }),
+    );
+    if (reachedLimit)
+      set({
+        notice: `Member limit reached (${MEMBER_HARD_LIMIT}). Simplify the model before splitting members.`,
+      });
     return nodeId;
   },
-  updateMember: (id, patch) => mutate(set, (model) => ({
-    ...model,
-    members: model.members.map((member) => {
-      if (member.id !== id) return member;
-      const next = { ...member, ...patch };
-      if (next.cableOnly) return { ...next, releaseA: true, releaseB: true };
-      return next;
-    }),
-  })),
+  updateMember: (id, patch) =>
+    mutate(set, (model) => ({
+      ...model,
+      members: model.members.map((member) => {
+        if (member.id !== id) return member;
+        const next = { ...member, ...patch };
+        if (next.cableOnly) return { ...next, releaseA: true, releaseB: true };
+        return next;
+      }),
+    })),
   updateMembers: (ids, patch) => {
     const selected = new Set(ids);
     if (selected.size === 0) return;
@@ -223,23 +264,34 @@ export const useEditorStore = create<EditorStore>((set) => ({
       }),
     }));
   },
-  setSupport: (node, kind) => mutate(set, (model) => ({
-    ...model,
-    supports: kind === undefined
-      ? model.supports.filter((support) => support.node !== node)
-      : [...model.supports.filter((support) => support.node !== node), { node, kind }],
-  })),
+  setSupport: (node, kind) =>
+    mutate(set, (model) => ({
+      ...model,
+      supports:
+        kind === undefined
+          ? model.supports.filter((support) => support.node !== node)
+          : [...model.supports.filter((support) => support.node !== node), { node, kind }],
+    })),
   cycleSupport: (node) => {
-    const current = useEditorStore.getState().model.supports.find((support) => support.node === node)?.kind;
+    const current = useEditorStore
+      .getState()
+      .model.supports.find((support) => support.node === node)?.kind;
     const next: SupportKind | undefined =
-      current === undefined ? 'pin' : current === 'pin' ? 'roller' : current === 'roller' ? 'fixed' : undefined;
+      current === undefined
+        ? 'pin'
+        : current === 'pin'
+          ? 'roller'
+          : current === 'roller'
+            ? 'fixed'
+            : undefined;
     useEditorStore.getState().setSupport(node, next);
   },
-  setPointLoad: (node, fx, fy) => mutate(set, (model) => {
-    const points = model.loads.points.filter((point) => point.node !== node);
-    const point: PointLoad = { node, fx, fy };
-    return { ...model, loads: { ...model.loads, points: [...points, point] } };
-  }),
+  setPointLoad: (node, fx, fy) =>
+    mutate(set, (model) => {
+      const points = model.loads.points.filter((point) => point.node !== node);
+      const point: PointLoad = { node, fx, fy };
+      return { ...model, loads: { ...model.loads, points: [...points, point] } };
+    }),
   toggleDeckMember: (memberId) => {
     let notice: string | null = null;
     mutate(set, (model) => {
@@ -264,59 +316,79 @@ export const useEditorStore = create<EditorStore>((set) => ({
     });
     if (notice) set({ notice });
   },
-  deleteNode: (id) => mutate(set, (model) => {
-    const removedMembers = new Set(model.members.filter((member) => member.a === id || member.b === id).map((member) => member.id));
-    return {
-      ...model,
-      nodes: model.nodes.filter((node) => node.id !== id),
-      members: model.members.filter((member) => !removedMembers.has(member.id)),
-      supports: model.supports.filter((support) => support.node !== id),
-      loads: { ...model.loads, points: model.loads.points.filter((point) => point.node !== id) },
-      deck: model.deck.filter((memberId) => !removedMembers.has(memberId)),
-    };
-  }, () => ({ kind: 'none' })),
-  deleteMember: (id) => mutate(set, (model) => ({
-    ...model,
-    members: model.members.filter((member) => member.id !== id),
-    deck: model.deck.filter((memberId) => memberId !== id),
-  }), () => ({ kind: 'none' })),
+  deleteNode: (id) =>
+    mutate(
+      set,
+      (model) => {
+        const removedMembers = new Set(
+          model.members
+            .filter((member) => member.a === id || member.b === id)
+            .map((member) => member.id),
+        );
+        return {
+          ...model,
+          nodes: model.nodes.filter((node) => node.id !== id),
+          members: model.members.filter((member) => !removedMembers.has(member.id)),
+          supports: model.supports.filter((support) => support.node !== id),
+          loads: {
+            ...model.loads,
+            points: model.loads.points.filter((point) => point.node !== id),
+          },
+          deck: model.deck.filter((memberId) => !removedMembers.has(memberId)),
+        };
+      },
+      () => ({ kind: 'none' }),
+    ),
+  deleteMember: (id) =>
+    mutate(
+      set,
+      (model) => ({
+        ...model,
+        members: model.members.filter((member) => member.id !== id),
+        deck: model.deck.filter((memberId) => memberId !== id),
+      }),
+      () => ({ kind: 'none' }),
+    ),
   setStability: (stability) => set({ stability }),
   setNotice: (notice) => set({ notice }),
   setResultDiagram: (resultDiagram) => set({ resultDiagram }),
   setShowDeformed: (showDeformed) => set({ showDeformed }),
   setShearFlexible: (shearFlexible) => set({ shearFlexible }),
   setSecondOrder: (secondOrder) => set({ secondOrder }),
-  undo: () => set((state) => {
-    const previous = state.past.at(-1);
-    if (!previous) return state;
-    return {
-      model: cloneModel(previous),
-      past: state.past.slice(0, -1),
-      future: [cloneModel(state.model), ...state.future],
+  undo: () =>
+    set((state) => {
+      const previous = state.past.at(-1);
+      if (!previous) return state;
+      return {
+        model: cloneModel(previous),
+        past: state.past.slice(0, -1),
+        future: [cloneModel(state.model), ...state.future],
+        selection: { kind: 'none' },
+        notice: null,
+      };
+    }),
+  redo: () =>
+    set((state) => {
+      const next = state.future[0];
+      if (!next) return state;
+      return {
+        model: cloneModel(next),
+        past: [...state.past, cloneModel(state.model)].slice(-HISTORY_LIMIT),
+        future: state.future.slice(1),
+        selection: { kind: 'none' },
+        notice: null,
+      };
+    }),
+  reset: () =>
+    set({
+      model: createBlankModel(),
       selection: { kind: 'none' },
+      past: [],
+      future: [],
+      stability: { kind: 'idle', message: 'Draw a member to begin.' },
       notice: null,
-    };
-  }),
-  redo: () => set((state) => {
-    const next = state.future[0];
-    if (!next) return state;
-    return {
-      model: cloneModel(next),
-      past: [...state.past, cloneModel(state.model)].slice(-HISTORY_LIMIT),
-      future: state.future.slice(1),
-      selection: { kind: 'none' },
-      notice: null,
-    };
-  }),
-  reset: () => set({
-    model: createBlankModel(),
-    selection: { kind: 'none' },
-    past: [],
-    future: [],
-    stability: { kind: 'idle', message: 'Draw a member to begin.' },
-    notice: null,
-    activeChallengeId: null,
-  }),
+      activeChallengeId: null,
+    }),
 }));
 
 function mutate(
@@ -347,13 +419,27 @@ function sharesNode(a: MemberSpec, b: MemberSpec): boolean {
 }
 
 /** Preserve the traffic path while replacing one drawn member with its two collinear segments. */
-function splitDeckPath(deck: readonly number[], members: readonly MemberSpec[], member: MemberSpec, appendedMemberId: number): number[] {
+function splitDeckPath(
+  deck: readonly number[],
+  members: readonly MemberSpec[],
+  member: MemberSpec,
+  appendedMemberId: number,
+): number[] {
   const index = deck.indexOf(member.id);
   if (index < 0) return [...deck];
-  const before = index > 0 ? members.find((candidate) => candidate.id === deck[index - 1]!) : undefined;
-  const after = index < deck.length - 1 ? members.find((candidate) => candidate.id === deck[index + 1]!) : undefined;
-  const enteredAt = before ? sharedNode(before, member) : after ? otherEnd(member, sharedNode(after, member)) : member.a;
-  const replacement = enteredAt === member.b ? [appendedMemberId, member.id] : [member.id, appendedMemberId];
+  const before =
+    index > 0 ? members.find((candidate) => candidate.id === deck[index - 1]!) : undefined;
+  const after =
+    index < deck.length - 1
+      ? members.find((candidate) => candidate.id === deck[index + 1]!)
+      : undefined;
+  const enteredAt = before
+    ? sharedNode(before, member)
+    : after
+      ? otherEnd(member, sharedNode(after, member))
+      : member.a;
+  const replacement =
+    enteredAt === member.b ? [appendedMemberId, member.id] : [member.id, appendedMemberId];
   return [...deck.slice(0, index), ...replacement, ...deck.slice(index + 1)];
 }
 
@@ -367,9 +453,13 @@ function otherEnd(member: MemberSpec, node: number | undefined): number {
 
 export function defaultSection(kind: SectionSpec['kind']): SectionSpec {
   switch (kind) {
-    case 'rect': return { kind, b: 0.2, h: 0.3 };
-    case 'box': return { kind, b: 0.2, h: 0.2, t: 0.008 };
-    case 'ibeam': return { kind, b: 0.2, h: 0.3, tf: 0.02, tw: 0.012 };
-    case 'tube': return { kind, d: 0.2, t: 0.01 };
+    case 'rect':
+      return { kind, b: 0.2, h: 0.3 };
+    case 'box':
+      return { kind, b: 0.2, h: 0.2, t: 0.008 };
+    case 'ibeam':
+      return { kind, b: 0.2, h: 0.3, tf: 0.02, tw: 0.012 };
+    case 'tube':
+      return { kind, d: 0.2, t: 0.01 };
   }
 }

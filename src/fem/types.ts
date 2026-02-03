@@ -45,7 +45,13 @@ export interface PointLoad {
 
 export type StorySpec =
   | { kind: 'traffic'; weightkN: number; speed: number; movingMass: boolean }
-  | { kind: 'wind'; pattern: 'steady' | 'sine' | 'gusts'; amplitudekNm: number; freqHz: number; zeta: number }
+  | {
+      kind: 'wind';
+      pattern: 'steady' | 'sine' | 'gusts';
+      amplitudekNm: number;
+      freqHz: number;
+      zeta: number;
+    }
   | { kind: 'earthquake'; record: EarthquakeRecordId; scale: number; zeta: number }
   | { kind: 'ramp' }
   | { kind: 'pushover' };

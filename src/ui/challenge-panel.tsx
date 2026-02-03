@@ -27,21 +27,30 @@ export function ChallengePanel({
   if (!challenge || !verdict) return null;
 
   return (
-    <aside className={`challenge-panel ${verdict.passed ? 'challenge-passed' : ''}`} aria-label="Challenge checklist">
+    <aside
+      className={`challenge-panel ${verdict.passed ? 'challenge-passed' : ''}`}
+      aria-label="Challenge checklist"
+    >
       <div className="challenge-panel-header">
         <div>
           <strong>{challenge.label}</strong>
           <p>{challenge.brief}</p>
         </div>
-        <button type="button" className="quiet-button" onClick={onClear}>Leave</button>
+        <button type="button" className="quiet-button" onClick={onClear}>
+          Leave
+        </button>
       </div>
       <ul className="challenge-checks">
         {verdict.checks.map((check) => (
           <li key={check.id} className={check.ok ? 'ok' : 'fail'}>
-            <span className="challenge-mark" aria-hidden>{check.ok ? '✓' : '·'}</span>
+            <span className="challenge-mark" aria-hidden>
+              {check.ok ? '✓' : '·'}
+            </span>
             <span>
               <strong>{check.label}</strong>
-              <span className="challenge-numbers">{check.actual} · need {check.required}</span>
+              <span className="challenge-numbers">
+                {check.actual} · need {check.required}
+              </span>
             </span>
           </li>
         ))}

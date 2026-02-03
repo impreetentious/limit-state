@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NO_RELEASES, type EditorModel3d } from '../../fem/space';
-import {
-  extrudeModel3d,
-  replicateModel3d,
-  scaleVec,
-  workplaneExtrudeAxis,
-} from '../ops3d';
+import { extrudeModel3d, replicateModel3d, scaleVec, workplaneExtrudeAxis } from '../ops3d';
 
 const SECTION = { kind: 'box' as const, b: 0.2, h: 0.2, t: 0.008 };
 
