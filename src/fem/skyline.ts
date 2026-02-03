@@ -24,8 +24,7 @@ export interface SkylineFactor {
 }
 
 export type SkylineFactorResult =
-  | { ok: true; factor: SkylineFactor }
-  | { ok: false; mechanism: { freeDofIndex: number } };
+  { ok: true; factor: SkylineFactor } | { ok: false; mechanism: { freeDofIndex: number } };
 
 /** Build a zero skyline from a first-column profile. */
 export function createSkyline(firstCol: Int32Array): SkylineMatrix {

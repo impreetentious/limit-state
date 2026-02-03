@@ -51,6 +51,7 @@ The 3D view needs WebGL; eigen solves run in a Web Worker.
 npm run typecheck
 npm test           # solver checks against the closed-form benchmarks
 npm run lint
+npm run format:check
 npm run build      # static export in out/
 ```
 
@@ -75,4 +76,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ---
 
-**Version:** v0.8.0
+**Version:** v0.8.1

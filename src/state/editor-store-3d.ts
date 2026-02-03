@@ -4,9 +4,11 @@
  */
 import { create } from 'zustand';
 import { DEFAULT_SECTION } from '../fem/materials';
+import type { MaterialId, SectionSpec } from '../fem/types';
 import {
   NO_RELEASES,
   type EditorModel3d,
+  type MemberSpec3d,
   type StorySpec3d,
   type SupportKind3d,
 } from '../fem/space';
@@ -24,26 +26,19 @@ import {
 /** @deprecated Prefer WorkplaneKind — kept for existing imports. */
 export type Workplane = WorkplaneKind;
 export type EditorTool3d =
-  | 'select'
-  | 'node'
-  | 'member'
-  | 'support'
-  | 'load'
-  | 'deck'
-  | 'delete'
-  | 'workplane';
+  'select' | 'node' | 'member' | 'support' | 'load' | 'deck' | 'delete' | 'workplane';
 export type ResultDiagram3d = 'none' | 'axial' | 'shear' | 'moment';
 
 export type Selection3d =
   | { kind: 'none' }
   | { kind: 'node'; id: number }
-  | { kind: 'member'; id: number };
+  | { kind: 'member'; id: number }
+  /** Additive member selection used for bulk material/section edits. */
+  | { kind: 'members'; ids: number[] };
 
 /** Three-click custom workplane definition in progress. */
 export type WorkplanePick =
-  | { step: 0 }
-  | { step: 1; origin: Vec3 }
-  | { step: 2; origin: Vec3; alongU: Vec3 };
+  { step: 0 } | { step: 1; origin: Vec3 } | { step: 2; origin: Vec3; alongU: Vec3 };
 
 interface EditorState3d {
   model: EditorModel3d;
@@ -66,6 +61,12 @@ interface EditorState3d {
   /** Result diagram overlay for 3D members. */
   resultDiagram: ResultDiagram3d;
   setResultDiagram: (diagram: ResultDiagram3d) => void;
+  /** Timoshenko (shear-flexible) element formulation for 3D statics. */
+  shearFlexible: boolean;
+  /** P-Δ second-order solve for 3D statics. */
+  secondOrder: boolean;
+  setShearFlexible: (enabled: boolean) => void;
+  setSecondOrder: (enabled: boolean) => void;
   setTool: (tool: EditorTool3d) => void;
   setWorkplanePreset: (plane: 'ground' | 'xz' | 'yz') => void;
   beginCustomWorkplane: () => void;
@@ -80,6 +81,18 @@ interface EditorState3d {
   addNodeAt: (x: number, y: number, z: number) => number;
   addMemberBetween: (a: number, b: number) => void;
   setSupportOnNode: (nodeId: number, kind?: SupportKind3d) => void;
+  setSupport: (nodeId: number, kind: SupportKind3d | undefined) => void;
+  updateNode: (nodeId: number, x: number, y: number, z: number) => void;
+  updateMember: (
+    memberId: number,
+    patch: Partial<
+      Pick<MemberSpec3d, 'material' | 'section' | 'releaseA' | 'releaseB' | 'roll' | 'cableOnly'>
+    >,
+  ) => void;
+  updateMembers: (
+    memberIds: readonly number[],
+    patch: { material?: MaterialId; section?: SectionSpec },
+  ) => void;
   addLoadOnNode: (nodeId: number) => void;
   deleteSelection: () => void;
   setMemberStart: (id: number | null) => void;
@@ -180,6 +193,10 @@ export const useEditorStore3d = create<EditorState3d>((rawSet, get) => {
     future: [],
     resultDiagram: 'none',
     setResultDiagram: (resultDiagram) => rawSet({ resultDiagram }),
+    shearFlexible: false,
+    secondOrder: false,
+    setShearFlexible: (shearFlexible) => rawSet({ shearFlexible }),
+    setSecondOrder: (secondOrder) => rawSet({ secondOrder }),
 
     undo: () =>
       rawSet((state) => {
@@ -363,6 +380,46 @@ export const useEditorStore3d = create<EditorState3d>((rawSet, get) => {
       });
     },
 
+    setSupport: (nodeId, kind) => {
+      const { model } = get();
+      if (!model.nodes.some((node) => node.id === nodeId)) return;
+      const supports = model.supports.filter((support) => support.node !== nodeId);
+      if (kind !== undefined) supports.push({ node: nodeId, kind });
+      set({ model: { ...model, supports }, selection: { kind: 'node', id: nodeId } });
+    },
+
+    updateNode: (nodeId, x, y, z) =>
+      set((state) => ({
+        model: {
+          ...state.model,
+          nodes: state.model.nodes.map((node) =>
+            node.id === nodeId ? { ...node, x, y, z } : node,
+          ),
+        },
+      })),
+
+    updateMember: (memberId, patch) =>
+      set((state) => ({
+        model: {
+          ...state.model,
+          members: state.model.members.map((member) =>
+            member.id === memberId ? { ...member, ...patch } : member,
+          ),
+        },
+      })),
+
+    updateMembers: (memberIds, patch) => {
+      const ids = new Set(memberIds);
+      set((state) => ({
+        model: {
+          ...state.model,
+          members: state.model.members.map((member) =>
+            ids.has(member.id) ? { ...member, ...patch } : member,
+          ),
+        },
+      }));
+    },
+
     addLoadOnNode: (nodeId) => {
       const { model } = get();
       if (!model.nodes.some((n) => n.id === nodeId)) return;
@@ -394,15 +451,16 @@ export const useEditorStore3d = create<EditorState3d>((rawSet, get) => {
           selection: { kind: 'none' },
           notice: `Deleted node ${id}`,
         });
-      } else if (selection.kind === 'member') {
+      } else if (selection.kind === 'member' || selection.kind === 'members') {
+        const ids = new Set(selection.kind === 'member' ? [selection.id] : selection.ids);
         set({
           model: {
             ...model,
-            members: model.members.filter((m) => m.id !== selection.id),
-            deck: (model.deck ?? []).filter((memberId) => memberId !== selection.id),
+            members: model.members.filter((m) => !ids.has(m.id)),
+            deck: (model.deck ?? []).filter((memberId) => !ids.has(memberId)),
           },
           selection: { kind: 'none' },
-          notice: `Deleted member ${selection.id}`,
+          notice: `Deleted ${ids.size} member${ids.size === 1 ? '' : 's'}`,
         });
       }
     },
