@@ -59,10 +59,10 @@ To refresh README stills after a UI change: `npm run build && npx serve out -l 4
 
 ## Deploy
 
-Static, client-side, no backend. Both pipelines are committed:
+Static, client-side, no backend. Nothing is deployed yet; both pipelines are committed and ready:
 
 - **GitHub Pages** — push to `main`; `.github/workflows/ci.yml` builds and deploys (enable Pages → Source: GitHub Actions in repo settings, once).
-- **GitLab Pages** — push to `main`; `.gitlab-ci.yml` builds and publishes automatically.
+- **GitLab Pages** — `.gitlab-ci.yml` builds and publishes on push to `main`. It is an unused mirror today: the repository has no GitLab remote, so this pipeline only becomes live once a GitLab project exists and is added as a remote.
 
 Both set `BASE_PATH` for project-site subpaths; for a custom domain or root site, set it to `''` in the pipeline. Or `npm run build` and drop `out/` on any static host.
 
@@ -76,4 +76,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ---
 
-**Version:** v0.8.1
+**Version:** v0.8.2
