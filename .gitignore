@@ -9,6 +9,11 @@ coverage
 # env files
 .env*
 !.env.example
+# Playwright output from `npm run test:e2e`.
+/test-results
+/playwright-report
+/playwright/.cache
+
 *.tsbuildinfo
 next-env.d.ts
 CLAUDE.md
