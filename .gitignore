@@ -6,6 +6,9 @@ node_modules
 /out/
 coverage
 *.local
+# env files
+.env*
+!.env.example
 *.tsbuildinfo
 next-env.d.ts
 CLAUDE.md

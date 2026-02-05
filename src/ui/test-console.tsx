@@ -356,7 +356,9 @@ export function TestConsole({
                   key={mark.label}
                   value={mark.value.toFixed(2)}
                   label={`${mark.label} ${mark.value.toFixed(2)} Hz`}
-                />
+                >
+                  {mark.label} {mark.value.toFixed(2)} Hz
+                </option>
               ))}
           </datalist>
           <label>

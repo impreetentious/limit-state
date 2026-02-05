@@ -51,15 +51,15 @@ export async function decodeModel(hash: string): Promise<EditorModel> {
       bytes = await streamBytes(
         blobFromBytes(encoded).stream().pipeThrough(new DecompressionStream('deflate-raw')),
       );
-    } catch {
-      throw new Error('Shared model compression data is invalid.');
+    } catch (error) {
+      throw new Error('Shared model compression data is invalid.', { cause: error });
     }
   }
   try {
     return validateModel(JSON.parse(new TextDecoder().decode(bytes)));
   } catch (error) {
     if (error instanceof Error) throw error;
-    throw new Error('Shared model JSON is invalid.');
+    throw new Error('Shared model JSON is invalid.', { cause: error });
   }
 }
 
@@ -391,15 +391,15 @@ export async function decodeModel3d(hash: string): Promise<EditorModel3d> {
       bytes = await streamBytes(
         blobFromBytes(encoded).stream().pipeThrough(new DecompressionStream('deflate-raw')),
       );
-    } catch {
-      throw new Error('Shared model compression data is invalid.');
+    } catch (error) {
+      throw new Error('Shared model compression data is invalid.', { cause: error });
     }
   }
   try {
     return validateModel3d(JSON.parse(new TextDecoder().decode(bytes)));
   } catch (error) {
     if (error instanceof Error) throw error;
-    throw new Error('Shared model JSON is invalid.');
+    throw new Error('Shared model JSON is invalid.', { cause: error });
   }
 }
 

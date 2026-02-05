@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // Deliberate scope: correctness/suspicious with React, a11y, TypeScript, and
+  // import checks. Avoid `all`; style/pedantic rules such as sort-keys and
+  // explicit return types are disproportionate noise for this app.
+  "categories": {
+    "correctness": "deny",
+    "suspicious": "deny"
+  },
+  "plugins": ["typescript", "import", "react", "jsx-a11y", "unicorn", "oxc"],
+  "rules": {
+    // Next/React use the automatic JSX runtime; importing React solely for JSX is obsolete.
+    "react/react-in-jsx-scope": "off",
+    // CSS/font imports in Next layouts are intentionally side-effect-only.
+    "import/no-unassigned-import": "off",
+    // Mutating array methods are used on fresh local arrays in the FEM/kernel paths.
+    "unicorn/no-array-reverse": "off",
+    "unicorn/no-array-sort": "off",
+    // Local helper placement is clearer next to the calculations it supports.
+    "unicorn/consistent-function-scoping": "off",
+    // Worker postMessage target origins are not applicable to dedicated worker ports.
+    "unicorn/require-post-message-target-origin": "off",
+    "unicorn/prefer-add-event-listener": "off",
+    // Existing status/img roles are intentional UI semantics; broader a11y checks stay enabled.
+    "jsx-a11y/prefer-tag-over-role": "off"
+  },
+  "overrides": [
+    {
+      "files": ["src/ui/editor-app.tsx"],
+      "rules": {
+        // The traffic animation resumes from the storyTime value captured when play starts.
+        "react-hooks/exhaustive-deps": "off"
+      }
+    }
+  ]
+}
