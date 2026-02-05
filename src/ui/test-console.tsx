@@ -793,7 +793,7 @@ function describeFailure(failure: FailureReport | undefined): string {
     return `governed by ${failure.governedBy} at λ ${formatFinite(failure.capacityFactor)}.`;
   if (failure.kind === 'mechanism') return `mechanism at node ${failure.nodeId}.`;
   if (failure.kind === 'yield')
-    return `yield at member ${failure.memberId} (U ${failure.utilization.toFixed(2)}).`;
+    return `yield at member ${failure.memberId}${failure.stationM === undefined ? '' : ` at ${failure.stationM.toFixed(2)} m`} (U ${failure.utilization.toFixed(2)}).`;
   if (failure.kind === 'buckling')
     return `${failure.governs} buckling at member ${failure.memberId} (λ ${failure.lambdaCr.toFixed(2)}).`;
   return `resonance with mode ${failure.mode + 1} at ${failure.freqHz.toFixed(2)} Hz.`;
@@ -803,7 +803,7 @@ function failureWhy(failure: Exclude<FailureReport, { kind: 'stable' }>): string
   if (failure.kind === 'mechanism')
     return `The constrained stiffness matrix has a free motion at node ${failure.nodeId}; a load factor cannot create a stable equilibrium.`;
   if (failure.kind === 'yield')
-    return `Member ${failure.memberId} reaches combined stress utilization ${failure.utilization.toFixed(2)} at λ ${failure.loadFactor.toFixed(2)}.`;
+    return `Member ${failure.memberId} reaches combined stress utilization ${failure.utilization.toFixed(2)}${failure.stationM === undefined ? '' : ` at ${failure.stationM.toFixed(2)} m`} at λ ${failure.loadFactor.toFixed(2)}.`;
   if (failure.kind === 'buckling')
     return failure.governs === 'member' &&
       failure.memberN !== undefined &&

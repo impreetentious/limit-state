@@ -104,8 +104,13 @@ export function buildMesh(model: EditorModel, options: AnalysisOptions = {}): An
   for (const support of model.supports) {
     const node = nodeById.get(support.node);
     if (!node) continue; // validateSupports has already made this impossible.
-    constrained.add(3 * node.index);
-    constrained.add(3 * node.index + 1);
+    if (support.kind === 'pin' || support.kind === 'fixed') {
+      constrained.add(3 * node.index);
+      constrained.add(3 * node.index + 1);
+    } else if (support.kind === 'roller') {
+      // A 2D roller bears vertically and leaves the horizontal DOF free.
+      constrained.add(3 * node.index + 1);
+    }
     if (support.kind === 'fixed') constrained.add(3 * node.index + 2);
   }
 

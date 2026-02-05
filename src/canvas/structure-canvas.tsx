@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { deformationDisplay, type StaticAnalysis } from '../fem/statics';
 import type { AnalysisMesh, MemberSpec, NodeSpec, SupportKind } from '../fem/types';
 import type { EditorTool, ResultDiagram, Selection } from '../state/editor-store';
+import { sampleDiagram } from './diagram-samples';
 import { useEditorStore } from '../state/editor-store';
 
 interface Point {
@@ -771,33 +772,17 @@ function drawDiagram(
   analysis: Extract<StaticAnalysis, { kind: 'stable' }>,
   diagram: Exclude<ResultDiagram, 'none'>,
 ): void {
-  const values = new Map<number, number>();
-  for (const member of members) {
-    const relevant = analysis.mesh.elements.flatMap((element, index) =>
-      element.memberId === member.id ? [index] : [],
-    );
-    const samples = relevant.map((index) => {
-      const offset = index * 5;
-      if (diagram === 'axial') return analysis.result.elementForces[offset]!;
-      if (diagram === 'shear')
-        return Math.max(
-          Math.abs(analysis.result.elementForces[offset + 1]!),
-          Math.abs(analysis.result.elementForces[offset + 3]!),
-        );
-      return Math.max(
-        Math.abs(analysis.result.elementForces[offset + 2]!),
-        Math.abs(analysis.result.elementForces[offset + 4]!),
-      );
-    });
-    values.set(
-      member.id,
-      samples.reduce(
-        (maximum, value) => (Math.abs(value) > Math.abs(maximum) ? value : maximum),
-        0,
-      ),
+  // Sampling lives in diagram-samples.ts so it stays pure and unit-testable;
+  // here the model-space ordinates are only mapped to screen.
+  const sampling = sampleDiagram(members, analysis, diagram);
+  const maximum = sampling.maximum;
+  const samplesByMember = new Map<number, { point: Point; value: number }[]>();
+  for (const [memberId, modelSamples] of sampling.byMember) {
+    samplesByMember.set(
+      memberId,
+      modelSamples.map((sample) => ({ point: toScreen(sample.point), value: sample.value })),
     );
   }
-  const maximum = Math.max(...[...values.values()].map((value) => Math.abs(value)), 1);
   const label = diagram === 'axial' ? 'N' : diagram === 'shear' ? 'V' : 'M';
   context.save();
   context.strokeStyle = 'rgba(36, 86, 164, 0.82)';
@@ -815,14 +800,18 @@ function drawDiagram(
     const length = Math.hypot(dx, dy);
     if (length === 0) continue;
     const normal = { x: -dy / length, y: dx / length };
-    const value = values.get(member.id) ?? 0;
-    const height = 8 + (26 * Math.abs(value)) / maximum;
-    const direction = value >= 0 ? 1 : -1;
-    const offset = { x: normal.x * height * direction, y: normal.y * height * direction };
+    const samples = samplesByMember.get(member.id) ?? [];
+    if (samples.length < 2) continue;
+    const peak = samples.reduce(
+      (best, sample) => (Math.abs(sample.value) > Math.abs(best) ? sample.value : best),
+      0,
+    );
     context.beginPath();
     context.moveTo(from.x, from.y);
-    context.lineTo(from.x + offset.x, from.y + offset.y);
-    context.lineTo(to.x + offset.x, to.y + offset.y);
+    for (const sample of samples) {
+      const height = (34 * sample.value) / maximum;
+      context.lineTo(sample.point.x + normal.x * height, sample.point.y + normal.y * height);
+    }
     context.lineTo(to.x, to.y);
     context.closePath();
     context.fill();
@@ -831,10 +820,10 @@ function drawDiagram(
     context.clip();
     context.strokeStyle = 'rgba(36, 86, 164, 0.42)';
     context.lineWidth = 0.7;
-    const minX = Math.min(from.x, to.x, from.x + offset.x, to.x + offset.x) - 36;
-    const maxX = Math.max(from.x, to.x, from.x + offset.x, to.x + offset.x) + 36;
-    const minY = Math.min(from.y, to.y, from.y + offset.y, to.y + offset.y) - 36;
-    const maxY = Math.max(from.y, to.y, from.y + offset.y, to.y + offset.y) + 36;
+    const minX = Math.min(...samples.map((sample) => sample.point.x), from.x, to.x) - 36;
+    const maxX = Math.max(...samples.map((sample) => sample.point.x), from.x, to.x) + 36;
+    const minY = Math.min(...samples.map((sample) => sample.point.y), from.y, to.y) - 36;
+    const maxY = Math.max(...samples.map((sample) => sample.point.y), from.y, to.y) + 36;
     for (let x = minX - (maxY - minY); x < maxX + (maxY - minY); x += 6) {
       context.beginPath();
       context.moveTo(x, maxY);
@@ -842,9 +831,14 @@ function drawDiagram(
       context.stroke();
     }
     context.restore();
-    const mid = { x: (from.x + to.x) / 2 + offset.x, y: (from.y + to.y) / 2 + offset.y };
+    const midSample = samples[Math.floor(samples.length / 2)]!;
+    const midHeight = (34 * midSample.value) / maximum;
+    const mid = {
+      x: midSample.point.x + normal.x * midHeight,
+      y: midSample.point.y + normal.y * midHeight,
+    };
     context.fillStyle = '#2456a4';
-    context.fillText(`${label} ${(value / 1000).toFixed(1)} k`, mid.x + 3, mid.y - 3);
+    context.fillText(`${label} ${(peak / 1000).toFixed(1)} k`, mid.x + 3, mid.y - 3);
     context.fillStyle = 'rgba(36, 86, 164, 0.11)';
   }
   context.restore();

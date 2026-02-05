@@ -147,6 +147,8 @@ export interface StaticResult {
   elementForces: Float64Array;
   /** per editor member: max combined-stress utilization */
   utilization: Map<number, number>;
+  /** local member coordinate of the governing utilization section, when recovered. */
+  utilizationStationM?: Map<number, number>;
   reactions: Map<number, { fx: number; fy: number; m: number }>;
 }
 
@@ -161,7 +163,7 @@ export interface EigenResult {
 
 export type FailureReport =
   | { kind: 'mechanism'; nodeId: number }
-  | { kind: 'yield'; memberId: number; utilization: number; loadFactor: number }
+  | { kind: 'yield'; memberId: number; utilization: number; loadFactor: number; stationM?: number }
   | {
       kind: 'buckling';
       governs: 'global' | 'member';
