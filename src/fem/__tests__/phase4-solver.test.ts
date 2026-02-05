@@ -40,7 +40,7 @@ function stubbyCantilever(L = 1.5): EditorModel3d {
 }
 
 describe('Phase 4E — 3D Timoshenko cantilever', () => {
-  it('shear-flexible tip deflection = PL³/3EIy + PL/(G·As)', () => {
+  it('G32: shear-flexible tip deflection = PL³/3EIy + PL/(G·As)', () => {
     const L = 1.5;
     const model = stubbyCantilever(L);
     const mat = MATERIALS['steel-s355'];
@@ -63,7 +63,7 @@ describe('Phase 4E — 3D Timoshenko cantilever', () => {
 });
 
 describe('Phase 4E — 3D P-Δ amplification', () => {
-  it('moment amplification approaches 1/(1 − P/Pcr) within 2%', () => {
+  it('G33: moment amplification approaches 1/(1 − P/Pcr) within 2%', () => {
     // Beam-column along +X: axial compression P at free tip, transverse H at tip.
     // Iy is the bending-plane inertia (about local y, load in local z direction).
     const L = 4;
@@ -148,7 +148,14 @@ describe('Phase 4E — 3D P-Δ amplification', () => {
 });
 
 describe('Phase 4H — live cable slack path', () => {
-  it('analyzeStaticModel3d routes guyed-mast statics through cable slack iteration', () => {
+  it('guards the unsupported cable × P-Δ combination', () => {
+    expect(solveSecondOrderStatic3d(guyedMast3d())).toMatchObject({
+      kind: 'invalid',
+      message: expect.stringMatching(/cables/i),
+    });
+  });
+
+  it('G34: analyzeStaticModel3d routes guyed-mast statics through cable slack iteration', () => {
     const analysis = analyzeStaticModel3d(guyedMast3d());
     expect(analysis.kind).toBe('stable');
     // Guy 3 (load-side) must go slack via the live path — its axial should be

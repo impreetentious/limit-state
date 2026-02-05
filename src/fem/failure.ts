@@ -49,6 +49,7 @@ export function evaluateFailure(
       memberId: yieldState.memberId,
       utilization: yieldState.utilization,
       loadFactor,
+      stationM: yieldState.stationM,
     };
   }
   if (memberBuckling.ratio >= 1 && memberBuckling.ratio >= globalBuckling.ratio) {
@@ -185,25 +186,31 @@ export function analyzeAtFactor(
 function scaleLoadAssembly(loads: LoadAssembly, factor: number): LoadAssembly {
   const F = new Float64Array(loads.F.length);
   const elementFixedEnd = new Float64Array(loads.elementFixedEnd.length);
+  const elementTransverseUdl = new Float64Array(loads.elementTransverseUdl.length);
   for (let index = 0; index < F.length; index++) F[index] = loads.F[index]! * factor;
   for (let index = 0; index < elementFixedEnd.length; index++)
     elementFixedEnd[index] = loads.elementFixedEnd[index]! * factor;
-  return { F, elementFixedEnd };
+  for (let index = 0; index < elementTransverseUdl.length; index++)
+    elementTransverseUdl[index] = loads.elementTransverseUdl[index]! * factor;
+  return { F, elementFixedEnd, elementTransverseUdl };
 }
 
 function governingYield(analysis: Extract<StaticAnalysis, { kind: 'stable' }>): {
   memberId: number;
   utilization: number;
+  stationM?: number;
 } {
   let memberId = -1;
   let utilization = 0;
+  let stationM: number | undefined;
   for (const [id, value] of analysis.result.utilization) {
     if (value > utilization) {
       memberId = id;
       utilization = value;
+      stationM = analysis.result.utilizationStationM?.get(id);
     }
   }
-  return { memberId, utilization };
+  return { memberId, utilization, stationM };
 }
 
 /** Per-member Euler comparison |N| / (π²EI/L_member²). */

@@ -12,6 +12,8 @@ export interface LoadAssembly {
   F: Float64Array;
   /** Condensed local fixed-end forces, six entries per analysis element. */
   elementFixedEnd: Float64Array;
+  /** Signed local-y uniform load intensity per element (positive local +y). */
+  elementTransverseUdl: Float64Array;
 }
 
 /**
@@ -199,6 +201,7 @@ export function assembleLoadCase(
 ): LoadAssembly {
   const F = new Float64Array(mesh.ndof);
   const elementFixedEnd = new Float64Array(mesh.elements.length * 6);
+  const elementTransverseUdl = new Float64Array(mesh.elements.length);
   for (const point of opts.points) {
     if (
       !Number.isInteger(point.meshNode) ||
@@ -217,6 +220,7 @@ export function assembleLoadCase(
     for (let index = 0; index < mesh.elements.length; index++) {
       const element = mesh.elements[index]!;
       const weight = element.rho * element.A * STANDARD_GRAVITY;
+      elementTransverseUdl[index] = elementTransverseUdl[index]! - weight * element.cos;
       // Global gravity (0, -rho*A*g) resolved into local x/y components.
       addEquivalentLocalLoad(
         F,
@@ -231,6 +235,7 @@ export function assembleLoadCase(
   for (const udl of opts.elementUdls ?? []) {
     const element = mesh.elements[udl.element];
     if (!element) throw new Error(`UDL references missing element ${udl.element}.`);
+    elementTransverseUdl[udl.element] = elementTransverseUdl[udl.element]! - udl.w;
     addEquivalentLocalLoad(
       F,
       mesh,
@@ -257,7 +262,7 @@ export function assembleLoadCase(
     );
   }
 
-  return { F, elementFixedEnd };
+  return { F, elementFixedEnd, elementTransverseUdl };
 }
 
 /** Standard gravity in m/s² for self-weight assembly. */

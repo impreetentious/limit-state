@@ -77,6 +77,7 @@ export function solveStatic(
     solveFactored(system.factor, freeVector(loads.F, mesh.freeDofs)),
   );
   const elementForces = recoverElementForces(mesh, u, loads.elementFixedEnd);
+  const utilization = recoverUtilization(mesh, elementForces, loads.elementTransverseUdl);
   return {
     kind: 'stable',
     mesh,
@@ -84,7 +85,8 @@ export function solveStatic(
     result: {
       u,
       elementForces,
-      utilization: recoverUtilization(mesh, elementForces),
+      utilization: utilization.values,
+      utilizationStationM: utilization.stations,
       reactions: recoverReactions(mesh, system.K, u, loads.F),
     },
   };
@@ -167,7 +169,7 @@ export function utilizationAtDisplacement(
   if (u.length !== mesh.ndof) throw new Error('Displacement vector does not match the mesh.');
   if (fixedEnd.length !== mesh.elements.length * 6)
     throw new Error('Fixed-end vector does not match the mesh.');
-  return recoverUtilization(mesh, recoverElementForces(mesh, u, fixedEnd));
+  return recoverUtilization(mesh, recoverElementForces(mesh, u, fixedEnd)).values;
 }
 
 /** Recover element end forces from a prescribed displacement state. */
@@ -213,24 +215,50 @@ function recoverElementForces(
 }
 
 /** Combined-stress endpoint utilization |N/A ± Mc/I| / fy. */
-function recoverUtilization(mesh: AnalysisMesh, forces: Float64Array): Map<number, number> {
+function recoverUtilization(
+  mesh: AnalysisMesh,
+  forces: Float64Array,
+  elementTransverseUdl?: Float64Array,
+): { values: Map<number, number>; stations: Map<number, number> } {
   const utilization = new Map<number, number>();
+  const stations = new Map<number, number>();
+  const memberOffset = new Map<number, number>();
   for (let index = 0; index < mesh.elements.length; index++) {
     const element = mesh.elements[index]!;
     const offset = index * 5;
+    const start = memberOffset.get(element.memberId) ?? 0;
+    memberOffset.set(element.memberId, start + element.L);
     const N = forces[offset]!;
     const ma = forces[offset + 2]!;
     const mb = forces[offset + 4]!;
-    const endpointUtilization = Math.max(
-      fiberUtilization(N, ma, element.A, element.I, element.c, element.fy),
-      fiberUtilization(N, mb, element.A, element.I, element.c, element.fy),
-    );
-    utilization.set(
-      element.memberId,
-      Math.max(utilization.get(element.memberId) ?? 0, endpointUtilization),
-    );
+    const atA = fiberUtilization(N, ma, element.A, element.I, element.c, element.fy);
+    const atB = fiberUtilization(N, mb, element.A, element.I, element.c, element.fy);
+    let maximumUtilization = Math.max(atA, atB);
+    let station = atA >= atB ? 0 : element.L;
+    const localYLoad = elementTransverseUdl?.[index] ?? 0;
+    // The published end-force convention stores the local-A internal shear and
+    // moment with the opposite sign to an in-span free body. Convert once, then
+    // apply M(x) = M1 + V1 x − w x² / 2 for downward-positive w.
+    const w = -localYLoad;
+    const v1 = -forces[offset + 1]!;
+    const v2 = forces[offset + 3]!;
+    if (!element.releaseA && !element.releaseB && w !== 0 && v1 * v2 < 0 && v1 !== v2) {
+      const x = (element.L * v1) / (v1 - v2);
+      if (x > 0 && x < element.L) {
+        const moment = -ma + v1 * x - (w * x * x) / 2;
+        const interior = fiberUtilization(N, moment, element.A, element.I, element.c, element.fy);
+        if (interior > maximumUtilization) {
+          maximumUtilization = interior;
+          station = x;
+        }
+      }
+    }
+    if (maximumUtilization > (utilization.get(element.memberId) ?? -Infinity)) {
+      utilization.set(element.memberId, maximumUtilization);
+      stations.set(element.memberId, start + station);
+    }
   }
-  return utilization;
+  return { values: utilization, stations };
 }
 
 function fiberUtilization(

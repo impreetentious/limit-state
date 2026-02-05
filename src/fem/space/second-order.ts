@@ -37,6 +37,12 @@ export function solveSecondOrderStatic3d(
   model: EditorModel3d,
   options: AnalysisOptions3d = {},
 ): SecondOrderAnalysis3d {
+  if (model.members.some((member) => member.cableOnly))
+    return {
+      kind: 'invalid',
+      message:
+        'P-Δ is unavailable while tension-only cables are active; use the cable iteration alone.',
+    };
   let mesh: AnalysisMesh3d;
   let F: Float64Array;
   let elementFixedEnd: Float64Array;

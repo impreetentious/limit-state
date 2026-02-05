@@ -148,10 +148,13 @@ function solveScaled(
 function scaleLoadAssembly(loads: LoadAssembly, factor: number): LoadAssembly {
   const F = new Float64Array(loads.F.length);
   const elementFixedEnd = new Float64Array(loads.elementFixedEnd.length);
+  const elementTransverseUdl = new Float64Array(loads.elementTransverseUdl.length);
   for (let index = 0; index < F.length; index++) F[index] = loads.F[index]! * factor;
   for (let index = 0; index < elementFixedEnd.length; index++)
     elementFixedEnd[index] = loads.elementFixedEnd[index]! * factor;
-  return { F, elementFixedEnd };
+  for (let index = 0; index < elementTransverseUdl.length; index++)
+    elementTransverseUdl[index] = loads.elementTransverseUdl[index]! * factor;
+  return { F, elementFixedEnd, elementTransverseUdl };
 }
 
 function withActiveCables(model: EditorModel, active: ReadonlySet<number>): EditorModel {

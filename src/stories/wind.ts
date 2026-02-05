@@ -80,6 +80,7 @@ export function windReferenceCoordinates(scenario: WindScenario, modal: EigenRes
   const loads = {
     F: windIncrementForMultiplier(scenario, 1),
     elementFixedEnd: new Float64Array(scenario.mesh.elements.length * 6),
+    elementTransverseUdl: new Float64Array(scenario.mesh.elements.length),
   };
   const analysis = solveStatic(scenario.mesh, loads, scenario.staticSystem);
   return analysis.kind === 'stable'
