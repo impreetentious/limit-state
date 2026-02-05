@@ -1,7 +1,7 @@
 {
   "name": "limit-state",
   "private": true,
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "Limit State — a structural sandbox that tells the truth. True FEM core, playful surface.",
   "license": "MIT",
   "repository": {
@@ -16,6 +16,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --deny-warnings .",
+    "budget:bundle": "node scripts/bundle-budget.mjs",
+    "test:e2e": "playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "gallery:generate": "npx vite-node scripts/generate-gallery.mts",
