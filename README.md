@@ -55,7 +55,8 @@ npm run format:check
 npm run build      # static export in out/
 ```
 
-To refresh README stills after a UI change: `npm run build && npx serve out -l 4173` then `npm run screenshots`.
+To refresh README stills after a UI change: `npm run build && node scripts/serve-static.mjs out` (the
+server uses port 3012 by default), then run `npm run screenshots` with `SHOT_BASE` pointing at it.
 
 ## Deploy
 
@@ -76,4 +77,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ---
 
-**Version:** v0.9.0
+**Version:** v0.9.1

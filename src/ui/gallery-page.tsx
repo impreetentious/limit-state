@@ -67,7 +67,7 @@ export function GalleryPage(): React.JSX.Element {
       <footer className="gallery-footer">
         <p>
           Hashes live in <code>public/gallery.json</code>. Regenerate with{' '}
-          <code>npx vite-node scripts/generate-gallery.mts</code> after editing gallery sources.
+          <code>npm run gallery:generate</code> after editing gallery sources.
         </p>
       </footer>
     </main>
