@@ -13,7 +13,8 @@ export interface Factor {
 }
 
 export type FactorResult =
-  { ok: true; factor: Factor } | { ok: false; mechanism: { freeDofIndex: number } };
+  | { ok: true; factor: Factor }
+  | { ok: false; mechanism: { freeDofIndex: number } };
 
 /**
  * Factor an SPD free-DOF stiffness matrix without pivoting.

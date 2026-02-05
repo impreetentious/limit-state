@@ -1,7 +1,8 @@
 import { defineConfig, devices } from 'playwright/test';
 
 const PORT = 3012;
-const BASE_URL = `http://127.0.0.1:${PORT}`;
+const BASE_PATH = (process.env.BASE_PATH ?? '').replace(/\/$/, '');
+const BASE_URL = `http://127.0.0.1:${PORT}${BASE_PATH}`;
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -13,13 +14,14 @@ export default defineConfig({
   timeout: 90_000,
   expect: { timeout: 15_000 },
   use: {
-    baseURL: BASE_URL,
+    baseURL: `${BASE_URL}/`,
     trace: 'on-first-retry',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: 'node scripts/serve-static.mjs out',
-    url: BASE_URL,
+    env: { BASE_PATH },
+    url: `${BASE_URL}/`,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
   },

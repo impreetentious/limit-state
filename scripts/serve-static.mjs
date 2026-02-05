@@ -5,6 +5,7 @@ import { extname, join, normalize, resolve, sep } from 'node:path';
 const root = resolve(process.argv[2] ?? 'out');
 const port = Number.parseInt(process.env.PORT ?? '3012', 10);
 const host = process.env.HOST ?? '127.0.0.1';
+const basePath = (process.env.BASE_PATH ?? '').replace(/\/$/, '');
 
 const types = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -32,12 +33,27 @@ function resolveRequest(pathname) {
   const html = `${candidate}.html`;
   if (existsSync(html)) return html;
 
+  if (extname(decoded)) return null;
   return join(root, 'index.html');
 }
 
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? '/', `http://${host}:${port}`);
-  const file = resolveRequest(url.pathname);
+  let pathname = url.pathname;
+  if (basePath) {
+    if (pathname === '/') {
+      response.writeHead(302, { Location: `${basePath}/` });
+      response.end();
+      return;
+    }
+    if (pathname !== basePath && !pathname.startsWith(`${basePath}/`)) {
+      response.writeHead(404);
+      response.end('Not found');
+      return;
+    }
+    pathname = pathname.slice(basePath.length) || '/';
+  }
+  const file = resolveRequest(pathname);
 
   if (!file || !existsSync(file)) {
     response.writeHead(404);

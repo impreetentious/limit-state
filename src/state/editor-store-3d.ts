@@ -26,7 +26,14 @@ import {
 /** @deprecated Prefer WorkplaneKind — kept for existing imports. */
 export type Workplane = WorkplaneKind;
 export type EditorTool3d =
-  'select' | 'node' | 'member' | 'support' | 'load' | 'deck' | 'delete' | 'workplane';
+  | 'select'
+  | 'node'
+  | 'member'
+  | 'support'
+  | 'load'
+  | 'deck'
+  | 'delete'
+  | 'workplane';
 export type ResultDiagram3d = 'none' | 'axial' | 'shear' | 'moment';
 
 export type Selection3d =
@@ -38,7 +45,9 @@ export type Selection3d =
 
 /** Three-click custom workplane definition in progress. */
 export type WorkplanePick =
-  { step: 0 } | { step: 1; origin: Vec3 } | { step: 2; origin: Vec3; alongU: Vec3 };
+  | { step: 0 }
+  | { step: 1; origin: Vec3 }
+  | { step: 2; origin: Vec3; alongU: Vec3 };
 
 interface EditorState3d {
   model: EditorModel3d;

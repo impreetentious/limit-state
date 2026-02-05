@@ -15,7 +15,8 @@ export interface WorkplaneFrame {
 export type WorkplaneKind = 'ground' | 'xz' | 'yz' | 'custom';
 
 export type WorkplaneSpec =
-  { kind: 'ground' | 'xz' | 'yz' } | { kind: 'custom'; frame: WorkplaneFrame };
+  | { kind: 'ground' | 'xz' | 'yz' }
+  | { kind: 'custom'; frame: WorkplaneFrame };
 
 export function presetFrame(kind: 'ground' | 'xz' | 'yz'): WorkplaneFrame {
   switch (kind) {
