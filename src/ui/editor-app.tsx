@@ -6,7 +6,7 @@ import { StructureCanvas } from '../canvas/structure-canvas';
 import { StructureCanvas3d } from '../canvas/structure-canvas-3d';
 import { sectionDepth } from '../fem/materials';
 import { analyzeStaticModel, deformationDisplay } from '../fem/statics';
-import { analyzeStaticModel3d, buckling3d, deformationDisplay3d, modal3d } from '../fem/space';
+import { analyzeStaticModel3d, deformationDisplay3d, solveSecondOrderStatic3d } from '../fem/space';
 import type { EditorModel, EigenResult } from '../fem/types';
 import { PRESETS } from '../presets/scenes';
 import { PRESETS_3D } from '../presets/scenes3d';
@@ -89,10 +89,11 @@ import {
 } from '../stories/traffic3d';
 import { ChallengePanel } from './challenge-panel';
 import { Inspector } from './inspector';
+import { Inspector3d } from './inspector-3d';
 import { TestConsole } from './test-console';
 import { TestConsole3d } from './test-console-3d';
 import Link from 'next/link';
-import type { StorySpec3d } from '../fem/space';
+import type { EditorModel3d, StaticAnalysis3d, StorySpec3d } from '../fem/space';
 import type { NewmarkState } from '../fem/dynamics';
 
 const TOOLS: Array<{ id: EditorTool; label: string; key: string; description: string }> = [
@@ -154,6 +155,8 @@ export function EditorApp(): React.JSX.Element {
   const stockyMembers = useMemo(() => stockyMemberIds(model), [model]);
   const requestId = useRef(0);
   const [eigen, setEigen] = useState<EigenUiState>({ kind: 'idle' });
+  const requestId3d = useRef(0);
+  const [eigen3dState, setEigen3dState] = useState<EigenUiState>({ kind: 'idle' });
   const [selectedMode, setSelectedMode] = useState(0);
   const [modeFamily, setModeFamily] = useState<'modal' | 'buckling'>('modal');
   const [modePhase, setModePhase] = useState(1);
@@ -217,27 +220,65 @@ export function EditorApp(): React.JSX.Element {
   const future3d = useEditorStore3d((s) => s.future);
   const resultDiagram3d = useEditorStore3d((s) => s.resultDiagram);
   const setResultDiagram3d = useEditorStore3d((s) => s.setResultDiagram);
+  const shearFlexible3d = useEditorStore3d((s) => s.shearFlexible);
+  const secondOrder3d = useEditorStore3d((s) => s.secondOrder);
+  const setShearFlexible3d = useEditorStore3d((s) => s.setShearFlexible);
+  const setSecondOrder3d = useEditorStore3d((s) => s.setSecondOrder);
 
-  const analysis3d = useMemo(() => analyzeStaticModel3d(model3d), [model3d]);
-  const eigen3d = useMemo(() => {
-    if (analysis3d.kind !== 'stable') return undefined;
-    // Soft budget: skip eigen above ~1.5k DOF so Build stays interactive.
-    if (analysis3d.mesh.ndof > 1500) return undefined;
-    const nModes = analysis3d.mesh.ndof > 600 ? 2 : 4;
-    try {
-      return {
-        modal: modal3d(analysis3d.mesh, nModes),
-        buckling: (() => {
-          const N = new Float64Array(analysis3d.mesh.elements.length);
-          for (let i = 0; i < analysis3d.mesh.elements.length; i++) {
-            N[i] = -Math.abs(analysis3d.result.elementForces[i * 12]!);
-          }
-          return buckling3d(analysis3d.mesh, N);
-        })(),
-      };
-    } catch {
-      return undefined;
+  const analysis3d = useMemo(
+    () =>
+      secondOrder3d
+        ? solveSecondOrderStatic3d(model3d, { shearFlexible: shearFlexible3d })
+        : analyzeStaticModel3d(model3d, { shearFlexible: shearFlexible3d }),
+    [model3d, secondOrder3d, shearFlexible3d],
+  );
+  const stockyMembers3d = useMemo(() => stockyMemberIds3d(model3d), [model3d]);
+  const canvasAnalysis3d: StaticAnalysis3d =
+    analysis3d.kind === 'stable' ||
+    analysis3d.kind === 'invalid' ||
+    (analysis3d.kind === 'mechanism' && 'freeDofIndex' in analysis3d)
+      ? (analysis3d as StaticAnalysis3d)
+      : { kind: 'invalid', message: analysis3d.message };
+  const eigen3d = eigen3dState.kind === 'ready' ? eigen3dState : undefined;
+  useEffect(() => {
+    if (analysis3d.kind !== 'stable') {
+      setEigen3dState({ kind: 'idle' });
+      return;
     }
+    const id = ++requestId3d.current;
+    const worker = new Worker(new URL('../workers/eigen.worker.ts', import.meta.url));
+    setEigen3dState({ kind: 'loading' });
+    worker.onmessage = (event: MessageEvent<EigenWorkerResponse>) => {
+      const response = event.data;
+      if (response.id !== id) return;
+      if (response.ok) {
+        setEigen3dState({ kind: 'ready', modal: response.modal, buckling: response.buckling });
+        setSelectedMode(0);
+      } else setEigen3dState({ kind: 'error', message: response.message });
+    };
+    worker.onerror = () =>
+      setEigen3dState({ kind: 'error', message: '3D eigen worker could not start.' });
+    const source = analysis3d.mesh;
+    const mesh = {
+      ...source,
+      coords: source.coords.slice(),
+      editorNode: source.editorNode.slice(),
+      freeDofs: source.freeDofs.slice(),
+      elements: source.elements.map((element) => ({ ...element, R: element.R.slice() })),
+    };
+    const elementN = new Float64Array(mesh.elements.length);
+    for (let index = 0; index < elementN.length; index++)
+      elementN[index] = -Math.abs(analysis3d.result.elementForces[index * 12]!);
+    const requestedModes = mesh.ndof > 1500 ? 4 : 8;
+    const nModes = Math.min(requestedModes, Math.max(1, mesh.freeDofs.length - 1));
+    worker.postMessage({ id, dimension: '3d', mesh, elementN, nModes }, [
+      mesh.coords.buffer,
+      mesh.editorNode.buffer,
+      mesh.freeDofs.buffer,
+      elementN.buffer,
+      ...mesh.elements.map((element) => element.R.buffer),
+    ]);
+    return () => worker.terminate();
   }, [analysis3d]);
   const windScenario3d = useMemo(
     () =>
@@ -534,7 +575,20 @@ export function EditorApp(): React.JSX.Element {
     const axialForces = new Float64Array(baseAnalysis.mesh.elements.length);
     for (let index = 0; index < axialForces.length; index++)
       axialForces[index] = baseAnalysis.result.elementForces[index * 5]!;
-    worker.postMessage({ id, mesh: baseAnalysis.mesh, elementN: axialForces, nModes: 8 });
+    // Transfer worker-owned copies.  The live mesh remains usable by rendering,
+    // animation, and a newer request while this solve is in flight.
+    const mesh = {
+      ...baseAnalysis.mesh,
+      coords: baseAnalysis.mesh.coords.slice(),
+      editorNode: baseAnalysis.mesh.editorNode.slice(),
+      freeDofs: baseAnalysis.mesh.freeDofs.slice(),
+    };
+    worker.postMessage({ id, dimension: '2d', mesh, elementN: axialForces, nModes: 8 }, [
+      mesh.coords.buffer,
+      mesh.editorNode.buffer,
+      mesh.freeDofs.buffer,
+      axialForces.buffer,
+    ]);
     return () => worker.terminate();
   }, [baseAnalysis]);
 
@@ -1249,7 +1303,7 @@ export function EditorApp(): React.JSX.Element {
                   ? rampFrame3d.analysis
                   : trafficFrame3dActive?.analysis.kind === 'stable'
                     ? trafficFrame3dActive.analysis
-                    : analysis3d
+                    : canvasAnalysis3d
               }
               showDeformed={
                 showDeformed ||
@@ -1276,8 +1330,9 @@ export function EditorApp(): React.JSX.Element {
               workplane={workplane}
               selectedNodeId={selection3d.kind === 'node' ? selection3d.id : null}
               selectedMemberId={selection3d.kind === 'member' ? selection3d.id : null}
+              selectedMemberIds={selection3d.kind === 'members' ? selection3d.ids : []}
               diagram={mode === 'test' ? resultDiagram3d : 'none'}
-              onWorkplaneClick={(point, hitNodeId, hitMemberId) => {
+              onWorkplaneClick={(point, hitNodeId, hitMemberId, modifiers) => {
                 if (tool3d === 'workplane') {
                   pickCustomWorkplanePoint(point);
                   return;
@@ -1316,8 +1371,30 @@ export function EditorApp(): React.JSX.Element {
                   deleteSelection3d();
                   return;
                 }
-                if (hitNodeId !== null) setSelection3d({ kind: 'node', id: hitNodeId });
-                else if (hitMemberId !== null) setSelection3d({ kind: 'member', id: hitMemberId });
+                if (hitNodeId !== null) {
+                  setSelection3d({ kind: 'node', id: hitNodeId });
+                } else if (hitMemberId !== null) {
+                  if (!modifiers.additive) {
+                    setSelection3d({ kind: 'member', id: hitMemberId });
+                    return;
+                  }
+                  const selectedIds =
+                    selection3d.kind === 'member'
+                      ? [selection3d.id]
+                      : selection3d.kind === 'members'
+                        ? selection3d.ids
+                        : [];
+                  const ids = selectedIds.includes(hitMemberId)
+                    ? selectedIds.filter((id) => id !== hitMemberId)
+                    : [...selectedIds, hitMemberId];
+                  setSelection3d(
+                    ids.length === 0
+                      ? { kind: 'none' }
+                      : ids.length === 1
+                        ? { kind: 'member', id: ids[0]! }
+                        : { kind: 'members', ids },
+                  );
+                }
               }}
             />
           ) : (
@@ -1490,7 +1567,7 @@ export function EditorApp(): React.JSX.Element {
                 />{' '}
                 Deformed
               </label>
-              {viewDimension === '2d' && (
+              {viewDimension === '2d' ? (
                 <>
                   <label>
                     <input
@@ -1509,12 +1586,36 @@ export function EditorApp(): React.JSX.Element {
                     P-Δ
                   </label>
                 </>
+              ) : (
+                <>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={shearFlexible3d}
+                      onChange={(event) => setShearFlexible3d(event.target.checked)}
+                    />{' '}
+                    Timoshenko
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={secondOrder3d}
+                      onChange={(event) => setSecondOrder3d(event.target.checked)}
+                    />{' '}
+                    P-Δ
+                  </label>
+                </>
               )}
             </div>
           )}
           {viewDimension === '2d' && analysis.kind === 'divergent' && (
             <div className="shear-note" role="alert">
               {analysis.message}
+            </div>
+          )}
+          {viewDimension === '3d' && analysis3d.kind === 'divergent' && (
+            <div className="shear-note" role="alert">
+              {analysis3d.message}
             </div>
           )}
           {viewDimension === '2d' && stockyMembers.length > 0 && (
@@ -1526,6 +1627,15 @@ export function EditorApp(): React.JSX.Element {
               stocky{shearFlexible ? '' : '; enable Timoshenko to include it'}.
             </div>
           )}
+          {viewDimension === '3d' && stockyMembers3d.length > 0 && (
+            <div className="shear-note" role="note">
+              Shear flexibility matters when L/h &lt; 10 —{' '}
+              {stockyMembers3d.length === 1
+                ? `member ${stockyMembers3d[0]} is`
+                : `${stockyMembers3d.length} members are`}{' '}
+              stocky{shearFlexible3d ? '' : '; enable Timoshenko to include it'}.
+            </div>
+          )}
           {viewDimension === '2d' && analysis.kind === 'stable' && analysis.secondOrder && (
             <div className="pdelta-badge" role="status">
               P-Δ ×{analysis.secondOrder.momentAmplification.toFixed(2)} moment · ×
@@ -1533,6 +1643,20 @@ export function EditorApp(): React.JSX.Element {
               {analysis.secondOrder.iterations} iter)
             </div>
           )}
+          {viewDimension === '3d' &&
+            analysis3d.kind === 'stable' &&
+            'momentAmplification' in analysis3d &&
+            typeof analysis3d.momentAmplification === 'number' &&
+            'displacementAmplification' in analysis3d &&
+            typeof analysis3d.displacementAmplification === 'number' &&
+            'iterations' in analysis3d &&
+            typeof analysis3d.iterations === 'number' && (
+              <div className="pdelta-badge" role="status">
+                P-Δ ×{analysis3d.momentAmplification.toFixed(2)} moment · ×
+                {analysis3d.displacementAmplification.toFixed(2)} disp vs linear (
+                {analysis3d.iterations} iter)
+              </div>
+            )}
           {deformation && showDeformed && deformation.maxMeters > 0 && (
             <div className="deformation-badge">
               deformation ×{formatScale(deformation.scale)} — true max{' '}
@@ -1577,14 +1701,15 @@ export function EditorApp(): React.JSX.Element {
           {viewDimension === '3d' && model3d.members.length >= MEMBER_SOFT_LIMIT_3D && (
             <div className="member-limit-badge">
               {model3d.members.length}/{MEMBER_HARD_LIMIT_3D} members — line LOD forced above 64;
-              eigen skipped above ~1.5k DOF
+              eigen stays in the worker
             </div>
           )}
           {viewDimension === '3d' &&
             analysis3d.kind === 'stable' &&
             analysis3d.mesh.ndof > 1500 && (
               <div className="member-limit-badge">
-                Modal/buckling deferred — {analysis3d.mesh.ndof} DOF (cap 1500 for live Build)
+                Modal/buckling solving in worker — {analysis3d.mesh.ndof} DOF; showing 4 modes for
+                responsiveness.
               </div>
             )}
           {(viewDimension === '3d' ? analysis3d.kind === 'stable' : analysis.kind === 'stable') && (
@@ -1593,6 +1718,12 @@ export function EditorApp(): React.JSX.Element {
               {viewDimension === '2d' && eigen.kind === 'loading' && <p>Solving in worker…</p>}
               {viewDimension === '2d' && eigen.kind === 'error' && (
                 <p className="eigen-error">{eigen.message}</p>
+              )}
+              {viewDimension === '3d' && eigen3dState.kind === 'loading' && (
+                <p>Solving in worker…</p>
+              )}
+              {viewDimension === '3d' && eigen3dState.kind === 'error' && (
+                <p className="eigen-error">{eigen3dState.message}</p>
               )}
               {((viewDimension === '2d' && eigen.kind === 'ready') ||
                 (viewDimension === '3d' && eigen3d)) &&
@@ -1723,7 +1854,7 @@ export function EditorApp(): React.JSX.Element {
             />
           )}
         </section>
-        {viewDimension === '2d' && <Inspector />}
+        {viewDimension === '2d' ? <Inspector /> : <Inspector3d />}
       </section>
     </main>
   );
@@ -1817,6 +1948,21 @@ function stockyMemberIds(model: EditorModel): number[] {
     const b = nodeById.get(member.b);
     if (!a || !b) continue;
     const length = Math.hypot(b.x - a.x, b.y - a.y);
+    const depth = sectionDepth(member.section);
+    if (depth > 0 && length / depth < 10) stocky.push(member.id);
+  }
+  return stocky;
+}
+
+/** 3D companion to the 2D L/h Timoshenko applicability note. */
+function stockyMemberIds3d(model: EditorModel3d): number[] {
+  const nodeById = new Map(model.nodes.map((node) => [node.id, node]));
+  const stocky: number[] = [];
+  for (const member of model.members) {
+    const a = nodeById.get(member.a);
+    const b = nodeById.get(member.b);
+    if (!a || !b) continue;
+    const length = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
     const depth = sectionDepth(member.section);
     if (depth > 0 && length / depth < 10) stocky.push(member.id);
   }

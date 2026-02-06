@@ -43,9 +43,11 @@ export interface StructureCanvas3dProps {
     point: { x: number; y: number; z: number },
     hitNodeId: number | null,
     hitMemberId: number | null,
+    modifiers: { additive: boolean },
   ) => void;
   selectedNodeId?: number | null;
   selectedMemberId?: number | null;
+  selectedMemberIds?: readonly number[];
   /** Optional per-member overlay: 'axial' | 'shear' | 'moment' colors + widths by force magnitude. */
   diagram?: 'none' | 'axial' | 'shear' | 'moment';
 }
@@ -61,6 +63,7 @@ export function StructureCanvas3d({
   onWorkplaneClick,
   selectedNodeId,
   selectedMemberId,
+  selectedMemberIds,
   diagram,
 }: StructureCanvas3dProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -75,6 +78,7 @@ export function StructureCanvas3d({
     onWorkplaneClick,
     selectedNodeId,
     selectedMemberId,
+    selectedMemberIds,
     diagram,
   });
   propsRef.current = {
@@ -88,6 +92,7 @@ export function StructureCanvas3d({
     onWorkplaneClick,
     selectedNodeId,
     selectedMemberId,
+    selectedMemberIds,
     diagram,
   };
 
@@ -218,7 +223,9 @@ export function StructureCanvas3d({
               const b = props.model.nodes.find((n) => n.id === m.b)!;
               return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
             })();
-      handler(projectPointToFrame(point, frame), hitNode, hitMember);
+      handler(projectPointToFrame(point, frame), hitNode, hitMember, {
+        additive: event.shiftKey || event.metaKey || event.ctrlKey,
+      });
     };
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
 
@@ -317,6 +324,7 @@ function sceneSignature(props: StructureCanvas3dProps): string {
     showDeformed,
     selectedNodeId,
     selectedMemberId,
+    selectedMemberIds,
     dynamicDisplacement,
     trafficAxles,
     diagram,
@@ -329,7 +337,7 @@ function sceneSignature(props: StructureCanvas3dProps): string {
   const story = model.story?.kind ?? 'nostory';
   const deck = (model.deck ?? []).join(',');
   const axles = trafficAxles?.map((a) => `${a.x.toFixed(2)},${a.z.toFixed(2)}`).join(';') ?? '';
-  return `${model.name}|${model.members.length}|${model.nodes.length}|${model.supports.length}|${model.loads.points.length}|${kind}|${uMax}|${showDeformed}|${selectedNodeId}|${selectedMemberId}|${dyn}|${story}|${deck}|${axles}|${diagram ?? 'none'}`;
+  return `${model.name}|${model.members.length}|${model.nodes.length}|${model.supports.length}|${model.loads.points.length}|${kind}|${uMax}|${showDeformed}|${selectedNodeId}|${selectedMemberId}|${selectedMemberIds?.join(',') ?? ''}|${dyn}|${story}|${deck}|${axles}|${diagram ?? 'none'}`;
 }
 
 function rebuildStructure(
@@ -341,6 +349,12 @@ function rebuildStructure(
   while (root.children.length) root.remove(root.children[0]!);
 
   const { model, analysis, showDeformed, selectedNodeId } = props;
+  const selectedMembers = new Set([
+    ...(props.selectedMemberId === undefined || props.selectedMemberId === null
+      ? []
+      : [props.selectedMemberId]),
+    ...(props.selectedMemberIds ?? []),
+  ]);
   const nodePos = new Map(model.nodes.map((n) => [n.id, new THREE.Vector3(n.x, n.y, n.z)]));
 
   for (const support of model.supports) {
@@ -393,7 +407,10 @@ function rebuildStructure(
     const onDeck = (model.deck ?? []).includes(member.id);
     let color: number;
     let width: number;
-    if (diagramValues) {
+    if (selectedMembers.has(member.id)) {
+      color = BLUE;
+      width = 0.15;
+    } else if (diagramValues) {
       const value = diagramValues.get(member.id) ?? 0;
       const ratio = Math.abs(value) / diagramMax;
       color = onDeck ? BLUE : diagramColorHex(ratio);

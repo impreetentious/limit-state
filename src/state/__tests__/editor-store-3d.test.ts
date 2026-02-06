@@ -37,12 +37,69 @@ describe('3D editor store — Phase 4G undo/redo + limit', () => {
     expect(useEditorStore3d.getState().notice).toMatch(/limit/i);
   });
 
-  it('loadModel and reset both clear history', () => {
+  it('G36: loadModel and reset both clear history', () => {
     const store = useEditorStore3d.getState();
+    store.addNodeAt(0, 0, 0);
+    expect(useEditorStore3d.getState().past.length).toBeGreaterThan(0);
+    const model = useEditorStore3d.getState().model;
+    store.undo();
+    expect(useEditorStore3d.getState().future.length).toBeGreaterThan(0);
+    store.loadModel(model);
+    expect(useEditorStore3d.getState().past).toEqual([]);
+    expect(useEditorStore3d.getState().future).toEqual([]);
     store.addNodeAt(0, 0, 0);
     expect(useEditorStore3d.getState().past.length).toBeGreaterThan(0);
     useEditorStore3d.getState().reset();
     expect(useEditorStore3d.getState().past).toEqual([]);
     expect(useEditorStore3d.getState().future).toEqual([]);
+  });
+
+  it('persists independent 3D Timoshenko and P-Δ analysis toggles', () => {
+    const store = useEditorStore3d.getState();
+    store.setShearFlexible(true);
+    store.setSecondOrder(true);
+    expect(useEditorStore3d.getState()).toMatchObject({ shearFlexible: true, secondOrder: true });
+  });
+
+  it('updates selected 3D member and node inspection fields', () => {
+    const store = useEditorStore3d.getState();
+    const a = store.addNodeAt(0, 0, 0);
+    const b = store.addNodeAt(4, 0, 0);
+    store.addMemberBetween(a, b);
+    const memberId = useEditorStore3d.getState().model.members[0]!.id;
+    useEditorStore3d.getState().updateNode(b, 4, 2, 1);
+    useEditorStore3d.getState().setSupport(a, 'rollerZ');
+    useEditorStore3d.getState().updateMember(memberId, {
+      roll: Math.PI / 4,
+      releaseA: { tx: true, ty: false, tz: true },
+      cableOnly: true,
+    });
+    expect(useEditorStore3d.getState().model.nodes.find((node) => node.id === b)).toMatchObject({
+      x: 4,
+      y: 2,
+      z: 1,
+    });
+    expect(useEditorStore3d.getState().model.supports).toContainEqual({ node: a, kind: 'rollerZ' });
+    expect(useEditorStore3d.getState().model.members[0]).toMatchObject({
+      roll: Math.PI / 4,
+      releaseA: { tx: true, ty: false, tz: true },
+      cableOnly: true,
+    });
+  });
+
+  it('applies a bulk section assignment to a multi-member selection', () => {
+    const store = useEditorStore3d.getState();
+    const a = store.addNodeAt(0, 0, 0);
+    const b = store.addNodeAt(4, 0, 0);
+    const c = store.addNodeAt(8, 0, 0);
+    store.addMemberBetween(a, b);
+    store.addMemberBetween(b, c);
+    const ids = useEditorStore3d.getState().model.members.map((member) => member.id);
+    useEditorStore3d.getState().setSelection({ kind: 'members', ids });
+    useEditorStore3d.getState().updateMembers(ids, { section: { kind: 'tube', d: 0.2, t: 0.01 } });
+    expect(useEditorStore3d.getState().model.members.map((member) => member.section)).toEqual([
+      { kind: 'tube', d: 0.2, t: 0.01 },
+      { kind: 'tube', d: 0.2, t: 0.01 },
+    ]);
   });
 });
