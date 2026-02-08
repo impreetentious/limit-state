@@ -5,6 +5,7 @@
 import { assembleM } from '../fem/assemble';
 import { newmarkStep, prepareNewmarkSystem, rayleighFit, type NewmarkState } from '../fem/dynamics';
 import { buildMesh } from '../fem/mesh';
+import { mulberry32 } from '../fem/rng';
 import {
   analyzeStaticModel,
   prepareStaticSystem,
@@ -216,23 +217,12 @@ function windMultiplier(story: WindScenario['model'], seed: number, time: number
   if (story.pattern === 'sine') return Math.sin(Math.PI * 2 * story.freqHz * time);
   let value = 0.35;
   for (let index = 0; index < 5; index++) {
-    const random = seeded(seed + index * 977);
+    const random = mulberry32(seed + index * 977);
     const frequency = 0.1 + random() * 1.9;
     const phase = random() * Math.PI * 2;
     value += 0.2 * Math.sin(Math.PI * 2 * frequency * time + phase);
   }
   return value;
-}
-
-function seeded(seed: number): () => number {
-  let value = seed >>> 0;
-  return () => {
-    value += 0x6d2b79f5;
-    let mixed = value;
-    mixed = Math.imul(mixed ^ (mixed >>> 15), mixed | 1);
-    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
-    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4_294_967_296;
-  };
 }
 
 function multiply(matrix: Float64Array, size: number, vector: Float64Array): Float64Array {

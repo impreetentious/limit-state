@@ -28,7 +28,8 @@ describe('3D wind story (Phase 3)', () => {
     let fx = 0;
     let fy = 0;
     let fz = 0;
-    for (let node = 0; scenario!.mesh.ndof > node * 6; node++) {
+    const nodeCount = scenario!.mesh.ndof / 6;
+    for (let node = 0; node < nodeCount; node++) {
       fx += F[6 * node]!;
       fy += F[6 * node + 1]!;
       fz += F[6 * node + 2]!;
@@ -47,7 +48,8 @@ describe('3D wind story (Phase 3)', () => {
     const F = windIncrementUnit3d(scenario);
     let fx = 0;
     let fy = 0;
-    for (let node = 0; scenario.mesh.ndof > node * 6; node++) {
+    const nodeCount = scenario.mesh.ndof / 6;
+    for (let node = 0; node < nodeCount; node++) {
       fx += F[6 * node]!;
       fy += F[6 * node + 1]!;
     }
@@ -97,7 +99,7 @@ describe('Phase 4C — 3D wind DAF + resonance helpers', () => {
     expect(daf!.ratio).toBeCloseTo(1 / (2 * zeta), 6);
   });
 
-  it('detectResonance3d fires only inside the ±10 % / 1.5× / ζ<5 % window', () => {
+  it('G31: detectResonance3d fires only inside the ±10 % / 1.5× / ζ<5 % window', () => {
     const modal: EigenResult = {
       kind: 'modal',
       values: new Float64Array([Math.PI * 2]),
@@ -110,5 +112,7 @@ describe('Phase 4C — 3D wind DAF + resonance helpers', () => {
     expect(detectResonance3d(1, modal, 0.02, [1, 1, 1, 1, 1, 1, 1, 1, 2, 2], 2)).toBe(0);
     // ζ ≥ 5 % suppresses.
     expect(detectResonance3d(1, modal, 0.06, [1, 1, 1, 1, 1, 1, 1, 1, 2, 2], 2)).toBeUndefined();
+    // Forcing outside the ±10 % frequency window suppresses resonance even with growth.
+    expect(detectResonance3d(1.5, modal, 0.02, [1, 1, 1, 1, 1, 1, 1, 1, 2, 2], 2)).toBeUndefined();
   });
 });
