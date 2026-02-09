@@ -1,6 +1,6 @@
 /**
  * Newmark-β (γ=1/2, β=1/4) with Rayleigh damping; modal projection for the
- * explainer layer; DAF meter; resonance detection. M5.
+ * explainer layer; DAF meter; resonance detection. docs/FEM-SPEC.md §4.6. M5.
  *
  * Core stepping is dimension-agnostic (`DynamicDofLayout` + assembled K/M) so
  * Phase 3 space-frame stories reuse the same integrator.
@@ -29,7 +29,7 @@ export interface NewmarkState {
   t: number;
   /** Optional Rayleigh coefficients retained across story steps. */
   damping?: RayleighParams;
-  /** Cached M, C, and K̂ factor for a fixed mesh/time step. */
+  /** Cached M, C, and K̂ factor for a fixed mesh/time step. docs/FEM-SPEC.md §4.6. */
   system?: NewmarkSystem;
 }
 
@@ -38,7 +38,7 @@ export interface RayleighParams {
   b: number; // stiffness-proportional
 }
 
-/** Preassembled and factored fixed-system terms for repeated Newmark steps. */
+/** Preassembled and factored fixed-system terms for repeated Newmark steps. docs/FEM-SPEC.md §4.6. */
 export interface NewmarkSystem {
   ndof: number;
   dt: number;
@@ -54,7 +54,7 @@ export interface NewmarkSystem {
   a5: number;
 }
 
-/** Fit a and b from a target damping ratio at two circular frequencies. Gate G9. */
+/** Fit a and b from a target damping ratio at two circular frequencies. docs/FEM-SPEC.md §4.6, gate G9. */
 export function rayleighFit(zeta: number, w1: number, w2: number): RayleighParams {
   if (!(zeta >= 0) || !Number.isFinite(zeta))
     throw new Error('Rayleigh damping ratio must be finite and non-negative.');
@@ -67,7 +67,7 @@ export function rayleighFit(zeta: number, w1: number, w2: number): RayleighParam
   };
 }
 
-/** ζ(ω) = ½(a/ω + bω) for a Rayleigh-damped mode. */
+/** ζ(ω) = ½(a/ω + bω) for a Rayleigh-damped mode. docs/FEM-SPEC.md §4.6. */
 export function rayleighDampingRatio(params: RayleighParams, omega: number): number {
   if (!(omega > 0) || !Number.isFinite(omega))
     throw new Error('Modal circular frequency must be finite and positive.');
@@ -122,7 +122,7 @@ export function prepareNewmarkSystemAssembled(
   };
 }
 
-/** Assemble and factor K̂ once for a fixed 2D Newmark run. */
+/** Assemble and factor K̂ once for a fixed 2D Newmark run. docs/FEM-SPEC.md §4.6. */
 export function prepareNewmarkSystem(
   mesh: AnalysisMesh,
   dt: number,
@@ -134,7 +134,7 @@ export function prepareNewmarkSystem(
 
 /**
  * One average-acceleration Newmark step on an assembled system.
- * Shared by 2D and 3D stories.
+ * docs/FEM-SPEC.md §4.6 — shared by 2D and 3D stories.
  */
 export function newmarkStepAssembled(
   layout: DynamicDofLayout,
@@ -178,8 +178,8 @@ export function newmarkStepAssembled(
 
 /**
  * One average-acceleration Newmark step on the mesh free-DOF partition.
- * K̂ = K + a0M + a1C, with the matching effective load.
- * Pass `mass` to rebuild K̂ when M changes (moving vehicle).
+ * K̂ = K + a0M + a1C and the effective load are exactly docs/FEM-SPEC.md §4.6.
+ * Pass `mass` to rebuild K̂ when M changes (moving vehicle). docs/FEM-SPEC.md §14 2H.
  */
 export function newmarkStep(
   mesh: AnalysisMesh,
@@ -199,7 +199,7 @@ export function newmarkStep(
   return mass ? { ...next, system: undefined } : next;
 }
 
-/** Exact SDOF DAF for a harmonic force, used by the honest live meter. */
+/** Exact SDOF DAF for a harmonic force, used by the honest live meter. docs/FEM-SPEC.md §4.6. */
 export function dynamicAmplificationRatio(
   forceOmega: number,
   naturalOmega: number,
@@ -213,6 +213,7 @@ export function dynamicAmplificationRatio(
 
 /**
  * Influence vector ι with unity on global-x translational DOFs (base excitation).
+ * docs/FEM-SPEC.md §14 2C.
  */
 export function influenceVectorX(mesh: AnalysisMesh): Float64Array {
   const iota = new Float64Array(mesh.ndof);
@@ -222,6 +223,7 @@ export function influenceVectorX(mesh: AnalysisMesh): Float64Array {
 
 /**
  * Effective nodal load from horizontal base acceleration: −M · ι · ü_g.
+ * docs/FEM-SPEC.md §14 2C.
  */
 export function baseExcitationLoad(
   mass: Float64Array,

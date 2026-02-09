@@ -1,6 +1,7 @@
 /**
  * Tension-only cable iteration: deactivate members in compression, re-solve,
  * reactivate if axial elongation returns tension; freeze after 10 iterations.
+ * docs/FEM-SPEC.md §14 2E.
  */
 import { assembleLoadCase, type LoadAssembly } from './assemble';
 import { buildMesh } from './mesh';
@@ -24,7 +25,7 @@ export interface CableSolveResult {
   frozen: boolean;
 }
 
-/** True when the model declares any tension-only cable members. */
+/** True when the model declares any tension-only cable members. docs/FEM-SPEC.md §14 2E. */
 export function modelHasCables(model: EditorModel): boolean {
   return model.members.some((member) => member.cableOnly);
 }
@@ -32,6 +33,7 @@ export function modelHasCables(model: EditorModel): boolean {
 /**
  * Static solve with iterative slack removal for `cableOnly` members.
  * `loadFactor` scales gravity and point loads together (ramp / failure path).
+ * docs/FEM-SPEC.md §14 2E.
  */
 export function solveTensionOnly(
   model: EditorModel,
@@ -218,7 +220,7 @@ function sameSet(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
   return true;
 }
 
-/** Ensure cable members carry truss releases. */
+/** Ensure cable members carry truss releases. docs/FEM-SPEC.md §14 2E. */
 export function normalizeCableMember(member: MemberSpec): MemberSpec {
   if (!member.cableOnly) return member;
   return { ...member, releaseA: true, releaseB: true };

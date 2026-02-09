@@ -1,12 +1,14 @@
 /**
  * EditorModel -> AnalysisMesh: subdivide each member into 2 elements (mid-node),
  * number DOFs, apply supports to the free-DOF list, validate deck contiguity.
+ * docs/FEM-SPEC.md §4.4 / §14 2A.
  */
 import { MATERIALS, sectionProps } from './materials';
 import type { AnalysisMesh, AnalysisOptions, EditorModel, MemberSpec, SupportSpec } from './types';
 
 /**
  * Build the hidden two-element-per-member analysis mesh from an editor model.
+ * docs/FEM-SPEC.md §4.4.
  */
 export function buildMesh(model: EditorModel, options: AnalysisOptions = {}): AnalysisMesh {
   const nodeById = new Map<number, { index: number; x: number; y: number }>();
@@ -63,7 +65,7 @@ export function buildMesh(model: EditorModel, options: AnalysisOptions = {}): An
 
     // A member released at both physical ends, or a tension-only cable, is an
     // exact axial truss bar. Subdividing it would add an artificial collinear
-    // node with an unrestrained transverse DOF.
+    // node with an unrestrained transverse DOF. docs/FEM-SPEC.md §4.4 / §14 2E.
     const truss = member.cableOnly || (member.releaseA && member.releaseB);
     if (truss) {
       elements.push({

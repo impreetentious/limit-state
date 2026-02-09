@@ -1,5 +1,6 @@
 /**
  * Contiguous deck-path geometry shared by traffic and influence-line sweeps.
+ * docs/FEM-SPEC.md §4.2, §6.3, and §14 2D.
  */
 import type { AnalysisMesh, EditorModel } from './types';
 
@@ -19,7 +20,7 @@ export interface DeckStationHit {
   y: number;
 }
 
-/** Ordered deck segments with analysis-element coverage along the painted path. */
+/** Ordered deck segments with analysis-element coverage along the painted path. docs/FEM-SPEC.md §6.3. */
 export function buildDeckRoute(model: EditorModel, mesh: AnalysisMesh): DeckSegment[] {
   if (model.deck.length === 0)
     throw new Error('Paint a contiguous deck before running a deck sweep.');
@@ -64,7 +65,7 @@ export function buildDeckRoute(model: EditorModel, mesh: AnalysisMesh): DeckSegm
   return route;
 }
 
-/** Map a deck station (m) onto the owning analysis element and Hermite ξ. */
+/** Map a deck station (m) onto the owning analysis element and Hermite ξ. docs/FEM-SPEC.md §4.2. */
 export function mapDeckStation(
   model: EditorModel,
   mesh: AnalysisMesh,
@@ -104,7 +105,7 @@ export function mapDeckStation(
   return [];
 }
 
-/** Editor-node id → analysis-mesh node index. */
+/** Editor-node id → analysis-mesh node index. docs/FEM-SPEC.md §4.4. */
 export function editorNodeIndex(mesh: AnalysisMesh): Map<number, number> {
   const index = new Map<number, number>();
   for (let node = 0; node < mesh.editorNode.length; node++) {
@@ -114,7 +115,7 @@ export function editorNodeIndex(mesh: AnalysisMesh): Map<number, number> {
   return index;
 }
 
-/** Total painted-deck length in metres. */
+/** Total painted-deck length in metres. docs/FEM-SPEC.md §6.3. */
 export function deckLength(route: readonly DeckSegment[]): number {
   return route.reduce((sum, segment) => sum + segment.length, 0);
 }

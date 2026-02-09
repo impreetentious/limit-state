@@ -1,5 +1,5 @@
 /**
- * Element matrices, transforms, assembly, load vectors.
+ * Element matrices, transforms, assembly, load vectors. docs/FEM-SPEC.md §4.1–§4.3 / §14 2A.
  * The three element matrices below are implemented and tested now (scaffold anchor);
  * assembly and load vectors are M1 work.
  *
@@ -17,7 +17,7 @@ export interface LoadAssembly {
 }
 
 /**
- * Shear flexibility factor φ = 12EI / (G A_s L²).
+ * Shear flexibility factor φ = 12EI / (G A_s L²). docs/FEM-SPEC.md §14 2A.
  * φ → 0 recovers Euler–Bernoulli.
  */
 export function shearFactor(E: number, I: number, G: number, As: number, L: number): number {
@@ -135,13 +135,13 @@ export function assembleK(mesh: AnalysisMesh): Float64Array {
   return K;
 }
 
-/** Local element stiffness after end-release condensation. */
+/** Local element stiffness after end-release condensation. docs/FEM-SPEC.md §4.1 / §14 2A. */
 export function elementLocalStiffness(element: Element, shearFlexible = false): Float64Array {
   const phi = elementPhi(element, shearFlexible);
   return condenseReleased(kLocal(element.E, element.A, element.I, element.L, phi), element, phi);
 }
 
-/** Assemble global consistent M, including release-compatible mass condensation. */
+/** Assemble global consistent M, including release-compatible mass condensation. docs/FEM-SPEC.md §4.1/§4.5. */
 export function assembleM(mesh: AnalysisMesh): Float64Array {
   const M = new Float64Array(mesh.ndof * mesh.ndof);
   for (const element of mesh.elements) {
@@ -152,7 +152,7 @@ export function assembleM(mesh: AnalysisMesh): Float64Array {
   return M;
 }
 
-/** Assemble K_g from tension-positive local element axial forces. */
+/** Assemble K_g from tension-positive local element axial forces. docs/FEM-SPEC.md §4.1/§4.5. */
 export function assembleKg(mesh: AnalysisMesh, elementN: Float64Array): Float64Array {
   if (elementN.length !== mesh.elements.length) {
     throw new Error('Geometric stiffness requires exactly one axial force per analysis element.');
@@ -186,7 +186,7 @@ export function assembleF(
 
 /**
  * Assemble the global load vector and retained fixed-end forces for static
- * recovery.
+ * recovery. docs/FEM-SPEC.md §4.2.
  */
 export function assembleLoadCase(
   mesh: AnalysisMesh,
@@ -265,7 +265,7 @@ export function assembleLoadCase(
   return { F, elementFixedEnd, elementTransverseUdl };
 }
 
-/** Standard gravity in m/s² for self-weight assembly. */
+/** Standard gravity in m/s² for self-weight assembly. docs/FEM-SPEC.md §4.2. */
 export const STANDARD_GRAVITY = 9.80665;
 
 function addElementMatrix(
@@ -297,7 +297,7 @@ function elementDofs(element: Element): readonly number[] {
 
 /**
  * Condense released rotational DOFs out of a local element matrix.
- * k_cond = k_kk - k_kr k_rr^-1 k_rk.
+ * docs/FEM-SPEC.md §4.1: k_cond = k_kk - k_kr k_rr^-1 k_rk.
  */
 function condenseReleased(local: Float64Array, element: Element, phi: number): Float64Array {
   const released = releasedRotations(element);
@@ -319,7 +319,7 @@ function condenseReleased(local: Float64Array, element: Element, phi: number): F
 }
 
 /**
- * Coordinate transform for a rotational end release:
+ * Coordinate transform for a rotational end release. docs/FEM-SPEC.md §4.1:
  * q_r = -k_rr⁻¹ k_rk q_k, so every compatible matrix is Cᵀ A C.
  */
 function releaseTransform(
@@ -349,7 +349,7 @@ function releaseTransform(
 
 /**
  * Condense a fixed-end vector alongside the stiffness releases.
- * f_cond = f_k - k_kr k_rr^-1 f_r.
+ * docs/FEM-SPEC.md §4.1: f_cond = f_k - k_kr k_rr^-1 f_r.
  */
 function condenseFixedEnd(fixedEnd: Float64Array, element: Element, phi: number): Float64Array {
   const released = releasedRotations(element);
@@ -419,7 +419,7 @@ function addEquivalentLocalLoad(
   }
 }
 
-/** Fixed-end force vector for a uniform local load (positive local x/y). */
+/** Fixed-end force vector for a uniform local load (positive local x/y). docs/FEM-SPEC.md §4.2. */
 function uniformFixedEnd(px: number, py: number, L: number): Float64Array {
   const fixedEnd = new Float64Array(6);
   fixedEnd[0] = (-px * L) / 2;
@@ -431,7 +431,7 @@ function uniformFixedEnd(px: number, py: number, L: number): Float64Array {
   return fixedEnd;
 }
 
-/** Fixed-end force vector for a local point load using Hermite shape functions. */
+/** Fixed-end force vector for a local point load using Hermite shape functions. docs/FEM-SPEC.md §4.2. */
 function pointFixedEnd(px: number, py: number, xi: number, L: number): Float64Array {
   const oneMinusXi = 1 - xi;
   const fixedEnd = new Float64Array(6);

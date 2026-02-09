@@ -1,4 +1,4 @@
-/** Material and section presets. Values are the product spec. */
+/** Material and section presets. docs/FEM-SPEC.md §4.8, §4.9 and §14 2A. Values are the product spec. */
 import type { Material, MaterialId, SectionProps, SectionSpec } from './types';
 
 export const MATERIALS: Record<MaterialId, Material> = {
@@ -35,6 +35,7 @@ export const DEFAULT_SECTION: SectionSpec = { kind: 'box', b: 0.2, h: 0.2, t: 0.
 /**
  * St. Venant torsion constant for a solid rectangle.
  * Roark / Timoshenko series approx: J = β b h³ with β from the aspect ratio.
+ * docs/FEM-SPEC.md §4.8 / §4.9.
  */
 function solidRectJ(b: number, h: number): number {
   const long = Math.max(b, h);
@@ -48,6 +49,7 @@ function solidRectJ(b: number, h: number): number {
 /**
  * Thin-walled closed-box torsion: J = 4 A_m² / ∮ ds/t.
  * Mid-line enclosed area A_m = (b−t)(h−t); perimeter integral ≈ 2((b−t)+(h−t))/t.
+ * docs/FEM-SPEC.md §4.8 / §4.9.
  */
 function thinBoxJ(b: number, h: number, t: number): number {
   const bm = b - t;
@@ -60,7 +62,7 @@ function thinBoxJ(b: number, h: number, t: number): number {
 
 /**
  * Open I-section St. Venant approx: sum of thin rectangles (⅓ b t³ each).
- * Warping torsion is out of scope.
+ * Warping torsion is out of scope. docs/FEM-SPEC.md §4.8 / §4.9.
  */
 function ibeamJ(b: number, h: number, tf: number, tw: number): number {
   const web = Math.max(0, h - 2 * tf);
@@ -134,7 +136,7 @@ export function sectionDepth(s: SectionSpec): number {
 
 /**
  * Plastic section modulus Z (first moment of area about the plastic NA).
- * M_p = Z · f_y.
+ * docs/FEM-SPEC.md §14 2F: M_p = Z · f_y.
  */
 export function plasticModulus(s: SectionSpec): number {
   switch (s.kind) {
@@ -157,7 +159,7 @@ export function plasticModulus(s: SectionSpec): number {
   }
 }
 
-/** Plastic moment capacity M_p = Z · f_y. */
+/** Plastic moment capacity M_p = Z · f_y. docs/FEM-SPEC.md §14 2F. */
 export function plasticMoment(s: SectionSpec, fy: number): number {
   return plasticModulus(s) * fy;
 }

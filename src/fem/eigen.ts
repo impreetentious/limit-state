@@ -2,7 +2,7 @@
  * Subspace iteration for the two generalized symmetric eigenproblems:
  *   modal    K φ = ω² M φ
  *   buckling K φ = μ (−K_g) φ,  λ_cr = 1 / max(μ > 0)
- * Jacobi eigensolver on the p×p Ritz block. M4 (runs in worker).
+ * Jacobi eigensolver on the p×p Ritz block. docs/FEM-SPEC.md §4.5. M4 (runs in worker).
  *
  * Measured accuracy at 2 sub-elements/member: buckling +0.75%, ω₁ +0.39% (gates G3, G4).
  */
@@ -14,7 +14,7 @@ const MAX_ITERATIONS = 80;
 const RELATIVE_TOLERANCE = 1e-8;
 const MAX_REQUESTED_MODES = 8;
 
-/** Solve Kφ = ω²Mφ for the requested lowest natural frequencies. */
+/** Solve Kφ = ω²Mφ for the requested lowest natural frequencies. docs/FEM-SPEC.md §4.5. */
 export function modal(mesh: AnalysisMesh, nModes: number): EigenResult {
   return modalAssembled(mesh, assembleK(mesh), assembleM(mesh), nModes);
 }
@@ -84,6 +84,7 @@ export function modalAssembled(
 /**
  * Solve Kφ = μ(−K_g)φ and return λ_cr = 1/μ for the positive buckling roots.
  * Element axial forces are tension-positive, so compression makes K_g negative.
+ * docs/FEM-SPEC.md §4.1 and §4.5.
  */
 export function buckling(mesh: AnalysisMesh, elementN: Float64Array): EigenResult {
   return bucklingAssembled(mesh, assembleK(mesh), assembleKg(mesh, elementN));
@@ -190,7 +191,7 @@ interface OrthonormalBasis {
   metricBasis: Float64Array;
 }
 
-/** Modified Gram–Schmidt in the M (or K) inner product. */
+/** Modified Gram–Schmidt in the M (or K) inner product. docs/FEM-SPEC.md §4.5. */
 function orthonormalizeMetric(
   input: Float64Array,
   metric: Float64Array,
@@ -347,7 +348,7 @@ interface GeneralizedEigen {
   vectors: Float64Array;
 }
 
-/** Cholesky-reduce a small symmetric generalized Ritz problem, then Jacobi-solve it. */
+/** Cholesky-reduce a small symmetric generalized Ritz problem, then Jacobi-solve it. docs/FEM-SPEC.md §4.5. */
 function generalizedSymmetric(K: Float64Array, M: Float64Array, n: number): GeneralizedEigen {
   const L = cholesky(M, n);
   const invL = invertLower(L, n);

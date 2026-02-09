@@ -1,7 +1,7 @@
 /**
  * Failure taxonomy evaluation (mechanism / yield / buckling / resonance),
  * exact load-ramp capacity (linearity ⇒ λ_yield = 1/max U), and the
- * quasi-static collapse cascade. M6.
+ * quasi-static collapse cascade. docs/FEM-SPEC.md §4.7. M6.
  */
 import { assembleLoadCase, type LoadAssembly } from './assemble';
 import { modelHasCables, solveTensionOnly } from './cables';
@@ -19,7 +19,7 @@ import type {
 
 /**
  * Evaluate the four static failure classes at one proportional load factor.
- * λ_yield = 1/max(U), global buckling is λ_cr,
+ * docs/FEM-SPEC.md §4.5 and §4.7: λ_yield = 1/max(U), global buckling is λ_cr,
  * and the member Euler check is π²EI/L_member².
  */
 export function evaluateFailure(
@@ -88,7 +88,7 @@ export function evaluateFailure(
 /**
  * Deterministic quasi-static collapse: remove buckled/axial members or insert
  * a hinge at the governing bending end, then re-solve at the same load.
- * Maximum twenty steps.
+ * docs/FEM-SPEC.md §4.7, maximum twenty steps.
  */
 export function collapseCascade(
   model: EditorModel,
@@ -104,7 +104,7 @@ export function collapseCascade(
     if (report.kind === 'mechanism') return { steps, outcome: 'collapse' };
     if (report.kind === 'stable') return { steps, outcome: 'stable' };
     // Dynamic resonance is reported by the wind story; this quasi-static path
-    // deliberately has no inertial collapse step.
+    // deliberately has no inertial collapse step. docs/FEM-SPEC.md §4.6–§4.7.
     if (report.kind === 'resonance') return { steps, outcome: 'stable' };
     const memberId = report.memberId;
     const member = current.members.find((candidate) => candidate.id === memberId);
@@ -152,7 +152,7 @@ export function collapseCascade(
   return { steps, outcome: 'stable' };
 }
 
-/** Solve the base load case at a proportional ramp factor. */
+/** Solve the base load case at a proportional ramp factor. docs/FEM-SPEC.md §4.7 / §14 2E. */
 export function analyzeAtFactor(
   model: EditorModel,
   factor: number,
@@ -182,7 +182,7 @@ export function analyzeAtFactor(
   }
 }
 
-/** Scale both external loads and retained fixed-end vectors so recovery remains exact. */
+/** Scale both external loads and retained fixed-end vectors so recovery remains exact. docs/FEM-SPEC.md §4.2/§4.7. */
 function scaleLoadAssembly(loads: LoadAssembly, factor: number): LoadAssembly {
   const F = new Float64Array(loads.F.length);
   const elementFixedEnd = new Float64Array(loads.elementFixedEnd.length);
@@ -213,7 +213,7 @@ function governingYield(analysis: Extract<StaticAnalysis, { kind: 'stable' }>): 
   return { memberId, utilization, stationM };
 }
 
-/** Per-member Euler comparison |N| / (π²EI/L_member²). */
+/** Per-member Euler comparison |N| / (π²EI/L_member²). docs/FEM-SPEC.md §4.5 and §4.7. */
 function governingMemberBuckling(
   mesh: AnalysisMesh,
   forces: Float64Array,

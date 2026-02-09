@@ -1,6 +1,7 @@
 /**
  * Influence lines: unit-load deck sweep for reaction, axial, and section-moment
  * response quantities, plus two-axle envelope evaluation from the line.
+ * docs/FEM-SPEC.md §14 2D.
  */
 import { assembleLoadCase, type LoadAssembly } from './assemble';
 import {
@@ -14,7 +15,7 @@ import { buildMesh } from './mesh';
 import { prepareStaticSystem, solveStatic, type StaticSystem } from './statics';
 import type { AnalysisMesh, AnalysisOptions, EditorModel, StaticResult } from './types';
 
-/** Response quantity whose influence line is traced by a unit downward deck load. */
+/** Response quantity whose influence line is traced by a unit downward deck load. docs/FEM-SPEC.md §14 2D. */
 export type InfluenceQuantity =
   | { kind: 'reaction'; nodeId: number; component: 'fx' | 'fy' | 'm' }
   | { kind: 'axial'; memberId: number }
@@ -50,7 +51,7 @@ export interface InfluenceEnvelope {
   criticalStation: number;
 }
 
-/** Factor the deck once; subsequent unit-load stations are back-substitutions. */
+/** Factor the deck once; subsequent unit-load stations are back-substitutions. docs/FEM-SPEC.md §14 2D. */
 export function prepareInfluence(
   model: EditorModel,
   options: AnalysisOptions = {},
@@ -69,7 +70,7 @@ export function prepareInfluence(
 
 /**
  * Sweep a unit global-downward load along the deck and record the chosen response.
- * Default step is L/40 (dense enough for the piecewise-linear SS-beam gate).
+ * Default step is L/40 (dense enough for the piecewise-linear SS-beam gate). docs/FEM-SPEC.md §14 2D.
  */
 export function computeInfluenceLine(
   model: EditorModel,
@@ -80,7 +81,7 @@ export function computeInfluenceLine(
   return computeInfluenceLineAt(prepareInfluence(model, analysisOptions), quantity, step);
 }
 
-/** Re-use a prepared deck factorization for an influence sweep. */
+/** Re-use a prepared deck factorization for an influence sweep. docs/FEM-SPEC.md §14 2D. */
 export function computeInfluenceLineAt(
   scenario: InfluenceScenario,
   quantity: InfluenceQuantity,
@@ -110,7 +111,7 @@ export function computeInfluenceLineAt(
   };
 }
 
-/** Unit-load response at one deck station. */
+/** Unit-load response at one deck station. docs/FEM-SPEC.md §14 2D. */
 export function sampleInfluenceAt(
   scenario: InfluenceScenario,
   station: number,
@@ -136,7 +137,7 @@ export function sampleInfluenceAt(
 
 /**
  * Envelope a two-axle vehicle (equal axle weights, fixed spacing) against an
- * influence line — the analytic twin of the traffic moment-envelope sweep.
+ * influence line — the analytic twin of the traffic moment-envelope sweep. docs/FEM-SPEC.md §14 2D.
  */
 export function envelopeFromInfluence(
   line: InfluenceLine,
@@ -159,7 +160,7 @@ export function envelopeFromInfluence(
 
 /**
  * Per-member |M| envelope implied by a midspan-or-end moment influence line under
- * the current traffic vehicle.
+ * the current traffic vehicle. docs/FEM-SPEC.md §6.3 / §14 2D.
  */
 export function memberMomentEnvelopeFromInfluence(
   model: EditorModel,
@@ -222,7 +223,7 @@ function readQuantity(
 /**
  * Section moment with sagging-positive sign on a left-to-right chord.
  * At a shared mid-node, prefer the adjacent element that does not carry the
- * in-span unit load — its recovered end moment matches beam theory.
+ * in-span unit load — its recovered end moment matches beam theory. docs/FEM-SPEC.md §14 2D.
  */
 function sectionMoment(
   mesh: AnalysisMesh,
