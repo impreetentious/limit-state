@@ -1,6 +1,6 @@
 /**
  * P-Δ (geometric) second-order statics: iterate K + K_g(N) → re-solve → update N
- * until ‖ΔN‖/‖N‖ < 1e−6.
+ * until ‖ΔN‖/‖N‖ < 1e−6. docs/FEM-SPEC.md §14 2B.
  */
 import { assembleK, assembleKg, type LoadAssembly } from './assemble';
 import { factorLDLT, freeMatrix, mechanismEditorNode } from './solve';
@@ -27,7 +27,7 @@ export type SecondOrderAnalysis =
 
 /**
  * Geometric nonlinear (P-Δ) static solve by successive K + K_g updates.
- * Converge on ‖ΔN‖_rel < 1e−6; divergence ⇒ buckling-adjacent.
+ * docs/FEM-SPEC.md §14 2B: converge on ‖ΔN‖_rel < 1e−6; divergence ⇒ buckling-adjacent.
  *
  * Displacements come from (K+K_g)u = F; member forces recover from elastic k
  * (engineering beam theory); support reactions use the current K_eff.
@@ -102,7 +102,7 @@ export function solveSecondOrderStatic(
   };
 }
 
-/** Per-element tension-positive axial force from a static result. */
+/** Per-element tension-positive axial force from a static result. docs/FEM-SPEC.md §4.1. */
 export function elementAxial(result: StaticResult, elementCount: number): Float64Array {
   if (result.elementForces.length < elementCount * 5) {
     throw new Error('Static result does not carry one force record per analysis element.');
@@ -131,7 +131,7 @@ function relativeChange(previous: Float64Array, next: Float64Array): number {
   return Math.sqrt(num / den);
 }
 
-/** Peak |M| ratio (second / linear) over all element end moments. */
+/** Peak |M| ratio (second / linear) over all element end moments. docs/FEM-SPEC.md §14 2B. */
 function momentAmplification(linear: StaticResult, second: StaticResult): number {
   const m0 = peakMoment(linear);
   const m1 = peakMoment(second);

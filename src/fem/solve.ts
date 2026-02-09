@@ -2,7 +2,7 @@ import type { AnalysisMesh } from './types';
 
 /**
  * Dense LDLᵀ factorization + solve on the free-DOF partition, with mechanism
- * detection via pivot magnitude. M1.
+ * detection via pivot magnitude. docs/FEM-SPEC.md §4.3. M1.
  */
 
 export interface Factor {
@@ -18,7 +18,7 @@ export type FactorResult =
 
 /**
  * Factor an SPD free-DOF stiffness matrix without pivoting.
- * A pivot at or below 1e-10 of max diagonal is a mechanism.
+ * docs/FEM-SPEC.md §4.3: a pivot at or below 1e-10 of max diagonal is a mechanism.
  */
 export function factorLDLT(kff: Float64Array, n: number): FactorResult {
   if (!Number.isInteger(n) || n < 0 || kff.length !== n * n) {
@@ -49,7 +49,7 @@ export function factorLDLT(kff: Float64Array, n: number): FactorResult {
   return { ok: true, factor: { n, ld, d } };
 }
 
-/** One forward/back substitution — this is the 60 fps traffic path. */
+/** One forward/back substitution — this is the 60 fps traffic path. docs/FEM-SPEC.md §4.3. */
 export function solveFactored(factor: Factor, rhs: Float64Array): Float64Array {
   const { n, ld, d } = factor;
   if (rhs.length !== n) throw new Error('LDLᵀ right-hand side length does not match the factor.');
@@ -71,7 +71,7 @@ export function solveFactored(factor: Factor, rhs: Float64Array): Float64Array {
   return solution;
 }
 
-/** Extract K_ff from a full dense global matrix. */
+/** Extract K_ff from a full dense global matrix. docs/FEM-SPEC.md §4.3 constraints. */
 export function freeMatrix(K: Float64Array, ndof: number, freeDofs: Int32Array): Float64Array {
   if (K.length !== ndof * ndof) throw new Error('Global matrix must be ndof×ndof.');
   const n = freeDofs.length;
@@ -83,7 +83,7 @@ export function freeMatrix(K: Float64Array, ndof: number, freeDofs: Int32Array):
   return out;
 }
 
-/** Extract F_f from a full global load vector. */
+/** Extract F_f from a full global load vector. docs/FEM-SPEC.md §4.3 constraints. */
 export function freeVector(F: Float64Array, freeDofs: Int32Array): Float64Array {
   const out = new Float64Array(freeDofs.length);
   for (let i = 0; i < freeDofs.length; i++) out[i] = F[freeDofs[i]!]!;
@@ -107,6 +107,7 @@ export function expandFreeVector(
  * Map an LDLᵀ pivot back to an editor node for the stability lint.
  * A frame midpoint is hidden implementation detail, so prefer a connected
  * physical node whose matching component is also unconstrained.
+ * docs/FEM-SPEC.md §4.3 and §6.2.
  */
 export function mechanismEditorNode(mesh: AnalysisMesh, freeDofIndex: number): number {
   const fullDof = mesh.freeDofs[freeDofIndex];

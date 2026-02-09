@@ -1,5 +1,6 @@
 /**
  * Vehicle mass lumped onto translational DOFs at axle contacts.
+ * docs/FEM-SPEC.md §4.1 ("Lumped node masses…") and §14 2H.
  */
 import { assembleM, STANDARD_GRAVITY } from './assemble';
 import type { AnalysisMesh } from './types';
@@ -11,14 +12,14 @@ export interface VehicleContact {
   massKg: number;
 }
 
-/** Total vehicle mass from weight in kN: m = W·1000 / g. */
+/** Total vehicle mass from weight in kN: m = W·1000 / g. docs/FEM-SPEC.md §14 2H. */
 export function vehicleMassKg(weightkN: number): number {
   return (Math.max(0, weightkN) * 1000) / STANDARD_GRAVITY;
 }
 
 /**
  * Copy of the structure mass with vehicle point masses added to translational
- * diagonals (ux, uy) at element ends, linearly split by ξ.
+ * diagonals (ux, uy) at element ends, linearly split by ξ. docs/FEM-SPEC.md §4.1 / §14 2H.
  */
 export function assembleMassWithVehicle(
   mesh: AnalysisMesh,
@@ -31,7 +32,7 @@ export function assembleMassWithVehicle(
 
 /**
  * Add vehicle point masses to translational diagonals only.
- * Split m·(1−ξ) to end a and m·ξ to end b.
+ * Split m·(1−ξ) to end a and m·ξ to end b. docs/FEM-SPEC.md §4.1 / §14 2H.
  */
 export function addLumpedVehicleMass(
   M: Float64Array,

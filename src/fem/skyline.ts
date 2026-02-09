@@ -1,5 +1,5 @@
 /**
- * Symmetric skyline (profile) storage + LDLᵀ.
+ * Symmetric skyline (profile) storage + LDLᵀ — docs/FEM-SPEC.md §4.3 / §4.9 / §14 3S.
  * Packed lower triangle: row i holds columns firstCol[i]…i inclusive.
  * Pure Float64Array; no DOM. Used by the 3D static path; 2D stays dense.
  */

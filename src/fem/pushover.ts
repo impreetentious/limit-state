@@ -1,6 +1,6 @@
 /**
  * Plastic pushover: event-to-event lateral load with plastic-hinge insertion
- * when |M| reaches M_p = Z·f_y. Reuses the hinge cascade.
+ * when |M| reaches M_p = Z·f_y. docs/FEM-SPEC.md §14 2F (reuses §4.7 hinge cascade).
  *
  * Moments at non-hinged sections are carried forward along the load path;
  * after a hinge is inserted, further moment increments use the new unit-load
@@ -41,7 +41,7 @@ type SectionKey = `${number}:${'a' | 'b'}`;
 
 /**
  * Event-to-event plastic pushover under the model's current point-load pattern
- * (gravity off for the classic portal gate).
+ * (gravity off for the classic portal gate). docs/FEM-SPEC.md §14 2F.
  */
 export function runPushover(model: EditorModel, options: AnalysisOptions = {}): PushoverResult {
   const reference = { ...model, loads: { gravity: false, points: model.loads.points } };

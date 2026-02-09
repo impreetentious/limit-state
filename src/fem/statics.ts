@@ -1,6 +1,6 @@
 /**
  * Static result recovery: constrained solve, local element end forces,
- * utilization, and support reactions.
+ * utilization, and support reactions. docs/FEM-SPEC.md §4.1–§4.3 and §4.7.
  */
 import { assembleK, assembleLoadCase, elementLocalStiffness, type LoadAssembly } from './assemble';
 import { modelHasCables, solveTensionOnly } from './cables';
@@ -40,12 +40,12 @@ export interface DeformationDisplay {
   scale: number;
 }
 
-/** Factored static stiffness retained by moving-load stories. */
+/** Factored static stiffness retained by moving-load stories. docs/FEM-SPEC.md §4.3 and §6.3. */
 export type StaticSystem =
   | { ndof: number; K: Float64Array; factor: Factor }
   | { ndof: number; K: Float64Array; mechanismFreeDof: number };
 
-/** Assemble and factor a model once; subsequent load cases take only back-substitution. */
+/** Assemble and factor a model once; subsequent load cases take only back-substitution. docs/FEM-SPEC.md §4.3/§6.3. */
 export function prepareStaticSystem(mesh: AnalysisMesh): StaticSystem {
   const K = assembleK(mesh);
   const result = factorLDLT(freeMatrix(K, mesh.ndof, mesh.freeDofs), mesh.freeDofs.length);
@@ -54,7 +54,7 @@ export function prepareStaticSystem(mesh: AnalysisMesh): StaticSystem {
     : { ndof: mesh.ndof, K, mechanismFreeDof: result.mechanism.freeDofIndex };
 }
 
-/** Solve one assembled static load case and recover all displayed result values. */
+/** Solve one assembled static load case and recover all displayed result values. docs/FEM-SPEC.md §4.3. */
 export function solveStatic(
   mesh: AnalysisMesh,
   loads: LoadAssembly,
@@ -92,7 +92,7 @@ export function solveStatic(
   };
 }
 
-/** Build the model's base static load case (self-weight plus editor point loads). */
+/** Build the model's base static load case (self-weight plus editor point loads). docs/FEM-SPEC.md §4.2–§4.3 / §14 2B / §14 2E. */
 export function analyzeStaticModel(
   model: EditorModel,
   options: AnalysisOptions = {},
@@ -146,7 +146,7 @@ function asStaticAnalysis(second: SecondOrderAnalysis): StaticAnalysis {
   return second;
 }
 
-/** Honest display amplification sized to a legible 28 px maximum displacement. */
+/** Honest display amplification sized to a legible 28 px maximum displacement. docs/FEM-SPEC.md §6.4. */
 export function deformationDisplay(
   mesh: AnalysisMesh,
   u: Float64Array,
@@ -160,7 +160,7 @@ export function deformationDisplay(
   return { maxMeters, scale: Math.max(1, Math.min(100_000, 28 / (maxMeters * pixelsPerMeter))) };
 }
 
-/** Recover combined-stress utilization from a prescribed displacement state. */
+/** Recover combined-stress utilization from a prescribed displacement state. docs/FEM-SPEC.md §4.1 and §4.7(b). */
 export function utilizationAtDisplacement(
   mesh: AnalysisMesh,
   u: Float64Array,
@@ -172,7 +172,7 @@ export function utilizationAtDisplacement(
   return recoverUtilization(mesh, recoverElementForces(mesh, u, fixedEnd)).values;
 }
 
-/** Recover element end forces from a prescribed displacement state. */
+/** Recover element end forces from a prescribed displacement state. docs/FEM-SPEC.md §4.1 / §14 2H. */
 export function elementForcesAtDisplacement(
   mesh: AnalysisMesh,
   u: Float64Array,
@@ -184,7 +184,7 @@ export function elementForcesAtDisplacement(
   return recoverElementForces(mesh, u, fixedEnd);
 }
 
-/** Element force recovery f_local = k_cond(Tu_e) − f_fixedEnd. */
+/** Element force recovery f_local = k_cond(Tu_e) − f_fixedEnd. docs/FEM-SPEC.md §4.1. */
 function recoverElementForces(
   mesh: AnalysisMesh,
   u: Float64Array,
@@ -214,7 +214,7 @@ function recoverElementForces(
   return out;
 }
 
-/** Combined-stress endpoint utilization |N/A ± Mc/I| / fy. */
+/** Combined-stress endpoint utilization |N/A ± Mc/I| / fy. docs/FEM-SPEC.md §4.7(b). */
 function recoverUtilization(
   mesh: AnalysisMesh,
   forces: Float64Array,
@@ -274,7 +274,7 @@ function fiberUtilization(
   return Math.max(Math.abs(axial + bending), Math.abs(axial - bending)) / fy;
 }
 
-/** Reactions from R = Ku − F at original editor nodes. */
+/** Reactions from R = Ku − F at original editor nodes. docs/FEM-SPEC.md §4.3. */
 function recoverReactions(
   mesh: AnalysisMesh,
   K: Float64Array,
@@ -301,7 +301,7 @@ function recoverReactions(
   return reactions;
 }
 
-/** Local displacement T u_e with R = [[c,s,0],[-s,c,0],[0,0,1]]. */
+/** Local displacement T u_e with R = [[c,s,0],[-s,c,0],[0,0,1]]. docs/FEM-SPEC.md §4.1. */
 function localElementDisplacement(
   u: Float64Array,
   na: number,

@@ -1,6 +1,6 @@
 /**
  * SDOF response-spectrum helpers for the earthquake story.
- * Sweep 0.1–10 Hz; gate vs Newmark SDOF peak.
+ * docs/FEM-SPEC.md §14 2C: sweep 0.1–10 Hz; gate vs Newmark SDOF peak.
  */
 import type { GroundMotionRecord } from './records';
 
@@ -21,7 +21,7 @@ export interface ResponseSpectrum {
 
 /**
  * Average-acceleration Newmark on ü + 2ζωú + ω²u = −üg(t).
- * Returns relative displacement history.
+ * Returns relative displacement history. docs/FEM-SPEC.md §4.6 / §14 2C.
  */
 export function newmarkSdofRelative(
   omega: number,
@@ -64,7 +64,7 @@ export function newmarkSdofRelative(
   return u;
 }
 
-/** Peak |u| of an SDOF Newmark run. */
+/** Peak |u| of an SDOF Newmark run. docs/FEM-SPEC.md §14 2C. */
 export function peakAbs(values: Float64Array): number {
   let peak = 0;
   for (const value of values) peak = Math.max(peak, Math.abs(value));
@@ -73,6 +73,7 @@ export function peakAbs(values: Float64Array): number {
 
 /**
  * Pseudo-acceleration spectrum Sa(f) over a frequency grid.
+ * docs/FEM-SPEC.md §14 2C.
  */
 export function responseSpectrum(
   record: GroundMotionRecord,
@@ -97,7 +98,7 @@ export function responseSpectrum(
   return { zeta, points, peakIndex };
 }
 
-/** Default log-spaced sweep 0.1–10 Hz (81 points). */
+/** Default log-spaced sweep 0.1–10 Hz (81 points). docs/FEM-SPEC.md §14 2C. */
 export function spectrumFrequencies(minHz = 0.1, maxHz = 10, count = 81): number[] {
   if (!(minHz > 0) || !(maxHz > minHz) || !(count >= 2))
     throw new Error('Invalid spectrum frequency grid.');

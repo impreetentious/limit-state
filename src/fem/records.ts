@@ -1,6 +1,6 @@
 /**
  * Deterministic ground-acceleration records for the earthquake story.
- * Synthetic pulses plus a classic-style scaled series.
+ * docs/FEM-SPEC.md §14 2C — synthetic pulses plus a classic-style scaled series.
  */
 import type { EarthquakeRecordId } from './types';
 
@@ -14,7 +14,7 @@ export interface GroundMotionRecord {
   accel: Float64Array;
 }
 
-/** Catalog of built-in records. */
+/** Catalog of built-in records. docs/FEM-SPEC.md §14 2C. */
 export function earthquakeRecords(): GroundMotionRecord[] {
   return [pulseRecord(), chirpRecord(), elCentroScaledRecord()];
 }
@@ -25,7 +25,7 @@ export function earthquakeRecord(id: EarthquakeRecordId): GroundMotionRecord {
   return found;
 }
 
-/** Sample ü_g at time t with linear hold past the last sample. */
+/** Sample ü_g at time t with linear hold past the last sample. docs/FEM-SPEC.md §14 2C. */
 export function groundAccelAt(record: GroundMotionRecord, time: number): number {
   if (time <= 0) return record.accel[0] ?? 0;
   const index = time / record.dt;

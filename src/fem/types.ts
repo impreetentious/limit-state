@@ -1,6 +1,6 @@
 /**
  * Single source of truth for the model and result types.
- * Serialization schema v1 mirrors EditorModel exactly.
+ * docs/FEM-SPEC.md §5 (serialization schema v1) mirrors EditorModel exactly.
  * Everything in fem/ is pure and DOM-free.
  */
 
@@ -104,7 +104,7 @@ export interface AnalysisOptions {
   secondOrder?: boolean;
 }
 
-// ---------- analysis mesh (members auto-split into 2 elements) ----------
+// ---------- analysis mesh (docs/FEM-SPEC.md §4.4: members auto-split into 2 elements) ----------
 
 export interface Element {
   memberId: number; // owning editor member
