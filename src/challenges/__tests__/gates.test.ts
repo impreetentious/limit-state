@@ -91,7 +91,7 @@ describe('G20 — challenges & gallery (Phase 2G)', () => {
     }
   });
 
-  it('Phase 4J: curated 3D gallery hashes round-trip through decodeModel3d', async () => {
+  it('G35: curated 3D gallery hashes round-trip through decodeModel3d', async () => {
     const raw = readFileSync(join(ROOT, 'public/gallery.json'), 'utf8');
     const entries = JSON.parse(raw) as Array<{
       id: string;
@@ -108,9 +108,7 @@ describe('G20 — challenges & gallery (Phase 2G)', () => {
       expect(entry.id).toBe(source.id);
       expect(entry.hash).toBe(encodeModelUncompressed3d(source.model));
       const decoded = await decodeModel3d(entry.hash);
-      expect(decoded.v).toBe(2);
-      expect(decoded.nodes.length).toBe(source.model.nodes.length);
-      expect(decoded.members.length).toBe(source.model.members.length);
+      expect(decoded).toEqual(source.model);
       // Hash size stays reasonable for URL sharing (< 32 kB).
       expect(entry.hash.length).toBeLessThan(32 * 1024);
     }

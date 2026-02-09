@@ -41,7 +41,7 @@ describe('story controllers', () => {
       story: { kind: 'traffic' as const, weightkN: 300, speed: 12, movingMass: false },
     };
     const scenario = prepareTraffic(model);
-    expect(trafficYieldWeightAt(scenario, 0)).toBeUndefined();
+    expect(trafficYieldWeightAt(scenario, 0)).toBeTypeOf('number');
     const capacity = trafficYieldWeightAt(scenario, 30);
     expect(capacity).toBeTypeOf('number');
     expect(capacity).toBeGreaterThan(0);

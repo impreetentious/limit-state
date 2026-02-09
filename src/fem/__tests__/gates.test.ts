@@ -28,6 +28,7 @@ import {
   vehicleMassKg,
 } from '../moving-mass';
 import { buildMesh } from '../mesh';
+import { mulberry32 } from '../rng';
 import { runPushover } from '../pushover';
 import { earthquakeRecord } from '../records';
 import { solveSecondOrderStatic } from '../second-order';
@@ -40,7 +41,7 @@ import {
   mechanismEditorNode,
   solveFactored,
 } from '../solve';
-import { analyzeStaticModel } from '../statics';
+import { analyzeStaticModel, solveStatic } from '../statics';
 import {
   analyzeTrafficAt,
   initialMovingMassState,
@@ -119,6 +120,85 @@ describe('element matrices (implemented — scaffold anchor)', () => {
     const t = sectionProps({ kind: 'tube', d: 0.2, t: 0.01 });
     expect(t.A).toBeCloseTo((Math.PI / 4) * (0.2 ** 2 - 0.18 ** 2), 12);
     expect(t.As).toBeCloseTo(0.5 * t.A, 12);
+  });
+});
+
+describe('2D support constraints', () => {
+  it('G2b: a roller releases its horizontal reaction under an inclined tip load', () => {
+    const nodes = [
+      { id: 1, x: 0, y: 0 },
+      { id: 2, x: 8, y: 0 },
+    ];
+    const analyze = (rightSupport: SupportSpec['kind']) => {
+      const model = modelFor(nodes, [
+        { node: 1, kind: 'pin' },
+        { node: 2, kind: rightSupport },
+      ]);
+      model.loads.points = [{ node: 2, fx: 20_000, fy: -10_000 }];
+      const analysis = analyzeStaticModel(model);
+      if (analysis.kind !== 'stable')
+        throw new Error(`Expected a stable beam, received ${analysis.kind}.`);
+      return analysis;
+    };
+
+    const pinned = analyze('pin');
+    const roller = analyze('roller');
+    expect(Math.abs(pinned.result.reactions.get(2)?.fx ?? 0)).toBeGreaterThan(1);
+    expect(Math.abs(roller.result.reactions.get(2)?.fx ?? Number.POSITIVE_INFINITY)).toBeLessThan(
+      1e-10,
+    );
+    expect(roller.mesh.freeDofs).toContain(3);
+  });
+
+  it('G2c: UDL utilization includes the exact in-span shear-zero moment', () => {
+    const mesh: AnalysisMesh = {
+      coords: Float64Array.of(0, 0, 8, 0),
+      elements: [
+        {
+          memberId: 1,
+          na: 0,
+          nb: 1,
+          E: 210e9,
+          G: 80e9,
+          A: 0.01,
+          As: 0.008,
+          I: 1e-4,
+          c: 0.1,
+          rho: 0,
+          fy: 355e6,
+          L: 8,
+          cos: 1,
+          sin: 0,
+          releaseA: false,
+          releaseB: false,
+        },
+      ],
+      editorNode: Int32Array.of(1, 2),
+      freeDofs: Int32Array.of(2, 3, 5),
+      ndof: 6,
+      shearFlexible: false,
+    };
+    const loads = assembleLoadCase(mesh, {
+      gravity: false,
+      points: [],
+      elementUdls: [{ element: 0, w: 10_000 }],
+    });
+    const analysis = solveStatic(mesh, loads);
+    if (analysis.kind !== 'stable')
+      throw new Error(`Expected a stable beam, got ${analysis.kind}.`);
+
+    const [N, va, ma, vb, mb] = analysis.result.elementForces;
+    const v1 = -va!;
+    const v2 = vb!;
+    const xStar = (mesh.elements[0]!.L * v1) / (v1 - v2);
+    const mStar = -ma! + v1 * xStar - (10_000 * xStar ** 2) / 2;
+    const endpoint = Math.max(Math.abs(ma!), Math.abs(mb!));
+    const expected = Math.abs(N! / 0.01 + (mStar * 0.1) / 1e-4) / 355e6;
+
+    expect(xStar).toBeCloseTo(4, 12);
+    expect(Math.abs(mStar)).toBeGreaterThan(endpoint * 1.1);
+    expect(analysis.result.utilization.get(1)).toBeCloseTo(expected, 12);
+    expect(analysis.result.utilizationStationM?.get(1)).toBeCloseTo(4, 12);
   });
 });
 
@@ -1024,13 +1104,4 @@ function multiplyMatrixVector(matrix: Float64Array, vector: Float64Array): Float
 function relativeError(actual: number, expected: number): number {
   const scale = Math.max(Math.abs(actual), Math.abs(expected), 1);
   return Math.abs(actual - expected) / scale;
-}
-
-function mulberry32(seed: number): () => number {
-  return () => {
-    let t = (seed += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
-  };
 }

@@ -61,7 +61,7 @@ describe('Phase 4A — 3D traffic moment envelope', () => {
     expect(envelope.get(1)!).toBeGreaterThan(0);
   });
 
-  it('mergeMomentEnvelope is monotonic under repeated calls', () => {
+  it('G30: mergeMomentEnvelope is monotonic under repeated calls', () => {
     const scenario = prepareTraffic3d(clampedClampedBeam(8));
     const a = analyzeTrafficAt3d(scenario, 2).analysis;
     const b = analyzeTrafficAt3d(scenario, 4).analysis;
@@ -75,7 +75,7 @@ describe('Phase 4A — 3D traffic moment envelope', () => {
 });
 
 describe('Phase 4B — 3D influence lines', () => {
-  it('clamped-clamped midspan-M influence peaks at L/8 for a unit load', () => {
+  it('G29: clamped-clamped midspan-M influence peaks at L/8 for a unit load', () => {
     // Load walks along +X in the local xz-plane; response = |My| at midspan.
     // For a clamped-clamped beam under a unit load at midspan, the sagging
     // moment at midspan equals L/8.
