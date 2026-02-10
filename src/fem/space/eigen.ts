@@ -1,5 +1,6 @@
 /**
  * 3D modal / buckling wrappers around the dimension-agnostic eigen kernel.
+ * docs/FEM-SPEC.md §4.5 / §4.9 / §14 3S.
  */
 import { bucklingAssembled, modalAssembled } from '../eigen';
 import type { EigenResult } from '../types';

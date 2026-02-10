@@ -1,4 +1,4 @@
-/** Phase 3 space-frame public surface. */
+/** Phase 3 space-frame public surface. docs/FEM-SPEC.md §4.9 / §14. */
 export {
   kLocal3d,
   kgLocal3d,

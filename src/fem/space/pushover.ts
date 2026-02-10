@@ -1,5 +1,5 @@
 /**
- * Plastic pushover for space-frame meshes.
+ * Plastic pushover for space-frame meshes. docs/FEM-SPEC.md §14 2F / 3W.
  * Hinges form when √(My²+Mz²) reaches M_p = Z·f_y; releases θy+θz.
  */
 import { MATERIALS, plasticMoment } from '../materials';
@@ -34,7 +34,7 @@ type SectionKey = `${number}:${'a' | 'b'}`;
 
 /**
  * Event-to-event plastic pushover under the model's horizontal point-load pattern.
- * Gravity is off for the classic portal gate.
+ * Gravity is off for the classic portal gate. docs/FEM-SPEC.md §14 3W.
  */
 export function runPushover3d(model: EditorModel3d): PushoverResult3d {
   const reference = { ...model, loads: { gravity: false, points: model.loads.points } };

@@ -1,5 +1,6 @@
 /**
  * Tension-only cable iteration for space-frame members.
+ * docs/FEM-SPEC.md §14 2E / 3X.
  */
 import { assembleLoadCase3d, type LoadAssembly3d } from './assemble';
 import { buildMesh3d } from './mesh';
@@ -18,7 +19,7 @@ export interface CableSolveResult3d {
   frozen: boolean;
 }
 
-/** True when any member is marked cableOnly. */
+/** True when any member is marked cableOnly. docs/FEM-SPEC.md §14 3X. */
 export function modelHasCables3d(model: EditorModel3d): boolean {
   return model.members.some((member) => member.cableOnly);
 }
@@ -26,7 +27,7 @@ export function modelHasCables3d(model: EditorModel3d): boolean {
 /**
  * Static solve with iterative slack removal for `cableOnly` members.
  * `loadFactor` scales gravity and point loads together; `options` carries the
- * analysis flags (Timoshenko) through every iteration.
+ * analysis flags (Timoshenko) through every iteration. docs/FEM-SPEC.md §14 3X / 4H.
  */
 export function solveTensionOnly3d(
   model: EditorModel3d,
@@ -226,7 +227,7 @@ function sameSet(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
   return true;
 }
 
-/** Ensure cable members carry bending releases (keep torsion). */
+/** Ensure cable members carry bending releases (keep torsion). docs/FEM-SPEC.md §14 3X. */
 export function normalizeCableMember3d(member: MemberSpec3d): MemberSpec3d {
   if (!member.cableOnly) return member;
   return {

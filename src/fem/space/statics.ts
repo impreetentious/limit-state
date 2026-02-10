@@ -1,5 +1,5 @@
 /**
- * 3D static solve: assemble skyline K → free LDLᵀ → expand.
+ * 3D static solve: assemble skyline K → free LDLᵀ → expand. docs/FEM-SPEC.md §4.3 / §4.9 / §14 3S.
  */
 import {
   factorSkylineLDLT,

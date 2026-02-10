@@ -1,5 +1,6 @@
 /**
  * Vehicle mass lumped onto translational DOFs for 3D traffic.
+ * docs/FEM-SPEC.md §4.1 / §14 2H / 3Y.
  */
 import { assembleM3d } from './assemble';
 import type { AnalysisMesh3d } from './types';
@@ -10,6 +11,7 @@ export { vehicleMassKg } from '../moving-mass';
 
 /**
  * Structure mass + vehicle point masses on ux,uy,uz diagonals, split by ξ.
+ * docs/FEM-SPEC.md §4.1 / §14 3Y.
  */
 export function assembleMassWithVehicle3d(
   mesh: AnalysisMesh3d,

@@ -1,5 +1,5 @@
 /**
- * 12-DOF space-frame element matrices and assembly.
+ * 12-DOF space-frame element matrices and assembly. docs/FEM-SPEC.md §4.9.
  * Local DOF order: [u, v, w, θx, θy, θz] × 2.
  */
 import {

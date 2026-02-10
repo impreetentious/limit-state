@@ -1,6 +1,6 @@
 /**
  * Phase 3 space-frame types. Parallel to the 2D editor model; schema v2
- * migration lands with the 3D editor.
+ * migration lands with the 3D editor. docs/FEM-SPEC.md §4.9 / §14 Phase 3.
  */
 
 export interface NodeSpec3d {

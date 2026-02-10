@@ -1,6 +1,7 @@
 /**
  * 3D influence lines: unit downward (−Z) load swept along the deck polyline,
  * response quantity read per station. Parallel to 2D `fem/influence.ts`.
+ * docs/FEM-SPEC.md §14 4B.
  */
 import { assembleLoadCase3d } from './assemble';
 import {

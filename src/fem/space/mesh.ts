@@ -1,6 +1,7 @@
 /**
  * EditorModel3d → AnalysisMesh3d. Same meshing policy as 2D (§4.4): two
  * analysis elements per frame member; both-ends-released stays one bar.
+ * docs/FEM-SPEC.md §4.4 / §4.9.
  */
 import { MATERIALS, sectionProps } from '../materials';
 import { memberTriad } from './assemble';

@@ -1,5 +1,6 @@
 /**
  * 3D failure taxonomy, ramp capacity, and quasi-static collapse cascade.
+ * docs/FEM-SPEC.md §4.7 / §14 3V.
  */
 import { assembleLoadCase3d } from './assemble';
 import { modelHasCables3d, scaleLoadAssembly3d, solveTensionOnly3d } from './cables';
@@ -11,6 +12,7 @@ import type { CascadeResult, FailureReport } from '../types';
 
 /**
  * Evaluate static failure classes at one proportional load factor.
+ * docs/FEM-SPEC.md §4.5 / §4.7 / §14 3V.
  */
 export function evaluateFailure3d(model: EditorModel3d, loadFactor: number): FailureReport {
   if (!(loadFactor > 0) || !Number.isFinite(loadFactor))
@@ -73,7 +75,7 @@ export function evaluateFailure3d(model: EditorModel3d, loadFactor: number): Fai
 
 /**
  * Deterministic quasi-static collapse cascade for space frames.
- * Hinge insertion releases θy+θz at the governing end.
+ * Hinge insertion releases θy+θz at the governing end. docs/FEM-SPEC.md §4.7 / §14 3V.
  */
 export function collapseCascade3d(model: EditorModel3d, loadFactor = 1): CascadeResult {
   if (!(loadFactor > 0) || !Number.isFinite(loadFactor))
@@ -131,7 +133,7 @@ export function collapseCascade3d(model: EditorModel3d, loadFactor = 1): Cascade
   return { steps, outcome: 'stable' };
 }
 
-/** Solve the base load case at a proportional ramp factor. */
+/** Solve the base load case at a proportional ramp factor. docs/FEM-SPEC.md §4.7 / §14 3V. */
 export function analyzeAtFactor3d(model: EditorModel3d, factor: number): StaticAnalysis3d {
   if (!(factor > 0) || !Number.isFinite(factor))
     return { kind: 'invalid', message: 'Ramp factor must be finite and positive.' };
@@ -185,7 +187,7 @@ function governingYield3d(analysis: Extract<StaticAnalysis3d, { kind: 'stable' }
   return { memberId, utilization };
 }
 
-/** Per-member Euler |N| / (π² E I_min / L²). */
+/** Per-member Euler |N| / (π² E I_min / L²). docs/FEM-SPEC.md §4.5 / §4.7 / §14 3V. */
 function governingMemberBuckling3d(
   mesh: AnalysisMesh3d,
   forces: Float64Array,

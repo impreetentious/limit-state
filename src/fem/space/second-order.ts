@@ -1,6 +1,7 @@
 /**
  * 3D P-Δ (geometric) second-order statics: iterate K + K_g(N) → re-solve →
  * update N until ‖ΔN‖/‖N‖ < 1e−6. Parallels §14 2B on space-frame meshes.
+ * docs/FEM-SPEC.md §14 4E.
  */
 import { expandFreeVector, factorLDLT, freeMatrix, freeVector, solveFactored } from '../solve';
 import {
@@ -32,6 +33,7 @@ export type SecondOrderAnalysis3d =
 
 /**
  * Iterative geometric-nonlinear static solve on a 3D model.
+ * docs/FEM-SPEC.md §14 4E.
  */
 export function solveSecondOrderStatic3d(
   model: EditorModel3d,

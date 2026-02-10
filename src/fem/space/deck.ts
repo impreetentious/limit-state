@@ -1,6 +1,6 @@
 /**
  * Contiguous 3D deck-path geometry for traffic sweeps.
- * The traffic path is a 3D polyline.
+ * docs/FEM-SPEC.md §14 Phase 3 Stories — "traffic path is a 3D polyline".
  */
 import type { AnalysisMesh3d, EditorModel3d } from './types';
 
