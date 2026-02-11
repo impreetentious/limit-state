@@ -1,4 +1,4 @@
-/** Authored schema-v1 scenes for the editor menu. */
+/** Authored schema-v1 scenes for the editor menu. docs/FEM-SPEC.md §7. */
 import type { EditorModel, MemberSpec, SectionSpec } from '../fem/types';
 
 export interface PresetScene {

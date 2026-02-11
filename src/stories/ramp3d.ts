@@ -1,5 +1,5 @@
 /**
- * Load-ramp orchestration for 3D space frames.
+ * Load-ramp orchestration for 3D space frames. docs/FEM-SPEC.md §4.7 / §14 3V.
  */
 import { analyzeAtFactor3d, collapseCascade3d, evaluateFailure3d } from '../fem/space/failure';
 import type { StaticAnalysis3d } from '../fem/space/statics';
@@ -13,7 +13,7 @@ export interface RampFrame3d {
   cascade?: CascadeResult;
 }
 
-/** Exact first-limit capacity under proportional static loading. */
+/** Exact first-limit capacity under proportional static loading. docs/FEM-SPEC.md §4.7 / §14 3V. */
 export function rampCapacity3d(model: EditorModel3d): number | undefined {
   try {
     const report = evaluateFailure3d(model, 1);
@@ -26,7 +26,7 @@ export function rampCapacity3d(model: EditorModel3d): number | undefined {
   }
 }
 
-/** Analyze, classify, and optionally build the cascade. */
+/** Analyze, classify, and optionally build the cascade. docs/FEM-SPEC.md §4.7 / §14 3V. */
 export function analyzeRamp3d(
   model: EditorModel3d,
   factor: number,

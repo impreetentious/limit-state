@@ -1,5 +1,6 @@
 /**
  * 3D earthquake story: base excitation −M·ι·ü_g with horizontal ι (X by default).
+ * docs/FEM-SPEC.md §14 2C / 3W.
  */
 import {
   baseExcitationLoad,
@@ -76,7 +77,7 @@ export function prepareEarthquake3d(model: EditorModel3d): EarthquakeScenario3d 
   }
 }
 
-/** ι with unity on global-X translational DOFs. */
+/** ι with unity on global-X translational DOFs. docs/FEM-SPEC.md §14 2C / 3W. */
 export function influenceVectorHorizontal3d(mesh: AnalysisMesh3d, axis: 0 | 1 = 0): Float64Array {
   const iota = new Float64Array(mesh.ndof);
   for (let node = 0; mesh.ndof > node * 6; node++) iota[6 * node + axis] = 1;

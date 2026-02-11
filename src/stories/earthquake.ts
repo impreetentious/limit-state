@@ -1,6 +1,7 @@
 /**
  * Earthquake-story controller: horizontal base excitation −M·ι·ü_g(t) on top of
  * the static gravity/point-load equilibrium. Parallels the wind story.
+ * docs/FEM-SPEC.md §14 2C.
  */
 import { assembleM } from '../fem/assemble';
 import {
@@ -32,7 +33,7 @@ export interface EarthquakeScenario {
   duration: number;
 }
 
-/** Prepare mesh, mass, influence vector, and spectrum for one earthquake run. */
+/** Prepare mesh, mass, influence vector, and spectrum for one earthquake run. docs/FEM-SPEC.md §14 2C. */
 export function prepareEarthquake(
   model: EditorModel,
   options: AnalysisOptions = {},
@@ -72,7 +73,7 @@ export function prepareEarthquake(
   }
 }
 
-/** Absolute nodal load at time t: gravity/points + −M·ι·ü_g(t). */
+/** Absolute nodal load at time t: gravity/points + −M·ι·ü_g(t). docs/FEM-SPEC.md §14 2C. */
 export function earthquakeLoadAt(scenario: EarthquakeScenario, time: number): Float64Array {
   const load = new Float64Array(scenario.baseLoad);
   const ug = groundAccelAt(scenario.record, time);
@@ -81,7 +82,7 @@ export function earthquakeLoadAt(scenario: EarthquakeScenario, time: number): Fl
   return load;
 }
 
-/** Zero-velocity Newmark state around static equilibrium. */
+/** Zero-velocity Newmark state around static equilibrium. docs/FEM-SPEC.md §4.6 / §14 2C. */
 export function initialEarthquakeState(
   scenario: EarthquakeScenario,
   modal?: EigenResult,
@@ -101,7 +102,7 @@ export function initialEarthquakeState(
   };
 }
 
-/** Advance one display frame (four 1/240 s Newmark substeps). */
+/** Advance one display frame (four 1/240 s Newmark substeps). docs/FEM-SPEC.md §4.6. */
 export function stepEarthquake(
   scenario: EarthquakeScenario,
   state: NewmarkState,
@@ -119,7 +120,7 @@ export function stepEarthquake(
   return next;
 }
 
-/** Combined-stress utilization under the dynamic displacement. */
+/** Combined-stress utilization under the dynamic displacement. docs/FEM-SPEC.md §4.7. */
 export function earthquakeUtilization(
   scenario: EarthquakeScenario,
   u: Float64Array,

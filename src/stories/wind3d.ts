@@ -1,6 +1,6 @@
 /**
  * 3D wind story — horizontal pressure with a direction dial.
- * Wind gains a direction dial.
+ * docs/FEM-SPEC.md §14 Phase 3 Stories: "wind gains a direction dial".
  *
  * Reuses the dimension-agnostic Newmark integrator (`prepareNewmarkSystemAssembled`
  * / `newmarkStepAssembled`). Tributary length = L · |e × windDir| with a 2c

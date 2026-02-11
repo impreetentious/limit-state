@@ -2,6 +2,7 @@
  * Phase 3 teaching presets — spatial rebuilds of §7 scenes.
  * Slender deck is a twin-girder ladder so modal f₂ is St. Venant torsion
  * (the Tacoma cousin). Warping / aeroelastic flutter remain out of scope.
+ * docs/FEM-SPEC.md §7 / §14 Phase 3 Polish.
  */
 import {
   NO_RELEASES,
@@ -434,6 +435,7 @@ export function blankSpace3d(): EditorModel3d {
 /**
  * Spatial guyed mast — column + four tension-only guys.
  * Honesty: guys are straight chords (no sag/catenary); St. Venant torsion only.
+ * docs/FEM-SPEC.md §14 3X.
  */
 export function guyedMast3d(): EditorModel3d {
   const H = 20;
@@ -498,6 +500,7 @@ export function portalPushover3d(): EditorModel3d {
 /**
  * Simple suspension teaching span — deck + two hanging cables to towers.
  * Geometry is simplified (straight cable chords, no main-cable sag iteration).
+ * docs/FEM-SPEC.md §14 3X.
  */
 export function suspensionSpan3d(): EditorModel3d {
   const L = 40;

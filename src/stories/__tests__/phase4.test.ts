@@ -1,5 +1,6 @@
 /**
  * Phase 4 gates: 3D traffic moment envelope (4A) + 3D influence lines (4B).
+ * docs/FEM-SPEC.md §14 Phase 4.
  */
 import { describe, expect, it } from 'vitest';
 import { NO_RELEASES, type EditorModel3d } from '../../fem/space';
@@ -78,7 +79,7 @@ describe('Phase 4B — 3D influence lines', () => {
   it('G29: clamped-clamped midspan-M influence peaks at L/8 for a unit load', () => {
     // Load walks along +X in the local xz-plane; response = |My| at midspan.
     // For a clamped-clamped beam under a unit load at midspan, the sagging
-    // moment at midspan equals L/8.
+    // moment at midspan equals L/8. docs/FEM-SPEC.md §14 4B.
     const L = 8;
     const line = computeInfluenceLine3d(
       clampedClampedBeam(L),

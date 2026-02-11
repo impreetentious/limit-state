@@ -1,6 +1,6 @@
 /**
  * Quasi-static two-axle traffic on a 3D deck polyline, with optional moving-mass
- * Newmark (2H cousin).
+ * Newmark (2H cousin). docs/FEM-SPEC.md §14 Phase 3 Stories / 3Y.
  */
 import {
   newmarkStepAssembled,
@@ -44,7 +44,7 @@ export interface TrafficFrame3d {
   analysis: StaticAnalysis3d;
   length: number;
   axles: TrafficAxle3d[];
-  /** Present when the frame came from moving-mass Newmark. */
+  /** Present when the frame came from moving-mass Newmark. docs/FEM-SPEC.md §14 3Y. */
   movingMass?: {
     dynamicMaxDisp: number;
     staticMaxDisp: number;
@@ -100,6 +100,7 @@ export function analyzeTrafficAt3d(
 
 /**
  * Seed a moving-mass Newmark state from the quasi-static solution at the current station.
+ * docs/FEM-SPEC.md §14 3Y.
  */
 export function initialMovingMassState3d(
   scenario: TrafficScenario3d,
@@ -121,7 +122,7 @@ export function initialMovingMassState3d(
 }
 
 /**
- * Advance moving-mass traffic with M(t) rebuilt at each axle station.
+ * Advance moving-mass traffic with M(t) rebuilt at each axle station. docs/FEM-SPEC.md §14 3Y.
  */
 export function stepMovingMassTraffic3d(
   scenario: TrafficScenario3d,

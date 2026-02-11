@@ -1,5 +1,6 @@
 /**
  * Phase 3 preset polish — slender deck torsional mode + spatial rebuilds.
+ * docs/FEM-SPEC.md §14 Phase 3 Polish / §7.
  */
 import { describe, expect, it } from 'vitest';
 import { analyzeStaticModel3d, buildMesh3d, modal3d } from '../../fem/space';

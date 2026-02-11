@@ -1,6 +1,7 @@
 /**
  * Load-ramp orchestration for the explainer layer. The calculations remain in
  * the pure FEM kernel; this module selects an exact proportional load state.
+ * docs/FEM-SPEC.md §4.7 and §6.5.
  */
 import { analyzeAtFactor, collapseCascade, evaluateFailure } from '../fem/failure';
 import type { StaticAnalysis } from '../fem/statics';
@@ -13,7 +14,7 @@ export interface RampFrame {
   cascade?: CascadeResult;
 }
 
-/** Exact first-limit capacity under proportional static loading. */
+/** Exact first-limit capacity under proportional static loading. docs/FEM-SPEC.md §4.7. */
 export function rampCapacity(
   model: EditorModel,
   options: AnalysisOptions = {},
@@ -29,7 +30,7 @@ export function rampCapacity(
   }
 }
 
-/** Analyze, classify, and (once failure occurs) build the deterministic cascade. */
+/** Analyze, classify, and (once failure occurs) build the deterministic cascade. docs/FEM-SPEC.md §4.7. */
 export function analyzeRamp(
   model: EditorModel,
   factor: number,

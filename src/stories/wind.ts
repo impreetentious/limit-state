@@ -1,6 +1,7 @@
 /**
  * Deterministic wind-story controller. It builds horizontal tributary loads
  * and advances the verified Newmark kernel at four 1/240 s substeps/frame.
+ * docs/FEM-SPEC.md §4.6 and §6.3.
  */
 import { assembleM } from '../fem/assemble';
 import { newmarkStep, prepareNewmarkSystem, rayleighFit, type NewmarkState } from '../fem/dynamics';
@@ -31,7 +32,7 @@ export interface WindScenario {
   seed: number;
 }
 
-/** Prepare a repeatable uniform wind field, including its static starting state. */
+/** Prepare a repeatable uniform wind field, including its static starting state. docs/FEM-SPEC.md §6.3. */
 export function prepareWind(
   model: EditorModel,
   options: AnalysisOptions = {},
@@ -68,6 +69,7 @@ export function prepareWind(
  * Equivalent nodal wind forces q·L_projected/2 at each element end.
  * This in-plane model treats wind as uniform member-normal pressure: vertical
  * faces receive horizontal force and horizontal faces receive vertical force.
+ * docs/FEM-SPEC.md §6.3.
  */
 export function windLoadAt(scenario: WindScenario, time: number): Float64Array {
   const load = new Float64Array(scenario.baseLoad);
@@ -76,7 +78,7 @@ export function windLoadAt(scenario: WindScenario, time: number): Float64Array {
   return load;
 }
 
-/** Unit-amplitude wind load for an honest measured dynamic-amplification reference. */
+/** Unit-amplitude wind load for an honest measured dynamic-amplification reference. docs/FEM-SPEC.md §4.6 and §6.3. */
 export function windReferenceCoordinates(scenario: WindScenario, modal: EigenResult): Float64Array {
   const loads = {
     F: windIncrementForMultiplier(scenario, 1),
@@ -89,7 +91,7 @@ export function windReferenceCoordinates(scenario: WindScenario, modal: EigenRes
     : new Float64Array(modal.values.length);
 }
 
-/** Dynamic/static ratio for the modal coordinate that currently dominates the response. */
+/** Dynamic/static ratio for the modal coordinate that currently dominates the response. docs/FEM-SPEC.md §4.6. */
 export function measuredDaf(
   coordinates: Float64Array,
   referenceCoordinates: Float64Array,
@@ -131,7 +133,7 @@ function windIncrementForMultiplier(scenario: WindScenario, multiplier: number):
   return load;
 }
 
-/** Build a zero-velocity dynamic state around the already-solved gravity/point-load equilibrium. */
+/** Build a zero-velocity dynamic state around the already-solved gravity/point-load equilibrium. docs/FEM-SPEC.md §4.6. */
 export function initialWindState(
   scenario: WindScenario,
   modal?: EigenResult,
@@ -151,7 +153,7 @@ export function initialWindState(
   };
 }
 
-/** Advance Newmark by a whole display frame (four fixed substeps). */
+/** Advance Newmark by a whole display frame (four fixed substeps). docs/FEM-SPEC.md §4.6. */
 export function stepWind(scenario: WindScenario, state: NewmarkState, substeps = 4): NewmarkState {
   let next = state;
   for (let index = 0; index < substeps; index++)
@@ -159,7 +161,7 @@ export function stepWind(scenario: WindScenario, state: NewmarkState, substeps =
   return next;
 }
 
-/** q_i = φ_iᵀ M u for the mass-normalized modal explainer bars. */
+/** q_i = φ_iᵀ M u for the mass-normalized modal explainer bars. docs/FEM-SPEC.md §4.6. */
 export function modalCoordinates(
   mesh: AnalysisMesh,
   modal: EigenResult,
@@ -179,12 +181,12 @@ export function modalCoordinates(
   return output;
 }
 
-/** Dynamic combined-stress utilization with gravity fixed-end recovery retained. */
+/** Dynamic combined-stress utilization with gravity fixed-end recovery retained. docs/FEM-SPEC.md §4.1 and §4.7. */
 export function windUtilization(scenario: WindScenario, u: Float64Array): Map<number, number> {
   return utilizationAtDisplacement(scenario.mesh, u, scenario.baseFixedEnd);
 }
 
-/** The documented three-part resonance threshold. */
+/** The documented three-part resonance threshold. docs/FEM-SPEC.md §4.6. */
 export function detectResonance(
   forcingHz: number,
   modal: EigenResult | undefined,
