@@ -208,12 +208,12 @@ Each step is a timeline entry: "① Member 7 buckled → ② load redistributed,
 
 ### 4.8 Materials & sections (presets, `materials.ts`)
 
-| Material | E (GPa) | G (GPa) | f_y (MPa) | ρ (kg/m³) |
+| Material                   | E (GPa) | G (GPa)         | f_y (MPa) | ρ (kg/m³) |
 | -------------------------- | ------- | --------------- | --------- | --------- |
-| Steel S355 | 200 | 76.923 (ν=0.3) | 355 | 7850 |
-| Aluminum 6061-T6 | 69 | 25.940 (ν=0.33) | 276 | 2700 |
-| Timber (softwood, ∥ grain) | 11 | 0.688 (≈E/16) | 40 | 500 |
-| Spaghetti (dry) | 3.8 | 1.462 (ν=0.3) | 20 | 1500 |
+| Steel S355                 | 200     | 76.923 (ν=0.3)  | 355       | 7850      |
+| Aluminum 6061-T6           | 69      | 25.940 (ν=0.33) | 276       | 2700      |
+| Timber (softwood, ∥ grain) | 11      | 0.688 (≈E/16)   | 40        | 500       |
+| Spaghetti (dry)            | 3.8     | 1.462 (ν=0.3)   | 20        | 1500      |
 
 Spaghetti is deliberate: the classroom spaghetti-bridge tradition, with honest numbers. Sections: solid rect (b,h), box (b,h,t), I-beam (b,h,t_f,t_w), tube (d,t) — A, I≡I_z, I_y, c, A_s, J derived in code and unit-tested against hand calcs. Default: steel box 200×200×8 mm.
 
@@ -255,6 +255,7 @@ k_y = EI_y / L³ ·
 **Closed forms used by gates:** cantilever tip P along local y → `v = PL³/3EI_z`, `θz = PL²/2EI_z`; along local z → `w = PL³/3EI_y`, `θy = −PL²/2EI_y` (sign from k_y); tip torque T → `θx = TL/GJ`.
 
 ---
+
 ## 5. Data model & sharing
 
 `fem/types.ts` is the single source of truth (already scaffolded). Serialization schema v1 (JSON):
@@ -286,6 +287,7 @@ k_y = EI_y / L³ ·
 URL sharing: `#m=<base64url(deflate-raw(json))>` via `CompressionStream('deflate-raw')`; fallback to uncompressed base64url with prefix `#mu=` where CompressionStream is unavailable. Round-trip property test required (§9). IDs are stable ints; never reindex on delete.
 
 ---
+
 ## 6. UI spec
 
 ### 6.1 Layout
@@ -326,99 +328,153 @@ Banner (one line): mechanism class + governing element + the two numbers that de
 
 IBM Plex Sans (UI) + IBM Plex Mono (numbers). Paper `#f4f1ea`, ink `#1a1d21`, blueprint accent `#2456a4`, stress ramp `#2456a4 → paper → #c0392b`. Dark mode: not in v1 (cut: one aesthetic done well). Empty state: faint ghost of a hand-sketched truss with "draw a member to begin."
 
+### 6.8 A/S/M diagram ordinates
+
+> **Provenance.** This section is reconstructed from the implementation and its tests, not recovered
+> from an earlier draft. The contract below was written from what
+> `src/canvas/diagram-samples.ts` and `src/canvas/__tests__/diagram-samples.test.ts` actually
+> enforce, plus the acceptance criteria those tests name but do not yet pass. It is placed in §6
+> because the diagrams are a results-display surface, not a preset. Treat the numbered requirements
+> as authoritative; treat the provenance note as a standing invitation to correct them if an
+> original ruling turns up.
+
+The axial, shear, and moment diagrams are pedagogy, not decoration. Their job is to make the shape
+of the internal actions legible, so the contract is about shape, not only about extremes.
+
+**Sampling.** Ordinates are sampled at `DIAGRAM_STATIONS = 12` interior stations per mesh element,
+ordered from each member's A node to its B node, with the shared station at an element joint emitted
+once so the polyline does not double back. Sampling is pure and lives outside the canvas; the
+drawing code only maps model-space ordinates through `toScreen`.
+
+**Per-diagram shape.**
+
+- **Axial** is constant within an element — for the axial diagram a block _is_ the correct shape.
+- **Shear** varies linearly across an element between its end values.
+- **Moment** uses Hermite recovery: end moments interpolated linearly, plus the parabolic term the
+  transverse load contributes in span.
+
+**Scaling.** A single maximum, shared across all three diagrams and floored at 1, so ordinates stay
+comparable and a zero-action model cannot divide by zero.
+
+**Acceptance criteria (G37).** For the gravity-loaded `simple-beam` preset:
+
+1. the moment diagram is a sagging parabola whose peak is at midspan (within one station), and
+2. the moment at each simply supported end is essentially zero (< 2 % of the peak), and
+3. the shear diagram is linear and changes sign at midspan.
+
+**Open gap — GAP-10, criteria 1–3 are NOT met today.** The interior-station sampling landed and is
+gated; the sign convention is wrong, so the three criteria above are encoded as `it.skip` in
+`src/canvas/__tests__/diagram-samples.test.ts` rather than as passing gates. The cause is not in the
+canvas: `recoverElementForces` (`src/fem/statics.ts`) publishes raw element _nodal_ forces — those
+the nodes apply to the element — as if they were internal-action ordinates. The internal-action
+convention negates the B-end shear and the A-end moment (`V(0)=Fy1`, `V(L)=−Fy2`, `M(0)=−M1`,
+`M(L)=+M2`). Read raw, the gravity-loaded simple beam reports `|M| = wL²/24` at both pinned
+supports, where a simply supported end moment must be exactly zero.
+
+Settling that convention is a kernel decision, not a canvas change: the same recovery is read by
+`influence.ts`, `pushover.ts`, `second-order.ts`, and the utilization path, each with its own gates.
+It is recorded here as an open, diagnosed gap so the diagrams are not read as verified. **What
+ships today is honest about being unverified in sign; it must not be described as a validated
+bending-moment diagram until G37 passes.**
+
 ---
+
 ## 7. Presets
 
-| # | Name | Teaches | Notes |
+| #   | Name                       | Teaches                 | Notes                                                                                                                                                                        |
 | --- | -------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 | Simple beam | diagrams, deflection | 8 m, UDL + traffic |
-| 2 | Pratt truss (24 m) | axial flow, efficiency | releases on, deck on bottom chord |
-| 3 | Two-span cantilever bridge | negative moment, hinges | Forth-style balance |
-| 4 | Radio mast (30 m) | buckling, slenderness | ramp story default |
-| 5 | Slender deck (60 m) | resonance | tuned so f₁ ≈ 0.3–0.5 Hz, wind story default, in-app note: _real Tacoma Narrows failed in torsional aeroelastic flutter — a 3D phenomenon; this shows its 2D bending cousin_ |
-| 6 | Blank grid | — | default landing state |
+| 1   | Simple beam                | diagrams, deflection    | 8 m, UDL + traffic                                                                                                                                                           |
+| 2   | Pratt truss (24 m)         | axial flow, efficiency  | releases on, deck on bottom chord                                                                                                                                            |
+| 3   | Two-span cantilever bridge | negative moment, hinges | Forth-style balance                                                                                                                                                          |
+| 4   | Radio mast (30 m)          | buckling, slenderness   | ramp story default                                                                                                                                                           |
+| 5   | Slender deck (60 m)        | resonance               | tuned so f₁ ≈ 0.3–0.5 Hz, wind story default, in-app note: _real Tacoma Narrows failed in torsional aeroelastic flutter — a 3D phenomenon; this shows its 2D bending cousin_ |
+| 6   | Blank grid                 | —                       | default landing state                                                                                                                                                        |
 
 Preset files are data (`presets/*.ts` exporting schema-v1 objects with authored coordinates). Tune member sizes so each preset's default story produces its teaching moment within ~20 s of play.
 
 ---
+
 ## 8. Worker protocol
 
 `eigen.worker.ts`: request `{ id, kind: 'modal'|'buckling', mesh: TransferableMesh, nRef?: Float64Array }` → response `{ id, values: Float64Array, vectors: Float64Array, iterations }`. Transferables for all big arrays. Main thread keeps a single in-flight request per kind; stale responses (id mismatch) dropped. Statics/Newmark stay on main thread — they're sub-millisecond back-substitutions and moving them would add latency, not remove it.
 
 ---
+
 ## 9. Test plan (the honesty gates)
 
 All in `fem/__tests__/`, Vitest, node environment. These exact tolerances were measured during planning; regressions are bugs, not "numerical noise."
 
-| Gate | Setup | Expect | Tol |
+| Gate                       | Setup                                                       | Expect                                                                | Tol                                |
 | -------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------- |
-| G1 tip deflection | cantilever, 1 elem, tip P | PL³/3EI and θ = PL²/2EI | 1e−10 rel |
-| G2 SS midspan UDL | 2 subdivisions, consistent FEF | 5wL⁴/384EI at mid-node | 1e−10 rel (nodal exactness of E-B) |
-| G3 Euler buckling | pinned column, 2 elem | π²EI/L² | +0.8% (measured +0.75%) |
-| G3b Euler buckling | 4 elem | π²EI/L² | +0.1% (measured +0.051%) |
-| G4 SS beam ω₁ | 2 elem, consistent mass | π²√(EI/ρAL⁴) | +0.5% (measured +0.39%) |
-| G5 K symmetry & Betti | random frames (seeded) | Kᵀ = K; δ_ab = δ_ba | 1e−9 |
-| G6 mechanism detect | unsupported / underbraced models | flagged, correct node | exact |
-| G7 releases | truss vs frame same geometry | truss members carry M ≈ 0 | 1e−8 |
-| G8 Newmark SDOF | ζ = 2%, r = 1, 50 cycles | steady amp = static × 1/(2ζ) | 2% |
-| G9 Rayleigh fit | ζ at ω₁, ω₂ | modal ζ₁ = ζ₂ = target | 1e−6 |
-| G10 sections | each section kind | A, I vs hand calc | 1e−12 |
-| G11 share round-trip | property: random models | decode(encode(m)) = m | exact |
-| G12 cascade golden | preset 4 overload | exact step sequence | frozen fixture |
-| G13 load positioning | P at ξ sweep | reactions sum to P; continuity at nodes | 1e−10 |
-| G14 Timoshenko tip | cantilever, shearFlexible, tip P | PL³/3EI + PL/(G A_s) | 1e−9 rel |
-| G15 P-Δ amplification | beam-column, tip H + axial P | moment amp ≈ tan(μ)/μ ≈ 1/(1−P/P_cr) | 2% |
-| G16 earthquake spectrum | SDOF Sa peak vs Newmark SDOF | peak Sa match | 2% |
-| G17 influence midspan M | SS beam, unit-load deck sweep | piecewise-linear η peak L/4 | exact |
-| G18 tension-only cables | guyed mast, tip lateral load | load-side guy slack, restraint taut | golden |
-| G19 plastic pushover | fixed portal, eaves H | collapse H vs 4M_p/h | 3% |
-| G20 challenges + gallery | 4 budget challenges + curated hashes | starter fail / solution pass; gallery.json `#mu=` round-trip | exact |
-| G21 moving-mass traffic | SS beam, parked vehicle + lumped M | mass conserved; Newmark settles to quasi-static midspan | 2% |
-| G22 3D cantilever tip | 1 space-frame elem; tip P_y, P_z, T_x | PL³/3EI + TL/GJ closed forms | 1e−10 rel |
-| G23 2D↔3D regression | G1 cantilever as 3D XY-plane model, out-of-plane DOFs fixed | tip matches 2D analyzeStaticModel | 1e−9 rel |
-| G24 space corner frame | two orthogonal members, tip load off both axes | reactions ∑F = P; K symmetric; energy W=U | 1e−9 |
-| G25 3D Euler buckling | pinned column, 2 space-frame elems, 2D DOF pattern embedded | π²EI/L² (matches G3) | +0.8% |
-| G26 3D modal | SS beam 2 elems (embed + biaxial Iy≠Iz) | ω₁ ≈ π²√(EI/ρAL⁴); biaxial ∝ √I | +0.5% |
-| G27 spatial buckling | pinned column along Z, both bending planes free, G=1 | λ_cr = π² E I_min / L² | +0.8% |
-| G28 schema v2 migrate | golden v1 URL + migrateV1toV2 | v1 decode identical; v2 round-trip; z=0 planar | exact |
-| G29 3D influence midspan M | clamped-clamped deck, unit-load station sweep | η peak = L/8 at midspan | 1e−6 rel |
-| G30 3D traffic envelope | deck station sweep, two-axle | monotonic under repeated merges; ≥ single-station \|M\| | exact |
-| G31 3D wind DAF | synthetic modal coords driven at f₁ | measured DAF = 1/(2ζ); resonance fires only inside ±10% / 1.5× / ζ<5% | 2% |
-| G32 3D Timoshenko tip | stubby cantilever (L/h = 3), shearFlexible, tip P | PL³/3EI_y + PL/(G A_s) | 1e−6 rel |
-| G33 3D P-Δ amplification | space beam-column, tip H + axial P = 0.25 P_cr | M amp ≈ tan(μ)/μ ≈ 1/(1−P/P_cr); linear recovery at P=0 | 2% |
-| G34 3D live cable slack | guyed mast through `analyzeStaticModel3d` | load-side guy slack, restraint guy taut | golden |
-| G35 3D gallery round-trip | curated v2 `#mu=` hashes in gallery.json | `decodeModel3d` matches authored source; hash < 32 kB | exact |
-| G36 3D editor history | undo/redo + `MEMBER_HARD_LIMIT_3D` | counts restored; adds past the cap rejected; load/reset clear history | exact |
+| G1 tip deflection          | cantilever, 1 elem, tip P                                   | PL³/3EI and θ = PL²/2EI                                               | 1e−10 rel                          |
+| G2 SS midspan UDL          | 2 subdivisions, consistent FEF                              | 5wL⁴/384EI at mid-node                                                | 1e−10 rel (nodal exactness of E-B) |
+| G3 Euler buckling          | pinned column, 2 elem                                       | π²EI/L²                                                               | +0.8% (measured +0.75%)            |
+| G3b Euler buckling         | 4 elem                                                      | π²EI/L²                                                               | +0.1% (measured +0.051%)           |
+| G4 SS beam ω₁              | 2 elem, consistent mass                                     | π²√(EI/ρAL⁴)                                                          | +0.5% (measured +0.39%)            |
+| G5 K symmetry & Betti      | random frames (seeded)                                      | Kᵀ = K; δ_ab = δ_ba                                                   | 1e−9                               |
+| G6 mechanism detect        | unsupported / underbraced models                            | flagged, correct node                                                 | exact                              |
+| G7 releases                | truss vs frame same geometry                                | truss members carry M ≈ 0                                             | 1e−8                               |
+| G8 Newmark SDOF            | ζ = 2%, r = 1, 50 cycles                                    | steady amp = static × 1/(2ζ)                                          | 2%                                 |
+| G9 Rayleigh fit            | ζ at ω₁, ω₂                                                 | modal ζ₁ = ζ₂ = target                                                | 1e−6                               |
+| G10 sections               | each section kind                                           | A, I vs hand calc                                                     | 1e−12                              |
+| G11 share round-trip       | property: random models                                     | decode(encode(m)) = m                                                 | exact                              |
+| G12 cascade golden         | preset 4 overload                                           | exact step sequence                                                   | frozen fixture                     |
+| G13 load positioning       | P at ξ sweep                                                | reactions sum to P; continuity at nodes                               | 1e−10                              |
+| G14 Timoshenko tip         | cantilever, shearFlexible, tip P                            | PL³/3EI + PL/(G A_s)                                                  | 1e−9 rel                           |
+| G15 P-Δ amplification      | beam-column, tip H + axial P                                | moment amp ≈ tan(μ)/μ ≈ 1/(1−P/P_cr)                                  | 2%                                 |
+| G16 earthquake spectrum    | SDOF Sa peak vs Newmark SDOF                                | peak Sa match                                                         | 2%                                 |
+| G17 influence midspan M    | SS beam, unit-load deck sweep                               | piecewise-linear η peak L/4                                           | exact                              |
+| G18 tension-only cables    | guyed mast, tip lateral load                                | load-side guy slack, restraint taut                                   | golden                             |
+| G19 plastic pushover       | fixed portal, eaves H                                       | collapse H vs 4M_p/h                                                  | 3%                                 |
+| G20 challenges + gallery   | 4 budget challenges + curated hashes                        | starter fail / solution pass; gallery.json `#mu=` round-trip          | exact                              |
+| G21 moving-mass traffic    | SS beam, parked vehicle + lumped M                          | mass conserved; Newmark settles to quasi-static midspan               | 2%                                 |
+| G22 3D cantilever tip      | 1 space-frame elem; tip P_y, P_z, T_x                       | PL³/3EI + TL/GJ closed forms                                          | 1e−10 rel                          |
+| G23 2D↔3D regression       | G1 cantilever as 3D XY-plane model, out-of-plane DOFs fixed | tip matches 2D analyzeStaticModel                                     | 1e−9 rel                           |
+| G24 space corner frame     | two orthogonal members, tip load off both axes              | reactions ∑F = P; K symmetric; energy W=U                             | 1e−9                               |
+| G25 3D Euler buckling      | pinned column, 2 space-frame elems, 2D DOF pattern embedded | π²EI/L² (matches G3)                                                  | +0.8%                              |
+| G26 3D modal               | SS beam 2 elems (embed + biaxial Iy≠Iz)                     | ω₁ ≈ π²√(EI/ρAL⁴); biaxial ∝ √I                                       | +0.5%                              |
+| G27 spatial buckling       | pinned column along Z, both bending planes free, G=1        | λ_cr = π² E I_min / L²                                                | +0.8%                              |
+| G28 schema v2 migrate      | golden v1 URL + migrateV1toV2                               | v1 decode identical; v2 round-trip; z=0 planar                        | exact                              |
+| G29 3D influence midspan M | clamped-clamped deck, unit-load station sweep               | η peak = L/8 at midspan                                               | 1e−6 rel                           |
+| G30 3D traffic envelope    | deck station sweep, two-axle                                | monotonic under repeated merges; ≥ single-station \|M\|               | exact                              |
+| G31 3D wind DAF            | synthetic modal coords driven at f₁                         | measured DAF = 1/(2ζ); resonance fires only inside ±10% / 1.5× / ζ<5% | 2%                                 |
+| G32 3D Timoshenko tip      | stubby cantilever (L/h = 3), shearFlexible, tip P           | PL³/3EI_y + PL/(G A_s)                                                | 1e−6 rel                           |
+| G33 3D P-Δ amplification   | space beam-column, tip H + axial P = 0.25 P_cr              | M amp ≈ tan(μ)/μ ≈ 1/(1−P/P_cr); linear recovery at P=0               | 2%                                 |
+| G34 3D live cable slack    | guyed mast through `analyzeStaticModel3d`                   | load-side guy slack, restraint guy taut                               | golden                             |
+| G35 3D gallery round-trip  | curated v2 `#mu=` hashes in gallery.json                    | `decodeModel3d` matches authored source; hash < 32 kB                 | exact                              |
+| G36 3D editor history      | undo/redo + `MEMBER_HARD_LIMIT_3D`                          | counts restored; adds past the cap rejected; load/reset clear history | exact                              |
 
-**G29 supersedes the planned 4B criterion.** Phase 4B was specced as a simply-supported spatial beam with an `L/4` influence peak. A single-element pinned-pinned space frame is singular about its own axis, so the shipped gate uses a clamped-clamped deck and its exact `L/8` midspan peak instead. The planar `L/4` case stays covered by G17 in 2D. Accepted by the owner, 2026-01-29.
+**G29 supersedes the planned 4B criterion.** Phase 4B was specced as a simply-supported spatial beam with an `L/4` influence peak. A single-element pinned-pinned space frame is singular about its own axis, so the shipped gate uses a clamped-clamped deck and its exact `L/8` midspan peak instead. The planar `L/4` case stays covered by G17 in 2D. Accepted by the owner (date not recorded — the original stamp named a date that had not yet occurred).
 
-Gates G1–G36 are real Vitest checks (not `it.todo`) and must stay green. CI runs version coherence, typecheck, lint, a read-only format check, build, the bundle budget, a Playwright static-export smoke, and tests on pushes to `main` and pull requests; deploy only from green `main`. The GitLab pipeline mirrors the non-browser check steps and also runs version coherence before deploy, but is dormant until a GitLab remote exists. Phase 3 PRs must keep every prior 2D gate green.
+Gates G1–G36 are real Vitest checks (not `it.todo`) and must stay green. CI runs version coherence, typecheck, lint, a read-only format check, build, the bundle budget, a Playwright static-export smoke, and tests on pushes to `main` and pull requests; deploy only from green `main`. The GitLab pipeline mirrors the non-browser check steps and also runs version coherence before deploy; the GitLab project and remote exist and are in sync with `origin`, so it is live rather than dormant. Phase 3 PRs must keep every prior 2D gate green.
 
 ---
+
 ## 12. Decision log
 
-| Decision | Alternatives | Why |
+| Decision                                                    | Alternatives                         | Why                                                                                                                                                                                                                                                                                                                |
 | ----------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2D plane frames first | 3D immediately | 3D triples UI + solver surface, adds torsion/LTB, and would have killed the Phase 1 timeline. The 2D core carries the initial pedagogy; 3D is the marquee Phase 3 continuation of v1. |
-| Euler–Bernoulli default; Timoshenko optional (2A) | Timoshenko-only | shear deformation < 2% for slender members that dominate bridges/towers; E-B keeps matrices textbook-clean as the default. Timoshenko is an analysis toggle with φ = 12EI/(G A_s L²) and gate G14. |
-| "Tacoma-style" honesty | pretend 2D flutter | true Tacoma = torsional aeroelastic flutter, impossible in-plane; we ship honest bending resonance + an in-app note. Faking it would break the product's one promise. |
-| Auto-mesh ×2 hidden | user meshing | measured 0.75%/0.39% errors invisible at UI precision; meshing UI is expert noise |
-| Dense LDLᵀ (2D + early 3D) | sparse/skyline | Teaching sizes; dense typed-array factor < 5 ms at n ≲ 300 free DOF |
-| Skyline + RCM free factor (3S) | keep dense only | Dense ~587 ms @ ~1.5k free DOF; skyline+RCM ~23 ms — closes §3 budget for editor lattices |
-| Subspace iteration | full Jacobi on K | Jacobi is O(n³) on the full matrix — fine at 300 DOF, not 1200; subspace reuses the LDLᵀ solve we already have |
-| Quasi-static traffic | moving-mass dynamics | envelope + smooth sweep deliver the pedagogy; Phase 2H adds optional moving-mass Newmark (lumped vehicle M) as the honest ~10–30% amplification cousin |
-| Added: collapse cascade | stop at first failure | redistribution → progressive collapse is the single most instructive thing a sandbox can show, and quasi-static re-solve makes it cheap and true |
-| Added: capacity/weight readout | gamified scoring | one true number beats stars; makes shared URLs competitive without a backend |
-| Added: honesty badges (deformation ×N, quasi-static labels) | silent exaggeration | they cost nothing and are the brand |
-| Cut: earthquake story (superseded by §14 2C) | — | Was deferred in Phase 1; now shipped as Phase 2C with base excitation −M·ι·ü_g and Sa spectrum |
-| Cut: tension-only cables (superseded by §14 2E) | — | Was deferred in Phase 1; now shipped as Phase 2E with slack iteration + guyed-mast preset |
-| No runtime numerics deps | math.js et al. | auditability + portfolio signal; hand-rolled kernel is the point |
-| Next.js static export | Vite | owner's platform choice for long-term consistency across projects. Static export preserves the no-backend contract. Accepted costs: `BASE_PATH` must be set per host (no relative-base mode) and framework weight for a client-only app. Kernel + tests are bundler-agnostic, so the switch touched only the shell |
-| Dual CI (GitHub + GitLab) | pick one | keeps the option of migrating primary hosting; both pipelines are thin mirrors of the same commands, so drift risk is low. Only the GitHub pipeline is live — no GitLab remote exists yet |
-| three.js for Phase 3 WebGL | stay on Canvas2D; Babylon; raw WebGL | First new runtime dep since v1. Orbit/pan + extruded LOD need a scene graph; three is the smallest mature fit. Kernel stays dep-free. Added with the Phase 3 rendering slice. |
-| Playwright (devDep) for README stills (3Z) | manual OS screenshots; Puppeteer | Deterministic Build/Test 2D+3D captures via `scripts/capture-screenshots.mjs` against `out/`. Dev-only — not a runtime dep. |
+| 2D plane frames first                                       | 3D immediately                       | 3D triples UI + solver surface, adds torsion/LTB, and would have killed the Phase 1 timeline. The 2D core carries the initial pedagogy; 3D is the marquee Phase 3 continuation of v1.                                                                                                                              |
+| Euler–Bernoulli default; Timoshenko optional (2A)           | Timoshenko-only                      | shear deformation < 2% for slender members that dominate bridges/towers; E-B keeps matrices textbook-clean as the default. Timoshenko is an analysis toggle with φ = 12EI/(G A_s L²) and gate G14.                                                                                                                 |
+| "Tacoma-style" honesty                                      | pretend 2D flutter                   | true Tacoma = torsional aeroelastic flutter, impossible in-plane; we ship honest bending resonance + an in-app note. Faking it would break the product's one promise.                                                                                                                                              |
+| Auto-mesh ×2 hidden                                         | user meshing                         | measured 0.75%/0.39% errors invisible at UI precision; meshing UI is expert noise                                                                                                                                                                                                                                  |
+| Dense LDLᵀ (2D + early 3D)                                  | sparse/skyline                       | Teaching sizes; dense typed-array factor < 5 ms at n ≲ 300 free DOF                                                                                                                                                                                                                                                |
+| Skyline + RCM free factor (3S)                              | keep dense only                      | Dense ~587 ms @ ~1.5k free DOF; skyline+RCM ~23 ms — closes §3 budget for editor lattices                                                                                                                                                                                                                          |
+| Subspace iteration                                          | full Jacobi on K                     | Jacobi is O(n³) on the full matrix — fine at 300 DOF, not 1200; subspace reuses the LDLᵀ solve we already have                                                                                                                                                                                                     |
+| Quasi-static traffic                                        | moving-mass dynamics                 | envelope + smooth sweep deliver the pedagogy; Phase 2H adds optional moving-mass Newmark (lumped vehicle M) as the honest ~10–30% amplification cousin                                                                                                                                                             |
+| Added: collapse cascade                                     | stop at first failure                | redistribution → progressive collapse is the single most instructive thing a sandbox can show, and quasi-static re-solve makes it cheap and true                                                                                                                                                                   |
+| Added: capacity/weight readout                              | gamified scoring                     | one true number beats stars; makes shared URLs competitive without a backend                                                                                                                                                                                                                                       |
+| Added: honesty badges (deformation ×N, quasi-static labels) | silent exaggeration                  | they cost nothing and are the brand                                                                                                                                                                                                                                                                                |
+| Cut: earthquake story (superseded by §14 2C)                | —                                    | Was deferred in Phase 1; now shipped as Phase 2C with base excitation −M·ι·ü_g and Sa spectrum                                                                                                                                                                                                                     |
+| Cut: tension-only cables (superseded by §14 2E)             | —                                    | Was deferred in Phase 1; now shipped as Phase 2E with slack iteration + guyed-mast preset                                                                                                                                                                                                                          |
+| No runtime numerics deps                                    | math.js et al.                       | auditability + portfolio signal; hand-rolled kernel is the point                                                                                                                                                                                                                                                   |
+| Next.js static export                                       | Vite                                 | owner's platform choice for long-term consistency across projects. Static export preserves the no-backend contract. Accepted costs: `BASE_PATH` must be set per host (no relative-base mode) and framework weight for a client-only app. Kernel + tests are bundler-agnostic, so the switch touched only the shell |
+| Dual CI (GitHub + GitLab)                                   | pick one                             | keeps the option of migrating primary hosting; both pipelines are thin mirrors of the same commands, so drift risk is low. Only the GitHub pipeline is live — no GitLab remote exists yet                                                                                                                          |
+| three.js for Phase 3 WebGL                                  | stay on Canvas2D; Babylon; raw WebGL | First new runtime dep since v1. Orbit/pan + extruded LOD need a scene graph; three is the smallest mature fit. Kernel stays dep-free. Added with the Phase 3 rendering slice.                                                                                                                                      |
+| Playwright (devDep) for README stills (3Z)                  | manual OS screenshots; Puppeteer     | Deterministic Build/Test 2D+3D captures via `scripts/capture-screenshots.mjs` against `out/`. Dev-only — not a runtime dep.                                                                                                                                                                                        |
 
 ---
+
 ## 13. Appendix
 
 **A. Worked constants for gates.** With E=1, A=1, I=1, L=1, ρ=1: G1 v=1/3, θ=1/2 · G3 expects 9.9438 (2 elem) vs π²=9.8696 · G4 expects ω₁=9.9086 (2 elem) vs 9.8696. (Measured values — use them to verify the harness itself.)
@@ -435,18 +491,20 @@ The numbered requirement ids below are cited from source comments. Each row stat
 feature must do; all of them are implemented.
 
 ### Depth requirements (2A–2H)
-| # | Feature | Spec |
-| --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2A | Timoshenko option | Shear-flexible element via φ = 12EI/(G·A_s·L²): the §4.1 bending block gains standard (1+φ) denominators; per-material G, per-section shear area A_s (κ presets: rect 5/6, I-web-only, tube 0.5). Analysis toggle + "when it matters" in-app note (L/h < 10). Gate: cantilever tip = PL³/3EI + PL/(G A_s) vs closed form, 1e−9. |
-| 2B | P-Δ second-order statics | Iterate K + K_g(N) → re-solve → update N until ‖ΔN‖ < 1e−6 rel (2–4 iterations typical; divergence ⇒ report as buckling-adjacent instability). Show amplification vs linear side by side. Gate: beam-column moment amplification ≈ 1/(1−P/P_cr) within 2%. |
-| 2C | Earthquake story | Base excitation: effective load −M·ι·ü_g(t) (ι = influence vector, x-direction unity); 2–3 synthetic records + scaled classic record; response-spectrum panel (SDOF sweep 0.1–10 Hz, the record's teeth made visible); story copy parallels wind. Gate: SDOF spectrum peak matches Newmark SDOF run, 2%. |
-| 2D | Influence lines | First-class view: unit-load sweep along deck per response quantity (reaction, member N, section M); envelope integration with traffic story. Gate: SS beam midspan-moment influence line = piecewise-linear peak L/4, exact. |
-| 2E | Tension-only cables | Member flag `cableOnly`: iterative slack removal (deactivate compression members, re-solve, reactivate if tension returns; oscillation guard: freeze after 10 iterations, report). Unlocks guyed-mast; 3D suspension teaching preset is §14 3X. Gate: guyed mast under lateral load — load-side guy slack, restraint guy taut, golden fixture. |
-| 2F | Plastic pushover | Bilinear moment-curvature (M_p from section modulus × f_y); incremental lateral load with hinge insertion (reuse §4.7 cascade machinery); pushover curve panel (base shear vs roof displacement) with hinge-formation markers. Gate: portal frame collapse load vs plastic-analysis hand calc (4M_p/h), 3%. |
-| 2G | Challenge scenes + gallery | 4 constrained-budget challenges ("span 40 m under 6 t of steel"); curated shared-URL gallery page (static, no backend — a JSON of curated hashes). Gate G20: evaluator geometry/budget + starter fail / solution pass + gallery.json round-trip. |
-| 2H | Moving-mass note upgrade | Optional dynamic traffic: vehicle mass lumped at contact nodes, time-stepped (mass matrix updated per frame position — the honest version of the v1 footnote). Toggle on traffic story; Newmark ζ=2%; amp badge vs static. Gate G21. |
+
+| #   | Feature                    | Spec                                                                                                                                                                                                                                                                                                                                           |
+| --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2A  | Timoshenko option          | Shear-flexible element via φ = 12EI/(G·A_s·L²): the §4.1 bending block gains standard (1+φ) denominators; per-material G, per-section shear area A_s (κ presets: rect 5/6, I-web-only, tube 0.5). Analysis toggle + "when it matters" in-app note (L/h < 10). Gate: cantilever tip = PL³/3EI + PL/(G A_s) vs closed form, 1e−9.                |
+| 2B  | P-Δ second-order statics   | Iterate K + K_g(N) → re-solve → update N until ‖ΔN‖ < 1e−6 rel (2–4 iterations typical; divergence ⇒ report as buckling-adjacent instability). Show amplification vs linear side by side. Gate: beam-column moment amplification ≈ 1/(1−P/P_cr) within 2%.                                                                                     |
+| 2C  | Earthquake story           | Base excitation: effective load −M·ι·ü_g(t) (ι = influence vector, x-direction unity); 2–3 synthetic records + scaled classic record; response-spectrum panel (SDOF sweep 0.1–10 Hz, the record's teeth made visible); story copy parallels wind. Gate: SDOF spectrum peak matches Newmark SDOF run, 2%.                                       |
+| 2D  | Influence lines            | First-class view: unit-load sweep along deck per response quantity (reaction, member N, section M); envelope integration with traffic story. Gate: SS beam midspan-moment influence line = piecewise-linear peak L/4, exact.                                                                                                                   |
+| 2E  | Tension-only cables        | Member flag `cableOnly`: iterative slack removal (deactivate compression members, re-solve, reactivate if tension returns; oscillation guard: freeze after 10 iterations, report). Unlocks guyed-mast; 3D suspension teaching preset is §14 3X. Gate: guyed mast under lateral load — load-side guy slack, restraint guy taut, golden fixture. |
+| 2F  | Plastic pushover           | Bilinear moment-curvature (M_p from section modulus × f_y); incremental lateral load with hinge insertion (reuse §4.7 cascade machinery); pushover curve panel (base shear vs roof displacement) with hinge-formation markers. Gate: portal frame collapse load vs plastic-analysis hand calc (4M_p/h), 3%.                                    |
+| 2G  | Challenge scenes + gallery | 4 constrained-budget challenges ("span 40 m under 6 t of steel"); curated shared-URL gallery page (static, no backend — a JSON of curated hashes). Gate G20: evaluator geometry/budget + starter fail / solution pass + gallery.json round-trip.                                                                                               |
+| 2H  | Moving-mass note upgrade   | Optional dynamic traffic: vehicle mass lumped at contact nodes, time-stepped (mass matrix updated per frame position — the honest version of the v1 footnote). Toggle on traffic story; Newmark ζ=2%; amp badge vs static. Gate G21.                                                                                                           |
 
 ### Spatial requirements (3-series)
+
 The marquee. Same truth contract, one dimension up. Build order is load-bearing: solver first and gated before any UI, rendering second, editor last, then the stories, then the closeout items below.
 
 - **Solver:** 12-DOF space-frame element — formulas in §4.9 (axial EA/L, St. Venant torsion GJ/L, biaxial bending, triad transform, releases, 12×12 K_g and consistent M). Kernel lives under `fem/space/` so the 2D path stays untouched. Solver core (LDLᵀ, subspace iteration, Newmark) is dimension-agnostic and reused via `modalAssembled` / `bucklingAssembled`. Gates **G22–G27** (tip closed forms, 2D↔3D regression, space corner, embed Euler, 3D modal, spatial buckling).
@@ -459,37 +517,38 @@ The marquee. Same truth contract, one dimension up. Build order is load-bearing:
 
 Spatial parity items completing the 3-series.
 
-| # | Item | Spec |
-| --- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 3P | 3D preset polish | Spatial §7 rebuilds; twin-girder slender deck with early St. Venant torsional mode; Tacoma honesty graduated (2D = bending cousin, 3D f₂ = torsion — not flutter). |
-| 3Q | Landing refresh | Empty/first-load 2D + 3D states earn their pixels; brand + one clear invitation to draw or load a preset; no dashboard clutter. |
-| 3R | Performance pass | Profile at editor soft/hard member caps and ~1–5k DOF 3D; harden WebGL LOD; keep 60 fps traffic / Newmark budgets (§3). Document measured numbers in the status footer when done. |
-| 3S | Skyline (or confirmed dense) | Profile global K at n ≳ 5k DOF. If dense factor blows the §3 budget, ship skyline/profile storage for assembled K (and matching free-DOF factor path). If dense stays inside budget with headroom, record the measurement and keep dense — either outcome closes the item.|
-| 3T | Custom workplanes | Editor workplane beyond ground/XZ/YZ: user-defined plane (origin + two axes or point-normal), draw/extrude against it. |
-| 3U | 3D share URLs | Wire Share in 3D to `encodeModel3d` / `decodeModel3d`; load `#m`/`#mu` v2 hashes on boot; keep v1 hashes decoding via migrate. Round-trip property test for authored 3D presets. |
-| 3V | 3D story parity — ramp + failure | Load-ramp story on `EditorModel3d`; four-way failure taxonomy + cascade + why-panel + honesty badges against spatial results. Capacity-to-weight panel in 3D Test. |
-| 3W | 3D story parity — earthquake + pushover | Port 2C base excitation (−M·ι·ü_g with 3D ι) and 2F plastic pushover to space-frame meshes.|
-| 3X | 3D cables + suspension preset | `cableOnly` slack iteration on space-frame members; spatial guyed-mast + suspension teaching presets; honesty: straight chords.|
-| 3Y | 3D moving-mass traffic | Toggle on 3D traffic: lump vehicle mass at axle contacts, Newmark with M rebuilt per station; amp badge vs quasi-static (2H cousin). |
-| 3Z | README screenshots | Capture Build + Test (2D and 3D) stills into `docs/`; update README What-you-can-do bullets for Phase 3. |
+| #   | Item                                    | Spec                                                                                                                                                                                                                                                                       |
+| --- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3P  | 3D preset polish                        | Spatial §7 rebuilds; twin-girder slender deck with early St. Venant torsional mode; Tacoma honesty graduated (2D = bending cousin, 3D f₂ = torsion — not flutter).                                                                                                         |
+| 3Q  | Landing refresh                         | Empty/first-load 2D + 3D states earn their pixels; brand + one clear invitation to draw or load a preset; no dashboard clutter.                                                                                                                                            |
+| 3R  | Performance pass                        | Profile at editor soft/hard member caps and ~1–5k DOF 3D; harden WebGL LOD; keep 60 fps traffic / Newmark budgets (§3). Document measured numbers in the status footer when done.                                                                                          |
+| 3S  | Skyline (or confirmed dense)            | Profile global K at n ≳ 5k DOF. If dense factor blows the §3 budget, ship skyline/profile storage for assembled K (and matching free-DOF factor path). If dense stays inside budget with headroom, record the measurement and keep dense — either outcome closes the item. |
+| 3T  | Custom workplanes                       | Editor workplane beyond ground/XZ/YZ: user-defined plane (origin + two axes or point-normal), draw/extrude against it.                                                                                                                                                     |
+| 3U  | 3D share URLs                           | Wire Share in 3D to `encodeModel3d` / `decodeModel3d`; load `#m`/`#mu` v2 hashes on boot; keep v1 hashes decoding via migrate. Round-trip property test for authored 3D presets.                                                                                           |
+| 3V  | 3D story parity — ramp + failure        | Load-ramp story on `EditorModel3d`; four-way failure taxonomy + cascade + why-panel + honesty badges against spatial results. Capacity-to-weight panel in 3D Test.                                                                                                         |
+| 3W  | 3D story parity — earthquake + pushover | Port 2C base excitation (−M·ι·ü_g with 3D ι) and 2F plastic pushover to space-frame meshes.                                                                                                                                                                                |
+| 3X  | 3D cables + suspension preset           | `cableOnly` slack iteration on space-frame members; spatial guyed-mast + suspension teaching presets; honesty: straight chords.                                                                                                                                            |
+| 3Y  | 3D moving-mass traffic                  | Toggle on 3D traffic: lump vehicle mass at axle contacts, Newmark with M rebuilt per station; amp badge vs quasi-static (2H cousin).                                                                                                                                       |
+| 3Z  | README screenshots                      | Capture Build + Test (2D and 3D) stills into `docs/`; update README What-you-can-do bullets for Phase 3.                                                                                                                                                                   |
 
 **Discipline:** every spatial change keeps the 2D gates green. Never cut solver gates or honesty badges.
 
 ### Spatial pedagogy and parity requirements (4A–4J)
+
 Pedagogy and parity items on top of the spatial closeout. Same honesty contract; no new physics the product cannot truthfully claim.
 
-| # | Item | Spec |
-| --- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 4A | 3D traffic moment envelope | Port 2D moment-envelope overlay onto the 3D deck.|
-| 4B | 3D influence lines | Unit-load sweep along `EditorModel3d.deck` for reaction / member N / section M; envelope-from-η cousin.|
-| 4C | 3D wind DAF + resonance UI | Measured DAF meter, per-mode energy bars, f₁…f₄ marks, resonance classify/banner.|
-| 4D | 3D spectrum + pushover SVG | `SpectrumPanel3d` + `PushoverPanel3d` inside `TestConsole3d` (3W chrome). |
-| 4E | 3D Timoshenko + P-Δ | Shear-flexible space-frame option + iterative K+K_g.|
-| 4F | 3D A/S/M diagram toggles | Per-member N/V/M coloring + width overlay in `StructureCanvas3d` (via `memberDiagramMagnitudes`); Results / Axial / Shear / Moment buttons in Test. |
-| 4G | 3D editor depth | Undo/redo snapshot stack (`past`/`future` + `undo`/`redo`), `MEMBER_HARD_LIMIT_3D` on add/extrude/replicate, rail lint badge, `⌘Z / ⇧⌘Z` bindings. |
-| 4H | Live cable slack on Build | `analyzeStaticModel3d` delegates to `solveTensionOnly3d` when any member is `cableOnly`.|
-| 4I | Capacity / failure chrome polish | Resonance-excluded tooltip on capacity/weight (2D + 3D). |
-| 4J | Gallery + share polish | `gallerySources3d` + `encodeModelUncompressed3d`; `public/gallery.json` now carries 11 v1 + 12 v2 entries with 3D badge in gallery-page.|
+| #   | Item                             | Spec                                                                                                                                                |
+| --- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 4A  | 3D traffic moment envelope       | Port 2D moment-envelope overlay onto the 3D deck.                                                                                                   |
+| 4B  | 3D influence lines               | Unit-load sweep along `EditorModel3d.deck` for reaction / member N / section M; envelope-from-η cousin.                                             |
+| 4C  | 3D wind DAF + resonance UI       | Measured DAF meter, per-mode energy bars, f₁…f₄ marks, resonance classify/banner.                                                                   |
+| 4D  | 3D spectrum + pushover SVG       | `SpectrumPanel3d` + `PushoverPanel3d` inside `TestConsole3d` (3W chrome).                                                                           |
+| 4E  | 3D Timoshenko + P-Δ              | Shear-flexible space-frame option + iterative K+K_g.                                                                                                |
+| 4F  | 3D A/S/M diagram toggles         | Per-member N/V/M coloring + width overlay in `StructureCanvas3d` (via `memberDiagramMagnitudes`); Results / Axial / Shear / Moment buttons in Test. |
+| 4G  | 3D editor depth                  | Undo/redo snapshot stack (`past`/`future` + `undo`/`redo`), `MEMBER_HARD_LIMIT_3D` on add/extrude/replicate, rail lint badge, `⌘Z / ⇧⌘Z` bindings.  |
+| 4H  | Live cable slack on Build        | `analyzeStaticModel3d` delegates to `solveTensionOnly3d` when any member is `cableOnly`.                                                            |
+| 4I  | Capacity / failure chrome polish | Resonance-excluded tooltip on capacity/weight (2D + 3D).                                                                                            |
+| 4J  | Gallery + share polish           | `gallerySources3d` + `encodeModelUncompressed3d`; `public/gallery.json` now carries 11 v1 + 12 v2 entries with 3D badge in gallery-page.            |
 
 **Honesty / product ceilings** — do not fake these; label them forever: true aeroelastic flutter; warping torsion / member-level LTB; accounts; backends. Dark mode remains a taste cut, not a build item.
 
