@@ -1,6 +1,6 @@
 /**
  * Phase 4 solver gates: 3D Timoshenko + P-Δ (4E) and the live cable
- * slack path (4H).
+ * slack path (4H). docs/FEM-SPEC.md §14 4E / 4H.
  */
 import { describe, expect, it } from 'vitest';
 import { MATERIALS, sectionProps } from '../materials';

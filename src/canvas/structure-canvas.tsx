@@ -34,7 +34,7 @@ const SCALE = 44;
 const NODE_RADIUS = 5;
 const HIT_RADIUS = 11;
 
-/** Canvas2D structure editor and hit-testing surface. */
+/** Canvas2D structure editor and hit-testing surface. docs/FEM-SPEC.md §3 and §6. */
 export function StructureCanvas({
   analysis,
   diagram,
@@ -586,7 +586,7 @@ function drawDeformedShape(
   context.restore();
 }
 
-/** True Newmark displacement with only the presentation scale amplified. */
+/** True Newmark displacement with only the presentation scale amplified. docs/FEM-SPEC.md §6.4. */
 function drawDynamicShape(
   context: CanvasRenderingContext2D,
   size: CanvasSize,
@@ -621,7 +621,7 @@ function drawDynamicShape(
   context.restore();
 }
 
-/** Illustrative failure playback derived from the computed first-limit displacement. */
+/** Illustrative failure playback derived from the computed first-limit displacement. docs/FEM-SPEC.md §6.5. */
 function drawFailureCinematic(
   context: CanvasRenderingContext2D,
   size: CanvasSize,
@@ -718,7 +718,7 @@ function drawTrafficAxle(context: CanvasRenderingContext2D, point: Point): void 
   context.restore();
 }
 
-/** Normalized modal/buckling ghost; it is never presented as a true displacement. */
+/** Normalized modal/buckling ghost; it is never presented as a true displacement. docs/FEM-SPEC.md §4.5/§6.4. */
 function drawModeShape(
   context: CanvasRenderingContext2D,
   size: CanvasSize,

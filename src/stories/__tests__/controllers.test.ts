@@ -41,7 +41,11 @@ describe('story controllers', () => {
       story: { kind: 'traffic' as const, weightkN: 300, speed: 12, movingMass: false },
     };
     const scenario = prepareTraffic(model);
-    expect(trafficYieldWeightAt(scenario, 0)).toBeTypeOf('number');
+    // At station 0 the front axle is exactly on the left support and the rear
+    // axle is off the deck, so the vehicle adds no member action: capacity is
+    // unbounded at that station. At station 30 the re-derived finite capacity
+    // remains the interactive lesson's governing case.
+    expect(trafficYieldWeightAt(scenario, 0)).toBeUndefined();
     const capacity = trafficYieldWeightAt(scenario, 30);
     expect(capacity).toBeTypeOf('number');
     expect(capacity).toBeGreaterThan(0);

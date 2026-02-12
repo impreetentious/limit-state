@@ -1,5 +1,5 @@
 /**
- * Phase 3 space-frame honesty gates G22–G24.
+ * Phase 3 space-frame honesty gates — docs/FEM-SPEC.md §9 G22–G24 / §4.9.
  */
 import { describe, expect, it } from 'vitest';
 import { sectionProps } from '../materials';
@@ -428,7 +428,7 @@ function unitCantileverMesh(): AnalysisMesh3d {
 /**
  * Unit-EI pinned-pinned column along +X with the 2D G3 DOF pattern embedded
  * in 3D (active: ux, uy, θz; uz/θx/θy constrained). Verifies the space-frame
- * matrices reduce to the measured 2D Euler gate. Gate G25.
+ * matrices reduce to the measured 2D Euler gate. docs/FEM-SPEC.md §9 G25.
  */
 function pinnedColumnMesh3dEmbed(subdivisions: number): AnalysisMesh3d {
   const coords = new Float64Array((subdivisions + 1) * 3);

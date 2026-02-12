@@ -1,6 +1,7 @@
 /**
  * Phase 3 WebGL structure viewer. Orbit/pan, member LOD (lines ↔ cylinders with
  * hysteresis), stress color/width, deformed shape, mode ghosts.
+ * docs/FEM-SPEC.md §14 Phase 3 Rendering / closeout 3Q–3R.
  */
 'use client';
 

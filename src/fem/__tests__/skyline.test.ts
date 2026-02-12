@@ -1,5 +1,5 @@
 /**
- * Skyline storage + LDLᵀ.
+ * Skyline storage + LDLᵀ — docs/FEM-SPEC.md §14 3S.
  */
 import { describe, expect, it } from 'vitest';
 import {

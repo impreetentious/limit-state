@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Static curated gallery — opens share hashes in the editor.
+ * Static curated gallery — opens share hashes in the editor. docs/FEM-SPEC.md §14 2G.
  */
 import Link from 'next/link';
 import galleryEntries from '../../public/gallery.json';

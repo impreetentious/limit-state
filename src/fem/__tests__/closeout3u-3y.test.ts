@@ -1,5 +1,5 @@
 /**
- * Phase 3 closeout gates for 3U–3Y.
+ * Phase 3 closeout gates for 3U–3Y. docs/FEM-SPEC.md §14.
  */
 import { describe, expect, it } from 'vitest';
 import { MATERIALS, plasticMoment } from '../materials';

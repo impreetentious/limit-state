@@ -1,6 +1,6 @@
 /**
  * 3D Test-story controls, capacity / failure explanation, and honesty labels.
- * Reuses 2D failure copy patterns.
+ * Reuses 2D failure copy patterns. docs/FEM-SPEC.md §6.3–§6.6 / §14 3V–3Y.
  */
 'use client';
 

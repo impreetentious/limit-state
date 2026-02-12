@@ -1,5 +1,5 @@
 /**
- * The honesty gates. Tolerances are measured, not aspirational
+ * The honesty gates — docs/FEM-SPEC.md §9. Tolerances are measured, not aspirational
  * (they were validated numerically before the plan was written; see §13.A).
  * Each milestone converts its `it.todo` rows into real tests.
  */
@@ -339,7 +339,7 @@ describe('Phase 2C — earthquake spectrum', () => {
 describe('Phase 2D — influence lines', () => {
   it('G17: SS beam midspan-moment influence line is piecewise-linear with peak L/4 (exact)', () => {
     // Simply-supported span: η_M(mid)(x) = x/2 for x ≤ L/2 and (L−x)/2 for x ≥ L/2.
-    // Peak at midspan load is L/4. Gate G17.
+    // Peak at midspan load is L/4. docs/FEM-SPEC.md §9 G17 / §14 2D.
     const L = 8;
     const model = modelFor(
       [
@@ -377,7 +377,7 @@ describe('Phase 2D — influence lines', () => {
 describe('Phase 2E — tension-only cables', () => {
   it('G18: guyed mast under lateral load — load-side guy slack, restraint guy taut (golden)', () => {
     // Tip +Fx: left restraint guy stays in tension, right load-side guy goes slack.
-    // Gate G18.
+    // docs/FEM-SPEC.md §9 G18 / §14 2E.
     const model = modelFor(
       [
         { id: 1, x: 0, y: 0 },
@@ -440,7 +440,7 @@ describe('Phase 2E — tension-only cables', () => {
 
 describe('Phase 2F — plastic pushover', () => {
   it('G19: portal frame collapse load vs 4M_p/h within 3%', () => {
-    // Fixed-base single bay portal, equal M_p, eaves lateral load. Gate G19.
+    // Fixed-base single bay portal, equal M_p, eaves lateral load. docs/FEM-SPEC.md §9 G19 / §14 2F.
     const h = 4;
     const section = { kind: 'rect' as const, b: 0.2, h: 0.3 };
     const model = modelFor(
@@ -499,7 +499,7 @@ describe('Phase 2F — plastic pushover', () => {
 
 describe('Phase 2H — moving-mass traffic', () => {
   it('G21: lumped vehicle mass conserved; parked Newmark settles to quasi-static midspan within 2%', () => {
-    // Gate G21.
+    // docs/FEM-SPEC.md §9 G21 / §14 2H.
     const model: EditorModel = {
       v: 1,
       name: 'Moving-mass gate',
@@ -863,7 +863,7 @@ function modelFor(
   };
 }
 
-/** Unit EI pinned-pinned column with constrained endpoint translations. Gate G3/G3b. */
+/** Unit EI pinned-pinned column with constrained endpoint translations. docs/FEM-SPEC.md §9 G3/G3b. */
 function pinnedColumnMesh(subdivisions: number): AnalysisMesh {
   const coords = new Float64Array((subdivisions + 1) * 2);
   for (let node = 0; node <= subdivisions; node++) coords[2 * node + 1] = node / subdivisions;
@@ -901,7 +901,7 @@ function pinnedColumnMesh(subdivisions: number): AnalysisMesh {
   };
 }
 
-/** Unit EI/ρA simply-supported beam with axial DOFs held out of the bending gate. Gate G4. */
+/** Unit EI/ρA simply-supported beam with axial DOFs held out of the bending gate. docs/FEM-SPEC.md §9 G4. */
 function simplySupportedBendingBeam(): AnalysisMesh {
   return {
     coords: Float64Array.of(0, 0, 0.5, 0, 1, 0),
@@ -932,7 +932,7 @@ function simplySupportedBendingBeam(): AnalysisMesh {
   };
 }
 
-/** One free axial DOF with K=M=1 for the Newmark analytic gate. Gate G8. */
+/** One free axial DOF with K=M=1 for the Newmark analytic gate. docs/FEM-SPEC.md §9 G8. */
 function unitSdofMesh(): AnalysisMesh {
   return {
     coords: Float64Array.of(0, 0, 1, 0),

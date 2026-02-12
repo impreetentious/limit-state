@@ -67,7 +67,7 @@ interface TestConsoleProps {
   onReturn: () => void;
 }
 
-/** Test-story controls, real playback state, and capacity/failure explanation. */
+/** Test-story controls, real playback state, and capacity/failure explanation. docs/FEM-SPEC.md §6.3–§6.6 / §14 2C–2D. */
 export function TestConsole({
   model,
   modal,

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Challenge checklist overlay.
+ * Challenge checklist overlay. docs/FEM-SPEC.md §14 2G.
  */
 import { useMemo } from 'react';
 import { challengeById } from '../challenges/catalog';
