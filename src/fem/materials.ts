@@ -69,7 +69,7 @@ function ibeamJ(b: number, h: number, tf: number, tw: number): number {
   return (1 / 3) * (2 * b * tf ** 3 + web * tw ** 3);
 }
 
-/** A, I≡Iz, Iy, Iz, c, As, J from section dimensions. Unit-tested (gate G10). */
+/** A, I≡Iz, Iy, Iz, c, As, J from section dimensions. Unit-tested (gate G10). docs/FEM-SPEC.md §4.8 / §4.9 / §14 2A. */
 export function sectionProps(s: SectionSpec): SectionProps {
   switch (s.kind) {
     case 'rect': {
@@ -84,7 +84,7 @@ export function sectionProps(s: SectionSpec): SectionProps {
       const A = s.b * s.h - bi * hi;
       const Iz = (s.b * s.h ** 3 - bi * hi ** 3) / 12;
       const Iy = (s.h * s.b ** 3 - hi * bi ** 3) / 12;
-      // Thin-walled box: shear carried by the two webs (I-web-only analogue).
+      // Thin-walled box: shear carried by the two webs (I-web-only analogue). docs/FEM-SPEC.md §14 2A.
       return {
         A,
         I: Iz,
@@ -101,14 +101,14 @@ export function sectionProps(s: SectionSpec): SectionProps {
       const Iz = (s.b * s.h ** 3) / 12 - ((s.b - s.tw) * web ** 3) / 12;
       // About local y: flanges as rectangles at depth, web as thin strip.
       const Iy = 2 * ((s.tf * s.b ** 3) / 12) + (web * s.tw ** 3) / 12;
-      // I-web-only shear area.
+      // I-web-only shear area. docs/FEM-SPEC.md §14 2A.
       return { A, I: Iz, Iy, Iz, c: s.h / 2, As: s.tw * web, J: ibeamJ(s.b, s.h, s.tf, s.tw) };
     }
     case 'tube': {
       const di = s.d - 2 * s.t;
       const A = (Math.PI / 4) * (s.d ** 2 - di ** 2);
       const I = (Math.PI / 64) * (s.d ** 4 - di ** 4);
-      // Circular tube: polar J = Iy + Iz = 2I.
+      // Circular tube: polar J = Iy + Iz = 2I. docs/FEM-SPEC.md §4.9.
       return {
         A,
         I,
@@ -122,7 +122,7 @@ export function sectionProps(s: SectionSpec): SectionProps {
   }
 }
 
-/** Depth used for the stocky-member L/h note. */
+/** Depth used for the stocky-member L/h note. docs/FEM-SPEC.md §14 2A. */
 export function sectionDepth(s: SectionSpec): number {
   switch (s.kind) {
     case 'rect':

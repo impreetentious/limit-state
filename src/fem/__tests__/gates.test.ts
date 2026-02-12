@@ -315,7 +315,7 @@ describe('Phase 2B — P-Δ second-order statics', () => {
     const exact = Math.tan(mu) / mu;
     const approximate = 1 / (1 - P / Pcr);
     expect(relativeError(second.momentAmplification, exact)).toBeLessThan(0.02);
-    // The engineering approximation — keep it within a few percent of exact.
+    // docs/FEM-SPEC.md §14 2B names the engineering approximation — keep it within a few percent of exact.
     expect(relativeError(approximate, exact)).toBeLessThan(0.05);
     expect(second.momentAmplification).toBeGreaterThan(1.05);
     expect(second.iterations).toBeLessThanOrEqual(8);

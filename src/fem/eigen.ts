@@ -21,7 +21,7 @@ export function modal(mesh: AnalysisMesh, nModes: number): EigenResult {
 
 /**
  * Dimension-agnostic modal analysis from assembled global matrices.
- * Used by the 2D path and the Phase 3 space-frame path.
+ * Used by the 2D path and the Phase 3 space-frame path. docs/FEM-SPEC.md §4.5 / §4.9.
  */
 export function modalAssembled(
   layout: EigenDofLayout,
@@ -92,7 +92,7 @@ export function buckling(mesh: AnalysisMesh, elementN: Float64Array): EigenResul
 
 /**
  * Dimension-agnostic buckling from assembled global matrices.
- * Used by the 2D path and the Phase 3 space-frame path.
+ * Used by the 2D path and the Phase 3 space-frame path. docs/FEM-SPEC.md §4.5 / §4.9.
  */
 export function bucklingAssembled(
   layout: EigenDofLayout,
@@ -152,7 +152,7 @@ export function bucklingAssembled(
   };
 }
 
-/** DOF layout shared by 2D and 3D eigen paths. */
+/** DOF layout shared by 2D and 3D eigen paths. docs/FEM-SPEC.md §4.5 / §4.9. */
 export interface EigenDofLayout {
   ndof: number;
   freeDofs: Int32Array;

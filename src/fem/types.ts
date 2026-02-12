@@ -76,31 +76,31 @@ export interface Material {
   id: MaterialId;
   label: string;
   E: number; // Pa
-  G: number; // Pa — shear modulus
+  G: number; // Pa — shear modulus (docs/FEM-SPEC.md §14 2A)
   fy: number; // Pa
   rho: number; // kg/m^3
 }
 
 export interface SectionProps {
   A: number; // m^2
-  /** Strong/in-plane second moment — alias for I_z. 2D solver uses this. */
+  /** Strong/in-plane second moment — alias for I_z. 2D solver uses this. docs/FEM-SPEC.md §4.8. */
   I: number; // m^4
-  /** Second moment about local y (out-of-plane for a 2D XY frame). */
+  /** Second moment about local y (out-of-plane for a 2D XY frame). docs/FEM-SPEC.md §4.9. */
   Iy: number; // m^4
-  /** Second moment about local z (in-plane bending). I ≡ Iz. */
+  /** Second moment about local z (in-plane bending). I ≡ Iz. docs/FEM-SPEC.md §4.9. */
   Iz: number; // m^4
   c: number; // extreme fiber distance, m
-  /** Effective shear area A_s (κ presets: rect 5/6, I/box web-only, tube 0.5). */
+  /** Effective shear area A_s (κ presets: rect 5/6, I/box web-only, tube 0.5). docs/FEM-SPEC.md §14 2A. */
   As: number;
-  /** St. Venant torsion constant. */
+  /** St. Venant torsion constant. docs/FEM-SPEC.md §4.8 / §4.9. */
   J: number; // m^4
 }
 
-/** Analysis options that do not live in the shareable editor model. */
+/** Analysis options that do not live in the shareable editor model. docs/FEM-SPEC.md §14 2A/2B. */
 export interface AnalysisOptions {
   /** When true, frame elements use Timoshenko (shear-flexible) bending stiffness. */
   shearFlexible?: boolean;
-  /** When true, statics iterates K + K_g(N) for P-Δ second-order effects. */
+  /** When true, statics iterates K + K_g(N) for P-Δ second-order effects. docs/FEM-SPEC.md §14 2B. */
   secondOrder?: boolean;
 }
 
@@ -134,7 +134,7 @@ export interface AnalysisMesh {
   /** sorted free DOF indices after applying supports */
   freeDofs: Int32Array;
   ndof: number;
-  /** Timoshenko shear-flexible bending. Default false = Euler–Bernoulli. */
+  /** Timoshenko shear-flexible bending (docs/FEM-SPEC.md §14 2A). Default false = Euler–Bernoulli. */
   shearFlexible: boolean;
 }
 
@@ -145,7 +145,7 @@ export interface StaticResult {
   u: Float64Array;
   /** per element: [N, Va, Ma, Vb, Mb] in local axes, tension-positive N */
   elementForces: Float64Array;
-  /** per editor member: max combined-stress utilization */
+  /** per editor member: max combined-stress utilization (docs/FEM-SPEC.md §4.7b) */
   utilization: Map<number, number>;
   /** local member coordinate of the governing utilization section, when recovered. */
   utilizationStationM?: Map<number, number>;

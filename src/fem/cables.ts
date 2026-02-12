@@ -9,7 +9,7 @@ import { solveStatic, type StaticAnalysis } from './statics';
 import type { AnalysisOptions, EditorModel, MemberSpec } from './types';
 
 const MAX_CABLE_ITERATIONS = 10;
-/** Axial force below this (N) counts as slack / inactive. */
+/** Axial force below this (N) counts as slack / inactive. docs/FEM-SPEC.md §14 2E. */
 const SLACK_FORCE = 1e-6;
 /** Elongation above this (m) reactivates a slack cable. */
 const REACTIVATE_ELONGATION = 1e-12;
@@ -186,7 +186,7 @@ function memberAxial(
   return found ? N : 0;
 }
 
-/** Axial elongation (u_b − u_a)·ê of a cable's chord from the current displacement. */
+/** Axial elongation (u_b − u_a)·ê of a cable's chord from the current displacement. docs/FEM-SPEC.md §14 2E. */
 function cableElongation(
   analysis: Extract<StaticAnalysis, { kind: 'stable' }>,
   model: EditorModel,

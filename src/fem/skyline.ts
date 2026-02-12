@@ -27,7 +27,7 @@ export type SkylineFactorResult =
   | { ok: true; factor: SkylineFactor }
   | { ok: false; mechanism: { freeDofIndex: number } };
 
-/** Build a zero skyline from a first-column profile. */
+/** Build a zero skyline from a first-column profile. docs/FEM-SPEC.md §14 3S. */
 export function createSkyline(firstCol: Int32Array): SkylineMatrix {
   const n = firstCol.length;
   const diagIndex = new Int32Array(n);
@@ -43,6 +43,7 @@ export function createSkyline(firstCol: Int32Array): SkylineMatrix {
 
 /**
  * Profile from element DOF lists: firstCol[i] = min connected DOF ≤ i (self inclusive).
+ * docs/FEM-SPEC.md §14 3S.
  */
 export function profileFromDofGroups(
   ndof: number,
@@ -90,7 +91,7 @@ export function skylineGet(K: SkylineMatrix, i: number, j: number): number {
   return index < 0 ? 0 : K.values[index]!;
 }
 
-/** Dense row-major copy (tests / eigen bridge). */
+/** Dense row-major copy (tests / eigen bridge). docs/FEM-SPEC.md §14 3S. */
 export function skylineToDense(K: SkylineMatrix): Float64Array {
   const { n } = K;
   const out = new Float64Array(n * n);
@@ -104,7 +105,7 @@ export function skylineToDense(K: SkylineMatrix): Float64Array {
   return out;
 }
 
-/** y = K x for symmetric skyline. */
+/** y = K x for symmetric skyline. docs/FEM-SPEC.md §14 3S. */
 export function matvecSkyline(K: SkylineMatrix, x: Float64Array): Float64Array {
   if (x.length !== K.n) throw new Error('Skyline matvec length mismatch.');
   const y = new Float64Array(K.n);
@@ -125,6 +126,7 @@ export function matvecSkyline(K: SkylineMatrix, x: Float64Array): Float64Array {
  * Extract the free-DOF principal submatrix as a skyline, renumbered by RCM.
  * Profile is built from free connectivity (not the full-matrix envelope).
  * Returns `perm` with perm[newIndex] = old free index (into freeDofs).
+ * docs/FEM-SPEC.md §4.3 / §14 3S.
  */
 export function freeSkyline(
   K: SkylineMatrix,
@@ -181,6 +183,7 @@ export function freeSkyline(
 
 /**
  * In-place skyline LDLᵀ (no pivoting). Mechanism if D_ii ≤ ε · max|diag(K)|.
+ * docs/FEM-SPEC.md §4.3 / §14 3S.
  */
 export function factorSkylineLDLT(K: SkylineMatrix): SkylineFactorResult {
   const { n, firstCol, diagIndex } = K;
@@ -231,7 +234,7 @@ export function factorSkylineLDLT(K: SkylineMatrix): SkylineFactorResult {
   };
 }
 
-/** Forward / diagonal / back substitution on a skyline factor. */
+/** Forward / diagonal / back substitution on a skyline factor. docs/FEM-SPEC.md §4.3 / §14 3S. */
 export function solveSkylineFactored(factor: SkylineFactor, rhs: Float64Array): Float64Array {
   const { n, firstCol, diagIndex, ld, d } = factor;
   if (rhs.length !== n) throw new Error('Skyline RHS length does not match the factor.');
@@ -260,7 +263,7 @@ export function solveSkylineFactored(factor: SkylineFactor, rhs: Float64Array): 
 
 /**
  * Reverse Cuthill–McKee ordering for free-DOF indices (0..n-1).
- * Returns `perm` where perm[newIndex] = oldIndex.
+ * Returns `perm` where perm[newIndex] = oldIndex. docs/FEM-SPEC.md §14 3S.
  */
 export function rcmOrder(adjacency: ReadonlyArray<ReadonlyArray<number>>): Int32Array {
   const n = adjacency.length;

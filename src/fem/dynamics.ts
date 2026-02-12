@@ -3,7 +3,7 @@
  * explainer layer; DAF meter; resonance detection. docs/FEM-SPEC.md §4.6. M5.
  *
  * Core stepping is dimension-agnostic (`DynamicDofLayout` + assembled K/M) so
- * Phase 3 space-frame stories reuse the same integrator.
+ * Phase 3 space-frame stories reuse the same integrator. docs/FEM-SPEC.md §14 Phase 3.
  */
 import { assembleK, assembleM } from './assemble';
 import {
@@ -16,7 +16,7 @@ import {
 } from './solve';
 import type { AnalysisMesh } from './types';
 
-/** Minimal DOF layout shared by 2D and 3D meshes. */
+/** Minimal DOF layout shared by 2D and 3D meshes. docs/FEM-SPEC.md §14 Phase 3. */
 export interface DynamicDofLayout {
   ndof: number;
   freeDofs: Int32Array;
@@ -76,7 +76,7 @@ export function rayleighDampingRatio(params: RayleighParams, omega: number): num
 
 /**
  * Assemble and factor K̂ from precomputed global K and M.
- * Dimension-agnostic — used by 2D wind and Phase 3 space-frame stories.
+ * Dimension-agnostic — used by 2D wind and Phase 3 space-frame stories. docs/FEM-SPEC.md §4.6 / §14.
  */
 export function prepareNewmarkSystemAssembled(
   layout: DynamicDofLayout,

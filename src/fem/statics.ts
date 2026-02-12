@@ -23,7 +23,7 @@ export type StaticAnalysis =
       mesh: AnalysisMesh;
       loads: LoadAssembly;
       result: StaticResult;
-      /** Present when AnalysisOptions.secondOrder produced a converged P-Δ solve. */
+      /** Present when AnalysisOptions.secondOrder produced a converged P-Δ solve. docs/FEM-SPEC.md §14 2B. */
       secondOrder?: {
         linear: StaticResult;
         iterations: number;

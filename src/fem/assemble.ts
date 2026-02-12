@@ -26,7 +26,7 @@ export function shearFactor(E: number, I: number, G: number, As: number, L: numb
 }
 
 /**
- * Frame element stiffness, local axes.
+ * Frame element stiffness, local axes. docs/FEM-SPEC.md §4.1 / §14 2A.
  * Optional φ applies the standard Timoshenko (1+φ) bending block; φ = 0 is Euler–Bernoulli.
  */
 export function kLocal(E: number, A: number, I: number, L: number, phi = 0): Float64Array {
@@ -54,13 +54,13 @@ export function kLocal(E: number, A: number, I: number, L: number, phi = 0): Flo
   return k;
 }
 
-/** Element φ from mesh analysis option and section shear props. */
+/** Element φ from mesh analysis option and section shear props. docs/FEM-SPEC.md §14 2A. */
 export function elementPhi(element: Element, shearFlexible: boolean): number {
   if (!shearFlexible) return 0;
   return shearFactor(element.E, element.I, element.G, element.As, element.L);
 }
 
-/** Consistent geometric stiffness (transverse/rotation block), N tension-positive. */
+/** Consistent geometric stiffness (transverse/rotation block), N tension-positive. docs/FEM-SPEC.md §4.1. */
 export function kgLocal(N: number, L: number): Float64Array {
   const g = new Float64Array(36);
   const c = N / L;
@@ -75,7 +75,7 @@ export function kgLocal(N: number, L: number): Float64Array {
   return g;
 }
 
-/** Consistent mass matrix, local axes. */
+/** Consistent mass matrix, local axes. docs/FEM-SPEC.md §4.1. */
 export function mLocal(rho: number, A: number, L: number): Float64Array {
   const m = new Float64Array(36);
   const ax = (rho * A * L) / 6;
@@ -95,7 +95,7 @@ export function mLocal(rho: number, A: number, L: number): Float64Array {
   return m;
 }
 
-/** K_global = Tᵀ k T with per-node rotation blocks R = [[c,s,0],[-s,c,0],[0,0,1]]. */
+/** K_global = Tᵀ k T with per-node rotation blocks R = [[c,s,0],[-s,c,0],[0,0,1]]. docs/FEM-SPEC.md §4.1. */
 export function transformToGlobal(kLoc: Float64Array, cos: number, sin: number): Float64Array {
   // T maps global -> local. Column transform then row transform, exploiting block structure.
   const out = new Float64Array(36);
@@ -125,7 +125,7 @@ export function transformToGlobal(kLoc: Float64Array, cos: number, sin: number):
   return out;
 }
 
-/** Assemble global K (dense, row-major ndof×ndof). M1. */
+/** Assemble global K (dense, row-major ndof×ndof). M1 — docs/FEM-SPEC.md §4.3. */
 export function assembleK(mesh: AnalysisMesh): Float64Array {
   const K = new Float64Array(mesh.ndof * mesh.ndof);
   for (const element of mesh.elements) {
@@ -169,7 +169,7 @@ export function assembleKg(mesh: AnalysisMesh, elementN: Float64Array): Float64A
   return Kg;
 }
 
-/** Global load vector: nodal + self-weight UDL + in-element point loads (Hermite). M1. */
+/** Global load vector: nodal + self-weight UDL + in-element point loads (Hermite). M1 — docs/FEM-SPEC.md §4.2. */
 export function assembleF(
   mesh: AnalysisMesh,
   opts: {
