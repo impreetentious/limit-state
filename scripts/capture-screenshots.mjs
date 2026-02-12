@@ -1,6 +1,7 @@
 /**
  * Capture Build + Test stills (2D and 3D) for README / docs.
  * Run against a local static server serving `out/`.
+ * docs/FEM-SPEC.md §14 3Z.
  *
  *   npx serve out -l 4173
  *   node scripts/capture-screenshots.mjs

@@ -1,7 +1,7 @@
 /**
  * URL-hash sharing: '#m=' + base64url(deflate-raw(JSON)) via CompressionStream,
  * '#mu=' + base64url(JSON) fallback. Schema v1 = EditorModel; v2 = EditorModel3d
- * with automatic v1→v2 migration.
+ * with automatic v1→v2 migration. docs/FEM-SPEC.md §5 / §14 Phase 3.
  * Property gate G11: decode(encode(m)) deep-equals m (v1).
  * Gate G28: golden v1 URLs decode identically; migrateV1toV2 is deterministic.
  */
@@ -15,7 +15,7 @@ import {
 } from '../fem/space';
 import type { EditorModel, MemberSpec, SectionSpec, StorySpec } from '../fem/types';
 
-/** Encode a validated model as a URL fragment, compressing when the platform provides CompressionStream. */
+/** Encode a validated model as a URL fragment, compressing when the platform provides CompressionStream. docs/FEM-SPEC.md §5. */
 export async function encodeModel(model: EditorModel): Promise<string> {
   const valid = validateModel(model);
   const bytes = new TextEncoder().encode(JSON.stringify(valid));
@@ -31,13 +31,13 @@ export async function encodeModel(model: EditorModel): Promise<string> {
   }
 }
 
-/** Deterministic `#mu=` share fragment for curated gallery JSON. */
+/** Deterministic `#mu=` share fragment for curated gallery JSON. docs/FEM-SPEC.md §14 2G. */
 export function encodeModelUncompressed(model: EditorModel): string {
   const valid = validateModel(model);
   return `#mu=${base64urlEncode(new TextEncoder().encode(JSON.stringify(valid)))}`;
 }
 
-/** Decode a #m/#mu fragment and validate its exact v1 model shape before it reaches editor state. */
+/** Decode a #m/#mu fragment and validate its exact v1 model shape before it reaches editor state. docs/FEM-SPEC.md §5. */
 export async function decodeModel(hash: string): Promise<EditorModel> {
   const fragment = hash.startsWith('#') ? hash : new URL(hash, 'https://limit-state.local').hash;
   const match = /^#(m|mu)=([A-Za-z0-9_-]+)$/.exec(fragment);
@@ -280,7 +280,7 @@ function validMaterial(value: unknown): value is MemberSpec['material'] {
 /**
  * Lift a planar v1 model into schema v2: z = 0, roll = 0, moment releases → θz.
  * Old share URLs still decode as v1 via decodeModel; this is the explicit upgrade path.
- * Gate G28.
+ * docs/FEM-SPEC.md §14 Phase 3 Editor / gate G28 / closeout 3U.
  */
 export function migrateV1toV2(model: EditorModel): EditorModel3d {
   const valid = validateModel(model);
@@ -362,7 +362,7 @@ export function encodeModelUncompressed3d(model: EditorModel3d): string {
   return `#mu=${base64urlEncode(new TextEncoder().encode(JSON.stringify(valid)))}`;
 }
 
-/** Encode a validated v2 space-frame model as a URL fragment. */
+/** Encode a validated v2 space-frame model as a URL fragment. docs/FEM-SPEC.md §14 Phase 3. */
 export async function encodeModel3d(model: EditorModel3d): Promise<string> {
   const valid = validateModel3d(model);
   const bytes = new TextEncoder().encode(JSON.stringify(valid));
@@ -405,7 +405,7 @@ export async function decodeModel3d(hash: string): Promise<EditorModel3d> {
 
 /**
  * Peek schema version from a share fragment without full validate.
- * Boot loads v2 into 3D, v1 into 2D.
+ * docs/FEM-SPEC.md §14 3U — boot loads v2 into 3D, v1 into 2D.
  */
 export async function peekShareSchemaVersion(hash: string): Promise<1 | 2> {
   const fragment = hash.startsWith('#') ? hash : new URL(hash, 'https://limit-state.local').hash;

@@ -1,6 +1,7 @@
 /**
  * Phase 3 closeout 3R — measure assemble / factor / resolve budgets.
  * Run: npm run profile:perf
+ * docs/FEM-SPEC.md §3 performance budgets / §14 3R.
  */
 import { assembleK3d } from '../src/fem/space/assemble';
 import { buildMesh3d, NO_RELEASES, type EditorModel3d } from '../src/fem/space';

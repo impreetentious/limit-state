@@ -1,5 +1,5 @@
 /**
- * Curated share-URL gallery sources.
+ * Curated share-URL gallery sources. docs/FEM-SPEC.md §14 2G / §14 4J.
  * `public/gallery.json` stores the frozen `#mu=` hashes derived from these models.
  */
 import { CHALLENGE_SOLUTIONS, CHALLENGES } from '../challenges/catalog';
@@ -22,7 +22,7 @@ export interface GallerySource3d {
   model: EditorModel3d;
 }
 
-/** Authored gallery scenes — presets plus challenge reference solutions. */
+/** Authored gallery scenes — presets plus challenge reference solutions. docs/FEM-SPEC.md §14 2G. */
 export function gallerySources(): GallerySource[] {
   const presets: GallerySource[] = PRESETS.filter((preset) => preset.id !== 'blank').map(
     (preset) => ({
