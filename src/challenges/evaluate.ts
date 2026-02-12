@@ -1,5 +1,6 @@
 /**
  * Pure challenge evaluation: steel budget, geometry, traffic capacity, ramp λ.
+ * docs/FEM-SPEC.md §14 2G.
  */
 import { MATERIALS, sectionProps } from '../fem/materials';
 import type { AnalysisOptions, EditorModel, MemberSpec, NodeSpec } from '../fem/types';
@@ -12,7 +13,7 @@ import type {
   ChallengeVerdict,
 } from './types';
 
-/** Steel mass of every `steel-s355` member (kg). */
+/** Steel mass of every `steel-s355` member (kg). docs/FEM-SPEC.md §14 2G. */
 export function steelMassKg(model: EditorModel): number {
   const nodes = nodeMap(model.nodes);
   let mass = 0;
@@ -23,14 +24,14 @@ export function steelMassKg(model: EditorModel): number {
   return mass;
 }
 
-/** Clear horizontal span between outermost supported nodes (m). */
+/** Clear horizontal span between outermost supported nodes (m). docs/FEM-SPEC.md §14 2G. */
 export function clearSpanM(model: EditorModel): number {
   const xs = supportedXs(model);
   if (xs.length < 2) return 0;
   return xs[xs.length - 1]! - xs[0]!;
 }
 
-/** Vertical extent of the drawn nodes (m). */
+/** Vertical extent of the drawn nodes (m). docs/FEM-SPEC.md §14 2G. */
 export function structureHeightM(model: EditorModel): number {
   if (model.nodes.length === 0) return 0;
   let minY = Infinity;
@@ -44,6 +45,7 @@ export function structureHeightM(model: EditorModel): number {
 
 /**
  * True when every support sits on one of the two outermost supported nodes.
+ * docs/FEM-SPEC.md §14 2G.
  */
 export function abutmentsOnly(model: EditorModel): boolean {
   const xs = supportedXs(model);
@@ -59,7 +61,7 @@ export function abutmentsOnly(model: EditorModel): boolean {
   return true;
 }
 
-/** Mid-deck traffic yield capacity in kN, or undefined when the deck is missing/invalid. */
+/** Mid-deck traffic yield capacity in kN, or undefined when the deck is missing/invalid. docs/FEM-SPEC.md §14 2G. */
 export function midspanTruckCapacitykN(
   model: EditorModel,
   options: AnalysisOptions = {},
@@ -73,7 +75,7 @@ export function midspanTruckCapacitykN(
   }
 }
 
-/** Evaluate a model against one challenge's constraints. */
+/** Evaluate a model against one challenge's constraints. docs/FEM-SPEC.md §14 2G. */
 export function evaluateChallenge(
   challenge: ChallengeSpec,
   model: EditorModel,
@@ -184,7 +186,7 @@ function check(
   return { id, label, ok, actual, required };
 }
 
-/** Apply the challenge's probe tip load when configured. */
+/** Apply the challenge's probe tip load when configured. docs/FEM-SPEC.md §14 2G. */
 function withProbeLoads(model: EditorModel, constraints: ChallengeConstraints): EditorModel {
   if (constraints.probeTipLoadN === undefined || model.nodes.length === 0) return model;
   let tip = model.nodes[0]!;

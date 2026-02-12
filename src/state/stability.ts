@@ -4,7 +4,7 @@ import { factorLDLT, freeMatrix, mechanismEditorNode } from '../fem/solve';
 import type { AnalysisOptions, EditorModel } from '../fem/types';
 import type { Stability } from './editor-store';
 
-/** Live stability lint used by the editor after its 300 ms debounce. */
+/** Live stability lint used by the editor after its 300 ms debounce. docs/FEM-SPEC.md §4.3 and §6.2. */
 export function inspectStability(model: EditorModel, options: AnalysisOptions = {}): Stability {
   if (model.members.length === 0)
     return { kind: 'idle', message: 'Draw members and add supports to check stability.' };

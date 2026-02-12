@@ -1,6 +1,6 @@
 /**
  * Extrude / replicate — pure EditorModel3d transforms.
- * 2D truss → spatial truss in two operations.
+ * docs/FEM-SPEC.md §14 Phase 3 Editor: "2D truss → spatial truss in two operations".
  *
  * Extrude: copy selected (or all) nodes along an offset, copy in-plane members
  * onto each new layer, and add strut members connecting corresponding nodes.

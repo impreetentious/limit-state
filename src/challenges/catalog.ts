@@ -1,5 +1,5 @@
 /**
- * Four constrained-budget challenges.
+ * Four constrained-budget challenges. docs/FEM-SPEC.md §14 2G.
  * Starters place abutments (or a mast base) and leave the structure for the visitor.
  */
 import type { EditorModel, MemberSpec, SectionSpec } from '../fem/types';
@@ -9,7 +9,7 @@ const DEEP_IBEAM: SectionSpec = { kind: 'ibeam', b: 0.24, h: 0.68, tf: 0.022, tw
 const MAST_TUBE: SectionSpec = { kind: 'tube', d: 0.26, t: 0.012 };
 const TRUSS_CHORD: SectionSpec = { kind: 'rect', b: 0.04, h: 0.04 };
 
-/** Authored challenge catalog — load a starter, then satisfy the budget. */
+/** Authored challenge catalog — load a starter, then satisfy the budget. docs/FEM-SPEC.md §14 2G. */
 export const CHALLENGES: ChallengeSpec[] = [
   {
     id: 'span-40-steel-6t',
@@ -71,7 +71,7 @@ export const CHALLENGES: ChallengeSpec[] = [
   },
 ];
 
-/** Reference solutions used by the gallery and by G20. */
+/** Reference solutions used by the gallery and by G20. docs/FEM-SPEC.md §14 2G. */
 export const CHALLENGE_SOLUTIONS: Record<string, EditorModel> = {
   'span-40-steel-6t': deepBeamSolution('Solution: Span 40 m', 40, 100, DEEP_IBEAM),
   'heavy-12m': deepBeamSolution('Solution: Heavy 12 m', 12, 400, {

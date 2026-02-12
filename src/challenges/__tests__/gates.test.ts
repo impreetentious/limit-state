@@ -1,5 +1,5 @@
 /**
- * G20 — challenge evaluation + curated gallery hashes.
+ * G20 — challenge evaluation + curated gallery hashes. docs/FEM-SPEC.md §9 / §14 2G.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

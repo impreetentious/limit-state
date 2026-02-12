@@ -1,5 +1,5 @@
 /**
- * Worker boundary for modal and buckling solves.
+ * Worker boundary for modal and buckling solves. docs/FEM-SPEC.md §3 and §4.5.
  * No dependency wrapper: large typed arrays cross the worker boundary by transfer.
  */
 import { buckling, modal } from '../fem/eigen';

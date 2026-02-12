@@ -1,5 +1,5 @@
 /**
- * Custom workplane frames.
+ * Custom workplane frames — docs/FEM-SPEC.md §14 3T.
  */
 import { describe, expect, it } from 'vitest';
 import {

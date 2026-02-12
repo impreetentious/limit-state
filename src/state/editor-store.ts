@@ -82,7 +82,7 @@ const HISTORY_LIMIT = 100;
 export const MEMBER_SOFT_LIMIT = 120;
 export const MEMBER_HARD_LIMIT = 200;
 
-/** Blank grid preset. */
+/** Blank grid preset — docs/FEM-SPEC.md §7 preset 6. */
 export function createBlankModel(): EditorModel {
   return {
     v: 1,
@@ -97,7 +97,7 @@ export function createBlankModel(): EditorModel {
   };
 }
 
-/** Snapshot clone for the small, serializable editor model. */
+/** Snapshot clone for the small, serializable editor model. docs/FEM-SPEC.md §6.2. */
 export function cloneModel(model: EditorModel): EditorModel {
   return {
     ...model,
@@ -418,7 +418,7 @@ function sharesNode(a: MemberSpec, b: MemberSpec): boolean {
   return a.a === b.a || a.a === b.b || a.b === b.a || a.b === b.b;
 }
 
-/** Preserve the traffic path while replacing one drawn member with its two collinear segments. */
+/** Preserve the traffic path while replacing one drawn member with its two collinear segments. docs/FEM-SPEC.md §6.2–§6.3. */
 function splitDeckPath(
   deck: readonly number[],
   members: readonly MemberSpec[],

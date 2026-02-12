@@ -1,5 +1,6 @@
 /**
  * Workplane frames for the 3D editor — presets + custom.
+ * docs/FEM-SPEC.md §14 Phase 3 Editor / closeout 3T.
  */
 import type { Vec3 } from './ops3d';
 import { scaleVec } from './ops3d';

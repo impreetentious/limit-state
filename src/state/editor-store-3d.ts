@@ -1,6 +1,6 @@
 /**
  * Phase 3 workplane editor store — ground / elevation / custom draw into EditorModel3d.
- * Schema v2 only; 2D store stays untouched.
+ * docs/FEM-SPEC.md §14 Phase 3 Editor / closeout 3T. Schema v2 only; 2D store stays untouched.
  */
 import { create } from 'zustand';
 import { DEFAULT_SECTION } from '../fem/materials';
