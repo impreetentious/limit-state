@@ -61,7 +61,7 @@ describe('Phase 3 — G22 3D cantilever closed forms', () => {
   });
 
   it('G22: tip P_y, P_z, T_x match PL³/3EI and TL/GJ (1 elem, rel < 1e-10)', () => {
-    // Unit properties, one analysis element, root fixed.
+    // Unit properties, one analysis element, root fixed. docs/FEM-SPEC.md §4.9 / §13.A style.
     const mesh = unitCantileverMesh();
     const system = prepareStaticSystem3d(mesh);
     if ('mechanismFreeDof' in system) throw new Error('unit cantilever must be stable');
@@ -395,7 +395,7 @@ describe('Phase 3 — G28 schema v2 migration', () => {
   });
 });
 
-/** Single-element unit cantilever along +X for closed-form gates. */
+/** Single-element unit cantilever along +X for closed-form gates. docs/FEM-SPEC.md §4.9. */
 function unitCantileverMesh(): AnalysisMesh3d {
   const R = memberTriad(1, 0, 0, 0);
   const element: Element3d = {
@@ -470,7 +470,7 @@ function pinnedColumnMesh3dEmbed(subdivisions: number): AnalysisMesh3d {
   };
 }
 
-/** G4 DOF pattern embedded in 3D. Gate G26. */
+/** G4 DOF pattern embedded in 3D. docs/FEM-SPEC.md §9 G26. */
 function simplySupportedBeam3dEmbed(): AnalysisMesh3d {
   const elements: Element3d[] = [0, 1].map((index) => ({
     memberId: 1,
@@ -500,7 +500,7 @@ function simplySupportedBeam3dEmbed(): AnalysisMesh3d {
   };
 }
 
-/** Both bending planes free; axial mid DOF held out. Gate G26. */
+/** Both bending planes free; axial mid DOF held out. docs/FEM-SPEC.md §9 G26. */
 function simplySupportedBeam3dBiaxial(Iy: number, Iz: number): AnalysisMesh3d {
   const elements: Element3d[] = [0, 1].map((index) => ({
     memberId: 1,
@@ -533,7 +533,7 @@ function simplySupportedBeam3dBiaxial(Iy: number, Iz: number): AnalysisMesh3d {
 /**
  * Spatial pinned-pinned column along +Z with both bending planes active.
  * Torsion about the column restrained at the pins (lone shaft RB mode).
- * G=1 keeps K well-conditioned with torsional mid DOFs present. Gate G27.
+ * G=1 keeps K well-conditioned with torsional mid DOFs present. docs/FEM-SPEC.md §9 G27.
  */
 function spatialPinnedColumn(subdivisions: number, Iy: number, Iz: number): AnalysisMesh3d {
   const coords = new Float64Array((subdivisions + 1) * 3);

@@ -174,7 +174,7 @@ function withActiveCables3d(model: EditorModel3d, active: ReadonlySet<number>): 
   };
 }
 
-/** Tension-positive axial from end-A convention N = −Fx. */
+/** Tension-positive axial from end-A convention N = −Fx. docs/FEM-SPEC.md §4.9. */
 function memberAxial3d(
   analysis: Extract<StaticAnalysis3d, { kind: 'stable' }>,
   memberId: number,

@@ -14,10 +14,10 @@ import type { AnalysisMesh3d, Element3d, EndReleases3d } from './types';
 const N = 12;
 
 /**
- * Local space-frame stiffness.
+ * Local space-frame stiffness. docs/FEM-SPEC.md §4.9.
  * Axial EA/L, torsion GJ/L, bending about z (I_z) and about y (I_y with RH sign flip).
  * Optional shear areas `AsY`/`AsZ` engage the Timoshenko block per plane
- * (φ = 12EI/(G·As·L²)).
+ * (φ = 12EI/(G·As·L²)). docs/FEM-SPEC.md §14 4E.
  */
 export function kLocal3d(
   E: number,
@@ -47,7 +47,7 @@ export function kLocal3d(
   set(9, 9, t);
   set(3, 9, -t);
 
-  // Bending about z — shear along local y with shear area AsY.
+  // Bending about z — shear along local y with shear area AsY. docs/FEM-SPEC.md §14 4E.
   const phiZ = shear?.AsY && shear.AsY > 0 ? (12 * E * Iz) / (G * shear.AsY * L * L) : 0;
   const bzs = (E * Iz) / (L * L * L * (1 + phiZ));
   set(1, 1, 12 * bzs);
@@ -61,7 +61,7 @@ export function kLocal3d(
   set(11, 11, (4 + phiZ) * bzs * L * L);
   set(5, 11, (2 - phiZ) * bzs * L * L);
 
-  // Bending about y — shear along local z with shear area AsZ. RH sign flip.
+  // Bending about y — shear along local z with shear area AsZ. RH sign flip. docs/FEM-SPEC.md §14 4E.
   const phiY = shear?.AsZ && shear.AsZ > 0 ? (12 * E * Iy) / (G * shear.AsZ * L * L) : 0;
   const bys = (E * Iy) / (L * L * L * (1 + phiY));
   set(2, 2, 12 * bys);
@@ -80,7 +80,7 @@ export function kLocal3d(
 
 /**
  * Consistent geometric stiffness, 12×12. Axial force tension-positive.
- * Same 4×4 block as §4.1 on each bending plane (Cook ch. 9 analogue).
+ * Same 4×4 block as §4.1 on each bending plane (Cook ch. 9 analogue). docs/FEM-SPEC.md §4.9.
  */
 export function kgLocal3d(axialN: number, L: number): Float64Array {
   const g = new Float64Array(N * N);
@@ -112,6 +112,7 @@ export function kgLocal3d(axialN: number, L: number): Float64Array {
 
 /**
  * Consistent mass, 12×12. Axial + St. Venant rotary (Ip = Iy+Iz) + two Hermite bending blocks.
+ * docs/FEM-SPEC.md §4.9.
  */
 export function mLocal3d(rho: number, A: number, Iy: number, Iz: number, L: number): Float64Array {
   const m = new Float64Array(N * N);
@@ -154,7 +155,7 @@ export function mLocal3d(rho: number, A: number, Iy: number, Iz: number, L: numb
 
 /**
  * Build the local triad (e_x, e_y, e_z) as a row-major 3×3 R.
- * Prefer global Z as reference; fall back to global Y when nearly parallel.
+ * Prefer global Z as reference; fall back to global Y when nearly parallel. docs/FEM-SPEC.md §4.9.
  */
 export function memberTriad(dx: number, dy: number, dz: number, roll = 0): Float64Array {
   const L = Math.hypot(dx, dy, dz);
@@ -218,7 +219,7 @@ export function memberTriad(dx: number, dy: number, dz: number, roll = 0): Float
   return Float64Array.of(exx, exy, exz, eyx, eyy, eyz, ezx, ezy, ezz);
 }
 
-/** K_global = Tᵀ k T with T = blockdiag(R,R,R,R). */
+/** K_global = Tᵀ k T with T = blockdiag(R,R,R,R). docs/FEM-SPEC.md §4.9. */
 export function transformToGlobal3d(kLoc: Float64Array, R: Float64Array): Float64Array {
   // t = kLoc * T, then out = Tᵀ * t. Each 3-block multiplies by R.
   const t = new Float64Array(N * N);
@@ -252,7 +253,7 @@ export function transformToGlobal3d(kLoc: Float64Array, R: Float64Array): Float6
   return out;
 }
 
-/** Local element stiffness after rotational end-release condensation. */
+/** Local element stiffness after rotational end-release condensation. docs/FEM-SPEC.md §4.9 / §14 4E. */
 export function elementLocalStiffness3d(element: Element3d, shearFlexible = false): Float64Array {
   const shear =
     shearFlexible && element.As !== undefined && element.As > 0
@@ -271,7 +272,7 @@ export function elementLocalStiffness3d(element: Element3d, shearFlexible = fals
   return condenseWithElementReleases(elastic, element, shear);
 }
 
-/** Assemble global K (symmetric skyline). */
+/** Assemble global K (symmetric skyline). docs/FEM-SPEC.md §4.9 / §14 3S / §14 4E. */
 export function assembleK3d(mesh: AnalysisMesh3d): SkylineMatrix {
   const groups = mesh.elements.map((element) => [...elementDofs3d(element)]);
   const K = createSkyline(profileFromDofGroups(mesh.ndof, groups));
@@ -283,12 +284,12 @@ export function assembleK3d(mesh: AnalysisMesh3d): SkylineMatrix {
   return K;
 }
 
-/** Dense K for eigen / Newmark bridges that still expect Float64Array. */
+/** Dense K for eigen / Newmark bridges that still expect Float64Array. docs/FEM-SPEC.md §14 3S. */
 export function assembleK3dDense(mesh: AnalysisMesh3d): Float64Array {
   return skylineToDense(assembleK3d(mesh));
 }
 
-/** Assemble global consistent M. */
+/** Assemble global consistent M. docs/FEM-SPEC.md §4.9. */
 export function assembleM3d(mesh: AnalysisMesh3d): Float64Array {
   const M = new Float64Array(mesh.ndof * mesh.ndof);
   for (const element of mesh.elements) {
@@ -301,7 +302,7 @@ export function assembleM3d(mesh: AnalysisMesh3d): Float64Array {
   return M;
 }
 
-/** Assemble K_g from tension-positive local axial forces. */
+/** Assemble K_g from tension-positive local axial forces. docs/FEM-SPEC.md §4.9. */
 export function assembleKg3d(mesh: AnalysisMesh3d, elementN: Float64Array): Float64Array {
   if (elementN.length !== mesh.elements.length) {
     throw new Error('Geometric stiffness requires exactly one axial force per analysis element.');
@@ -317,11 +318,11 @@ export function assembleKg3d(mesh: AnalysisMesh3d, elementN: Float64Array): Floa
 
 export interface LoadAssembly3d {
   F: Float64Array;
-  /** Local fixed-end forces, 12 per element — subtracted in stress recovery. */
+  /** Local fixed-end forces, 12 per element — subtracted in stress recovery. docs/FEM-SPEC.md §4.2. */
   elementFixedEnd: Float64Array;
 }
 
-/** Nodal point loads (forces + optional moments) into the global vector. */
+/** Nodal point loads (forces + optional moments) into the global vector. docs/FEM-SPEC.md §4.9. */
 export function assembleF3d(
   mesh: AnalysisMesh3d,
   points: {
@@ -339,7 +340,7 @@ export function assembleF3d(
 
 /**
  * Nodal + in-element (Hermite) loads for 3D traffic / statics.
- * Optional self-weight along global −Z.
+ * Optional self-weight along global −Z. docs/FEM-SPEC.md §4.2 / §4.9 / §14.
  * `inElement` forces are global (fx,fy,fz); typically (0,0,−axleWeight) for traffic.
  */
 export function assembleLoadCase3d(
@@ -422,7 +423,7 @@ export function assembleLoadCase3d(
 
 /**
  * Uniform local distributed load (wx, wy, wz) N/m → 12 local fixed-end forces.
- * Axial lumps half; bending blocks match §4.2 / §4.9 RH signs.
+ * Axial lumps half; bending blocks match §4.2 / §4.9 RH signs. docs/FEM-SPEC.md §4.2.
  */
 export function uniformFixedEnd3d(wx: number, wy: number, wz: number, L: number): Float64Array {
   const f = new Float64Array(12);
@@ -440,7 +441,7 @@ export function uniformFixedEnd3d(wx: number, wy: number, wz: number, L: number)
 }
 
 /**
- * Hermite fixed-end for a local point force at ξ.
+ * Hermite fixed-end for a local point force at ξ. docs/FEM-SPEC.md §4.2 / §4.9.
  * v/θz block matches 2D; w/θy uses the RH moment sign flip of k_y.
  */
 export function pointFixedEnd3d(
@@ -512,7 +513,7 @@ function addElementMatrix3d(
   }
 }
 
-/** Scatter a 12×12 into the symmetric skyline (lower triangle only). */
+/** Scatter a 12×12 into the symmetric skyline (lower triangle only). docs/FEM-SPEC.md §14 3S. */
 function addElementMatrixSkyline3d(
   global: SkylineMatrix,
   local: Float64Array,
@@ -549,7 +550,7 @@ function pushReleases(out: number[], base: number, r: EndReleases3d): void {
 
 /**
  * Static condensation of released rotational DOFs using the element's elastic
- * release transform (Cᵀ A C).
+ * release transform (Cᵀ A C). docs/FEM-SPEC.md §4.1 / §4.9 / §14 4E.
  */
 function condenseWithElementReleases(
   matrix: Float64Array,

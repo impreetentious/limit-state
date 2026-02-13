@@ -21,7 +21,7 @@ export interface DeckStationHit3d {
   z: number;
 }
 
-/** Ordered deck segments with analysis-element coverage. */
+/** Ordered deck segments with analysis-element coverage. docs/FEM-SPEC.md §14. */
 export function buildDeckRoute3d(model: EditorModel3d, mesh: AnalysisMesh3d): DeckSegment3d[] {
   const deck = model.deck ?? [];
   if (deck.length === 0) throw new Error('Paint a contiguous deck before running a deck sweep.');
@@ -66,7 +66,7 @@ export function buildDeckRoute3d(model: EditorModel3d, mesh: AnalysisMesh3d): De
   return route;
 }
 
-/** Map a deck station (m) onto element ξ and world position. */
+/** Map a deck station (m) onto element ξ and world position. docs/FEM-SPEC.md §14. */
 export function mapDeckStation3d(
   model: EditorModel3d,
   mesh: AnalysisMesh3d,

@@ -25,7 +25,7 @@ export type StaticSystem3d =
   | { ndof: number; K: SkylineMatrix; factor: SkylineFactor; freePerm: Int32Array }
   | { ndof: number; K: SkylineMatrix; mechanismFreeDof: number; freePerm: Int32Array };
 
-/** Assemble and factor once (skyline free partition + RCM). */
+/** Assemble and factor once (skyline free partition + RCM). docs/FEM-SPEC.md §4.3 / §4.9 / §14 3S. */
 export function prepareStaticSystem3d(mesh: AnalysisMesh3d): StaticSystem3d {
   const K = assembleK3d(mesh);
   const groups = mesh.elements.map((element) => {
@@ -40,7 +40,7 @@ export function prepareStaticSystem3d(mesh: AnalysisMesh3d): StaticSystem3d {
     : { ndof: mesh.ndof, K, mechanismFreeDof: result.mechanism.freeDofIndex, freePerm: perm };
 }
 
-/** Solve one 3D static load case. */
+/** Solve one 3D static load case. docs/FEM-SPEC.md §4.3 / §4.9. */
 export function solveStatic3d(
   mesh: AnalysisMesh3d,
   F: Float64Array,
@@ -80,7 +80,7 @@ export function solveStatic3d(
   };
 }
 
-/** Recover local end forces; subtract Hermite fixed-ends when present (traffic). */
+/** Recover local end forces; subtract Hermite fixed-ends when present (traffic). docs/FEM-SPEC.md §4.2. */
 export function elementForcesAtDisplacement3d(
   mesh: AnalysisMesh3d,
   u: Float64Array,
@@ -102,7 +102,7 @@ export function utilizationAtDisplacement3d(
  * `options.shearFlexible` selects the Timoshenko element block (§14 4E).
  * When any member is `cableOnly`, delegates to the tension-only iteration so
  * wind/traffic/ramp base solves see cable slack on the live Build path
- * instead of only through the dedicated helper.
+ * instead of only through the dedicated helper. docs/FEM-SPEC.md §4.9 / §14 4H.
  */
 export function analyzeStaticModel3d(
   model: EditorModel3d,
@@ -182,6 +182,7 @@ function recoverElementForces3d(
 
 /**
  * Combined-stress utilization |N/A ± My·c/Iy ± Mz·c/Iz| / fy at both ends.
+ * docs/FEM-SPEC.md §4.7(b) / §4.9 (biaxial).
  */
 function recoverUtilization3d(mesh: AnalysisMesh3d, forces: Float64Array): Map<number, number> {
   const utilization = new Map<number, number>();
@@ -225,7 +226,7 @@ function fiberUtilization3d(
   return Math.max(axial + bending, Math.abs(axial - bending)) / fy;
 }
 
-/** Honest display amplification sized to a legible ~28 px screen displacement. */
+/** Honest display amplification sized to a legible ~28 px screen displacement. docs/FEM-SPEC.md §6.4 / §4.9. */
 export function deformationDisplay3d(
   mesh: AnalysisMesh3d,
   u: Float64Array,
@@ -276,7 +277,7 @@ function recoverReactions3d(
   return reactions;
 }
 
-/** Strain energy ½ uᵀ K u. Gate G24. */
+/** Strain energy ½ uᵀ K u. docs/FEM-SPEC.md §4.9 gate G24. */
 export function strainEnergy3d(K: SkylineMatrix, u: Float64Array, _ndof?: number): number {
   const Ku = matvecSkyline(K, u);
   let energy = 0;
@@ -284,14 +285,14 @@ export function strainEnergy3d(K: SkylineMatrix, u: Float64Array, _ndof?: number
   return 0.5 * energy;
 }
 
-/** External work ½ uᵀ F at equilibrium. Gate G24. */
+/** External work ½ uᵀ F at equilibrium. docs/FEM-SPEC.md §4.9 gate G24. */
 export function externalWork3d(u: Float64Array, F: Float64Array): number {
   let work = 0;
   for (let i = 0; i < u.length; i++) work += u[i]! * F[i]!;
   return 0.5 * work;
 }
 
-/** Map a singular free-partition pivot (RCM order) back to an editor node. */
+/** Map a singular free-partition pivot (RCM order) back to an editor node. docs/FEM-SPEC.md §4.3 / §14 3V. */
 export function mechanismEditorNode3d(
   mesh: AnalysisMesh3d,
   freeDofIndex: number,

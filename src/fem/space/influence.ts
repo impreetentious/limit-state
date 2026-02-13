@@ -15,7 +15,7 @@ import { buildMesh3d } from './mesh';
 import { prepareStaticSystem3d, solveStatic3d, type StaticSystem3d } from './statics';
 import type { AnalysisMesh3d, EditorModel3d, StaticResult3d } from './types';
 
-/** Response quantity whose influence line is traced by a unit −Z deck load. */
+/** Response quantity whose influence line is traced by a unit −Z deck load. docs/FEM-SPEC.md §14 4B. */
 export type InfluenceQuantity3d =
   | { kind: 'reaction'; nodeId: number; component: 'fx' | 'fy' | 'fz' | 'mx' | 'my' | 'mz' }
   | { kind: 'axial'; memberId: number }
@@ -51,7 +51,7 @@ export interface InfluenceEnvelope3d {
   criticalStation: number;
 }
 
-/** Factor the deck once. */
+/** Factor the deck once. docs/FEM-SPEC.md §14 4B. */
 export function prepareInfluence3d(model: EditorModel3d): InfluenceScenario3d {
   const mesh = buildMesh3d(model);
   const route = buildDeckRoute3d(model, mesh);
@@ -65,7 +65,7 @@ export function prepareInfluence3d(model: EditorModel3d): InfluenceScenario3d {
   };
 }
 
-/** Compute a full unit-load sweep. */
+/** Compute a full unit-load sweep. docs/FEM-SPEC.md §14 4B. */
 export function computeInfluenceLine3d(
   model: EditorModel3d,
   quantity: InfluenceQuantity3d,
@@ -74,7 +74,7 @@ export function computeInfluenceLine3d(
   return computeInfluenceLineAt3d(prepareInfluence3d(model), quantity, options.step);
 }
 
-/** Re-use a prepared scenario. */
+/** Re-use a prepared scenario. docs/FEM-SPEC.md §14 4B. */
 export function computeInfluenceLineAt3d(
   scenario: InfluenceScenario3d,
   quantity: InfluenceQuantity3d,
@@ -102,7 +102,7 @@ export function computeInfluenceLineAt3d(
   };
 }
 
-/** Unit −Z-load response at one deck station. */
+/** Unit −Z-load response at one deck station. docs/FEM-SPEC.md §14 4B. */
 export function sampleInfluenceAt3d(
   scenario: InfluenceScenario3d,
   station: number,
@@ -127,7 +127,7 @@ export function sampleInfluenceAt3d(
 
 /**
  * Envelope a two-axle vehicle (equal axle weights, fixed spacing) against a
- * 3D influence line.
+ * 3D influence line. docs/FEM-SPEC.md §14 4B (2D 2D cousin).
  */
 export function envelopeFromInfluence3d(
   line: InfluenceLine3d,
@@ -148,7 +148,7 @@ export function envelopeFromInfluence3d(
   return { maxAbs, criticalStation };
 }
 
-/** Per-member |M| envelope from midspan-moment influence lines under the current traffic vehicle. */
+/** Per-member |M| envelope from midspan-moment influence lines under the current traffic vehicle. docs/FEM-SPEC.md §14 4B. */
 export function memberMomentEnvelopeFromInfluence3d(model: EditorModel3d): Map<number, number> {
   const weightkN = model.story?.kind === 'traffic' ? model.story.weightkN : 0;
   const axleForce = (Math.max(0, weightkN) * 1000) / 2;

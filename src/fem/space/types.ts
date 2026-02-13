@@ -17,7 +17,7 @@ export interface SupportSpec3d {
   kind: SupportKind3d;
 }
 
-/** End releases for the three rotational DOFs. */
+/** End releases for the three rotational DOFs. docs/FEM-SPEC.md §4.9. */
 export interface EndReleases3d {
   tx: boolean; // θx (torsion)
   ty: boolean; // θy
@@ -32,9 +32,9 @@ export interface MemberSpec3d {
   section: import('../types').SectionSpec;
   releaseA: EndReleases3d;
   releaseB: EndReleases3d;
-  /** Roll angle (rad) about local x after the default triad. */
+  /** Roll angle (rad) about local x after the default triad. docs/FEM-SPEC.md §4.9. */
   roll: number;
-  /** Tension-only cable — slack iteration in `cables3d`. */
+  /** Tension-only cable — slack iteration in `cables3d`. docs/FEM-SPEC.md §14 3X. */
   cableOnly?: boolean;
 }
 
@@ -56,16 +56,16 @@ export interface EditorModel3d {
   members: MemberSpec3d[];
   supports: SupportSpec3d[];
   loads: { gravity: boolean; points: PointLoad3d[] };
-  /** Contiguous member-id path for traffic (3D polyline). */
+  /** Contiguous member-id path for traffic (3D polyline). docs/FEM-SPEC.md §14. */
   deck?: number[];
   /**
    * Phase 3 stories. Wind carries a horizontal direction dial; traffic rides
-   * the deck polyline.
+   * the deck polyline. docs/FEM-SPEC.md §14 Phase 3 Stories.
    */
   story?: StorySpec3d;
 }
 
-/** 3D story specs. */
+/** 3D story specs. docs/FEM-SPEC.md §14 Phase 3 Stories / closeout 3V–3Y. */
 export type StorySpec3d =
   | {
       kind: 'wind';
@@ -73,14 +73,14 @@ export type StorySpec3d =
       amplitudekNm: number;
       freqHz: number;
       zeta: number;
-      /** Horizontal azimuth in degrees: 0 = +X, 90 = +Y. */
+      /** Horizontal azimuth in degrees: 0 = +X, 90 = +Y. docs/FEM-SPEC.md §14. */
       directionDeg: number;
     }
   | {
       kind: 'traffic';
       weightkN: number;
       speed: number;
-      /** Optional moving-mass Newmark (2H cousin). */
+      /** Optional moving-mass Newmark (2H cousin). docs/FEM-SPEC.md §14 3Y. */
       movingMass: boolean;
     }
   | { kind: 'ramp' }
@@ -102,7 +102,7 @@ export interface Element3d {
   Iy: number;
   Iz: number;
   J: number;
-  /** Extreme fiber distance for Iz bending (section depth/2). */
+  /** Extreme fiber distance for Iz bending (section depth/2). docs/FEM-SPEC.md §4.8. */
   c?: number;
   fy?: number;
   rho: number;
@@ -111,7 +111,7 @@ export interface Element3d {
   R: Float64Array;
   releaseA: EndReleases3d;
   releaseB: EndReleases3d;
-  /** Shear area for Timoshenko option. Same value both planes. */
+  /** Shear area for Timoshenko option (docs/FEM-SPEC.md §14 4E). Same value both planes. */
   As?: number;
 }
 
@@ -122,11 +122,11 @@ export interface AnalysisMesh3d {
   editorNode: Int32Array;
   freeDofs: Int32Array;
   ndof: number;
-  /** Timoshenko toggle: when true, kLocal3d uses (1+φ) blocks. */
+  /** Timoshenko toggle: when true, kLocal3d uses (1+φ) blocks. docs/FEM-SPEC.md §14 4E. */
   shearFlexible?: boolean;
 }
 
-/** Optional analysis toggles when meshing a 3D model. */
+/** Optional analysis toggles when meshing a 3D model. docs/FEM-SPEC.md §14 4E. */
 export interface AnalysisOptions3d {
   shearFlexible?: boolean;
 }

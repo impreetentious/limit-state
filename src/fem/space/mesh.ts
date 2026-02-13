@@ -16,7 +16,7 @@ import type {
 } from './types';
 import { NO_RELEASES, TRUSS_RELEASES } from './types';
 
-/** Build the 3D analysis mesh. */
+/** Build the 3D analysis mesh. docs/FEM-SPEC.md §4.4 / §4.9. */
 export function buildMesh3d(model: EditorModel3d, options: AnalysisOptions3d = {}): AnalysisMesh3d {
   const nodeById = new Map<number, { index: number; x: number; y: number; z: number }>();
   const coords: number[] = [];
@@ -207,7 +207,7 @@ function validateSupports(
   }
 }
 
-/** Convenience: planar XY cantilever matching the 2D G1 setup. Gate G23. */
+/** Convenience: planar XY cantilever matching the 2D G1 setup. docs/FEM-SPEC.md §4.9 gate G23. */
 export function planarCantileverModel(opts?: {
   L?: number;
   section?: MemberSpec3d['section'];

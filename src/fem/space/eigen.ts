@@ -7,12 +7,12 @@ import type { EigenResult } from '../types';
 import { assembleK3dDense, assembleKg3d, assembleM3d } from './assemble';
 import type { AnalysisMesh3d } from './types';
 
-/** Space-frame buckling under tension-positive element axial forces. */
+/** Space-frame buckling under tension-positive element axial forces. docs/FEM-SPEC.md §4.5 / §4.9. */
 export function buckling3d(mesh: AnalysisMesh3d, elementN: Float64Array): EigenResult {
   return bucklingAssembled(mesh, assembleK3dDense(mesh), assembleKg3d(mesh, elementN));
 }
 
-/** Space-frame modal analysis (lowest nModes). */
+/** Space-frame modal analysis (lowest nModes). docs/FEM-SPEC.md §4.5 / §4.9. */
 export function modal3d(mesh: AnalysisMesh3d, nModes: number): EigenResult {
   return modalAssembled(mesh, assembleK3dDense(mesh), assembleM3d(mesh), nModes);
 }
