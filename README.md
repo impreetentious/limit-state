@@ -67,6 +67,14 @@ Static, client-side, no backend. Nothing is deployed yet; both pipelines are com
 
 Both set `BASE_PATH` for project-site subpaths; for a custom domain or root site, set it to `''` in the pipeline. Or `npm run build` and drop `out/` on any static host.
 
+Whatever host serves the export should send the response headers documented in
+[docs/STATIC-HOST-HEADERS.md](docs/STATIC-HOST-HEADERS.md) — in particular `worker-src 'self'`,
+without which modal and buckling analysis stops working while the rest of the app still renders.
+`vercel.json` and `serve.json` carry the same policy in the two formats hosts read, and
+`npm run check:csp` fails if they and the document ever disagree. Note that neither GitHub Pages nor
+GitLab Pages can set custom response headers, so on those two hosts the policy is documentation
+rather than enforcement — worth weighing when choosing the deployment target.
+
 ## Stack
 
 Next.js (static export) · React 19 · TypeScript (strict) · Zustand · Canvas2D + three.js (3D). The FEM kernel (`src/fem/`) is hand-rolled on `Float64Array` with **zero numerics dependencies** — Euler–Bernoulli frame elements (2D + 12-DOF space frame), LDLᵀ / skyline+RCM free solves, subspace-iteration eigenanalysis, Newmark-β dynamics. Eigen solves run in a Web Worker; traffic re-solves are single back-substitutions, which is why it holds 60 fps.
@@ -77,4 +85,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ---
 
-**Version:** v0.10.4
+**Version:** v0.10.5
