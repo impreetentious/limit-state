@@ -61,7 +61,7 @@ export function prepareWind3d(model: EditorModel3d): WindScenario3d | undefined 
   }
 }
 
-/** Horizontal wind unit vector from directionDeg (0 = +X, 90 = +Y). */
+/** Horizontal wind unit vector from directionDeg (0 = +X, 90 = +Y). docs/FEM-SPEC.md §14. */
 export function windDirectionUnit(directionDeg: number): { x: number; y: number; z: number } {
   const rad = (directionDeg * Math.PI) / 180;
   return { x: Math.cos(rad), y: Math.sin(rad), z: 0 };
@@ -77,7 +77,7 @@ export function windLoadAt3d(scenario: WindScenario3d, time: number): Float64Arr
   return load;
 }
 
-/** Unit-amplitude wind load for DAF reference. */
+/** Unit-amplitude wind load for DAF reference. docs/FEM-SPEC.md §4.6 / §14. */
 export function windIncrementUnit3d(scenario: WindScenario3d): Float64Array {
   return windIncrementForMultiplier3d(scenario, 1);
 }
@@ -167,7 +167,7 @@ export function stepWind3d(
 }
 
 /**
- * Modal projection q_i = φ_iᵀ M u for the 3D wind explainer bars.
+ * Modal projection q_i = φ_iᵀ M u for the 3D wind explainer bars. docs/FEM-SPEC.md §4.6 / §14 4C.
  */
 export function modalCoordinates3d(
   mesh: AnalysisMesh3d,
@@ -190,7 +190,7 @@ export function modalCoordinates3d(
 
 /**
  * Modal coordinates of the static response to a unit-amplitude wind load — the
- * denominator of the measured DAF. Solved via K uref = F_unit.
+ * denominator of the measured DAF. Solved via K uref = F_unit. docs/FEM-SPEC.md §14 4C.
  */
 export function windReferenceCoordinates3d(
   scenario: WindScenario3d,
@@ -267,7 +267,7 @@ function matVec(matrix: Float64Array, size: number, vector: Float64Array): Float
 
 /**
  * Ratio between the currently-dominant modal coordinate amplitude and its
- * static reference — the honest measured dynamic amplification.
+ * static reference — the honest measured dynamic amplification. docs/FEM-SPEC.md §4.6 / §14 4C.
  */
 export function measuredDaf3d(
   coordinates: Float64Array,
@@ -289,6 +289,7 @@ export function measuredDaf3d(
 /**
  * Three-part resonance detector matching §4.6 (forcing within ±10 % of f_i,
  * envelope growth ≥ 1.5× over five forcing cycles, ζ < 5 %). Dimension-agnostic.
+ * docs/FEM-SPEC.md §14 4C.
  */
 export function detectResonance3d(
   forcingHz: number,

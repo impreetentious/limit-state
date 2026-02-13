@@ -318,7 +318,7 @@ export function migrateV1toV2(model: EditorModel): EditorModel3d {
   };
 }
 
-/** Map a v1 story into the 3D story union (wind gains directionDeg = 0). */
+/** Map a v1 story into the 3D story union (wind gains directionDeg = 0). docs/FEM-SPEC.md §14 3U. */
 export function migrateStoryTo3d(story: StorySpec): NonNullable<EditorModel3d['story']> {
   if (story.kind === 'traffic') {
     return {
@@ -346,7 +346,7 @@ export function migrateStoryTo3d(story: StorySpec): NonNullable<EditorModel3d['s
 }
 
 function boolReleaseTo3d(released: boolean): EndReleases3d {
-  // Moment release → θy+θz; keep torsion for nonsingular condensation.
+  // Moment release → θy+θz; keep torsion for nonsingular condensation. docs/FEM-SPEC.md §14 3U.
   return released ? { tx: false, ty: true, tz: true } : { ...NO_RELEASES };
 }
 
@@ -356,7 +356,7 @@ function migrateSupportKind(kind: 'pin' | 'roller' | 'fixed'): SupportKind3d {
   return 'pin';
 }
 
-/** Deterministic `#mu=` share fragment for curated 3D gallery entries. */
+/** Deterministic `#mu=` share fragment for curated 3D gallery entries. docs/FEM-SPEC.md §14 4J. */
 export function encodeModelUncompressed3d(model: EditorModel3d): string {
   const valid = validateModel3d(model);
   return `#mu=${base64urlEncode(new TextEncoder().encode(JSON.stringify(valid)))}`;
@@ -377,7 +377,7 @@ export async function encodeModel3d(model: EditorModel3d): Promise<string> {
   }
 }
 
-/** Decode a #m/#mu fragment as schema v2 (rejects v1 — use decodeModel + migrateV1toV2). */
+/** Decode a #m/#mu fragment as schema v2 (rejects v1 — use decodeModel + migrateV1toV2). docs/FEM-SPEC.md §14. */
 export async function decodeModel3d(hash: string): Promise<EditorModel3d> {
   const fragment = hash.startsWith('#') ? hash : new URL(hash, 'https://limit-state.local').hash;
   const match = /^#(m|mu)=([A-Za-z0-9_-]+)$/.exec(fragment);

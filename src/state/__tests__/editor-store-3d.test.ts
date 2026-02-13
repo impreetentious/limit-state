@@ -1,5 +1,5 @@
 /**
- * Phase 4G tests — 3D editor undo/redo + member-limit enforcement.
+ * Phase 4G tests — 3D editor undo/redo + member-limit enforcement. docs/FEM-SPEC.md §14 4G.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { MEMBER_HARD_LIMIT_3D, useEditorStore3d } from '../editor-store-3d';

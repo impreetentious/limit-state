@@ -51,6 +51,7 @@ function offsetLen2(o: Vec3): number {
 
 /**
  * Extrude (or replicate when `connectLayers: false`) a planar sketch into space.
+ * docs/FEM-SPEC.md §14 Phase 3 Editor.
  */
 export function extrudeModel3d(model: EditorModel3d, options: ExtrudeOptions): ExtrudeResult {
   const count = Math.max(1, Math.floor(options.count ?? 1));
@@ -150,7 +151,7 @@ export function extrudeModel3d(model: EditorModel3d, options: ExtrudeOptions): E
   };
 }
 
-/** Array-copy without connecting struts. */
+/** Array-copy without connecting struts. docs/FEM-SPEC.md §14 Phase 3 Editor. */
 export function replicateModel3d(
   model: EditorModel3d,
   options: Omit<ExtrudeOptions, 'connectLayers'>,

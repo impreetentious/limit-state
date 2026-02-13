@@ -38,7 +38,7 @@ export interface EarthquakeScenario3d {
   duration: number;
 }
 
-/** Prepare mesh, mass, influence vector, and spectrum for one 3D earthquake run. */
+/** Prepare mesh, mass, influence vector, and spectrum for one 3D earthquake run. docs/FEM-SPEC.md §14 3W. */
 export function prepareEarthquake3d(model: EditorModel3d): EarthquakeScenario3d | undefined {
   if (model.story?.kind !== 'earthquake') return undefined;
   try {

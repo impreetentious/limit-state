@@ -43,7 +43,7 @@ export type Selection3d =
   /** Additive member selection used for bulk material/section edits. */
   | { kind: 'members'; ids: number[] };
 
-/** Three-click custom workplane definition in progress. */
+/** Three-click custom workplane definition in progress. docs/FEM-SPEC.md §14 3T. */
 export type WorkplanePick =
   | { step: 0 }
   | { step: 1; origin: Vec3 }
@@ -62,12 +62,12 @@ interface EditorState3d {
   extrudeDistance: number;
   /** Number of copies for extrude / replicate. */
   extrudeCount: number;
-  /** Undo / redo snapshot stack. */
+  /** Undo / redo snapshot stack. docs/FEM-SPEC.md §14 4G. */
   past: EditorModel3d[];
   future: EditorModel3d[];
   undo: () => void;
   redo: () => void;
-  /** Result diagram overlay for 3D members. */
+  /** Result diagram overlay for 3D members. docs/FEM-SPEC.md §14 4F. */
   resultDiagram: ResultDiagram3d;
   setResultDiagram: (diagram: ResultDiagram3d) => void;
   /** Timoshenko (shear-flexible) element formulation for 3D statics. */
@@ -106,7 +106,7 @@ interface EditorState3d {
   deleteSelection: () => void;
   setMemberStart: (id: number | null) => void;
   setModelName: (name: string) => void;
-  /** Extrude along workplane normal (or custom offset). */
+  /** Extrude along workplane normal (or custom offset). docs/FEM-SPEC.md §14. */
   extrude: (offset?: Vec3) => void;
   /** Replicate along workplane normal without connecting struts. */
   replicate: (offset?: Vec3) => void;
@@ -667,7 +667,7 @@ export const useEditorStore3d = create<EditorState3d>((rawSet, get) => {
   };
 });
 
-/** Project a world hit onto the active workplane. */
+/** Project a world hit onto the active workplane. docs/FEM-SPEC.md §14 Phase 3 / 3T. */
 export function projectToWorkplane(
   point: { x: number; y: number; z: number },
   plane: WorkplaneSpec | WorkplaneKind,

@@ -26,7 +26,7 @@ interface Props {
   rampCapacity?: number;
   pushover?: PushoverResult3d;
   earthquake?: { scenario: EarthquakeScenario3d; t: number; yieldMember?: number };
-  /** 3D wind DAF / resonance / modal-energy chrome. */
+  /** 3D wind DAF / resonance / modal-energy chrome (docs/FEM-SPEC.md §14 4C). */
   wind?: {
     daf?: { mode: number; ratio: number };
     resonanceMode?: number;
@@ -483,7 +483,7 @@ function formatForce(value: number): string {
   return `${(value / 1000).toFixed(1)} kN`;
 }
 
-/** Compact pushover base-shear vs roof-displacement curve for 3D. */
+/** Compact pushover base-shear vs roof-displacement curve for 3D. docs/FEM-SPEC.md §14 4D. */
 function PushoverPanel3d({ result }: { result: PushoverResult3d }): React.JSX.Element {
   const maxShear = Math.max(...result.points.map((p) => p.baseShear), 1e-9);
   const maxDisp = Math.max(...result.points.map((p) => p.roofDisp), 1e-12);
@@ -527,7 +527,7 @@ function PushoverPanel3d({ result }: { result: PushoverResult3d }): React.JSX.El
   );
 }
 
-/** Compact 3D pseudo-acceleration spectrum with an f₁ marker. */
+/** Compact 3D pseudo-acceleration spectrum with an f₁ marker. docs/FEM-SPEC.md §14 4D. */
 function SpectrumPanel3d({
   spectrum,
   f1,

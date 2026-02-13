@@ -1939,7 +1939,7 @@ function formatLength(value: number): string {
   return value < 0.01 ? `${(value * 1000).toFixed(2)} mm` : `${value.toFixed(3)} m`;
 }
 
-/** Members with L/h < 10, where shear flexibility starts to matter. */
+/** Members with L/h < 10, where shear flexibility starts to matter. docs/FEM-SPEC.md §14 2A. */
 function stockyMemberIds(model: EditorModel): number[] {
   const nodeById = new Map(model.nodes.map((node) => [node.id, node]));
   const stocky: number[] = [];

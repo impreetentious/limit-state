@@ -64,7 +64,7 @@ export interface TrafficScenario3d {
   K: Float64Array;
 }
 
-/** Build the deck route and factor K once. */
+/** Build the deck route and factor K once. docs/FEM-SPEC.md §14 / 3Y. */
 export function prepareTraffic3d(model: EditorModel3d): TrafficScenario3d {
   const mesh = buildMesh3d(model);
   const route = buildDeckRoute3d(model, mesh);
@@ -290,7 +290,7 @@ function maxNodalDisp3d(u: Float64Array): number {
 
 /**
  * Merge per-member combined bending magnitude |M| = √(My² + Mz²) across a
- * quasi-static station sweep into a persistent moving-load envelope.
+ * quasi-static station sweep into a persistent moving-load envelope. docs/FEM-SPEC.md §14 4A.
  */
 export function mergeMomentEnvelope3d(
   previous: ReadonlyMap<number, number>,
@@ -313,7 +313,7 @@ export function mergeMomentEnvelope3d(
 
 /**
  * Sweep the traffic vehicle across the deck at fixed spacing and return the
- * moving-load |M| envelope per member.
+ * moving-load |M| envelope per member. docs/FEM-SPEC.md §14 4A.
  */
 export function trafficMomentEnvelope3d(
   scenario: TrafficScenario3d,

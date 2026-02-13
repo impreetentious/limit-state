@@ -5,7 +5,7 @@
 import type { Vec3 } from './ops3d';
 import { scaleVec } from './ops3d';
 
-/** Right-handed draw frame: u×v = n (extrude direction). */
+/** Right-handed draw frame: u×v = n (extrude direction). docs/FEM-SPEC.md §14 3T. */
 export interface WorkplaneFrame {
   origin: Vec3;
   u: Vec3;
@@ -79,7 +79,7 @@ function unit(v: Vec3): Vec3 | undefined {
   return { x: v.x / L, y: v.y / L, z: v.z / L };
 }
 
-/** Closest point on the plane. */
+/** Closest point on the plane. docs/FEM-SPEC.md §14 3T. */
 export function projectPointToFrame(p: Vec3, frame: WorkplaneFrame): Vec3 {
   const rel = sub(p, frame.origin);
   return sub(p, scaleVec(frame.n, dot(rel, frame.n)));
@@ -91,6 +91,7 @@ export function frameExtrudeAxis(frame: WorkplaneFrame): Vec3 {
 
 /**
  * Build a frame from three non-collinear points (origin, u-direction, v hint).
+ * docs/FEM-SPEC.md §14 3T.
  */
 export function frameFromThreePoints(
   origin: Vec3,
@@ -109,6 +110,7 @@ export function frameFromThreePoints(
 
 /**
  * Point + normal: complete a right-handed triad (prefer global Z, else Y — same as memberTriad).
+ * docs/FEM-SPEC.md §14 3T / §4.9.
  */
 export function frameFromPointNormal(origin: Vec3, normal: Vec3): WorkplaneFrame | undefined {
   const n = unit(normal);

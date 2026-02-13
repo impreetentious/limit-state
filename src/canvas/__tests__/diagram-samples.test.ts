@@ -5,7 +5,7 @@ import { PRESETS } from '../../presets/scenes';
 import { DIAGRAM_STATIONS, sampleDiagram } from '../diagram-samples';
 
 /**
- * The A/S/M diagrams are pedagogy, not decoration. Before the
+ * docs/FEM-SPEC.md §6.8 — the A/S/M diagrams are pedagogy, not decoration. Before the
  * interior-station sampling landed, each member was reduced to a single extreme
  * value and drawn as a constant-height block: a gravity-loaded simple beam
  * rendered a flat moment and a shear that never crossed zero, which is the
@@ -41,7 +41,7 @@ describe('A/S/M diagram sampling', () => {
 
   // ------------------------------------------------------------------
   // GAP-10 IS NOT COMPLETE. The two cases below are the acceptance criteria
-  // ("a parabolic sagging moment with the peak at midspan and
+  // from docs/FEM-SPEC.md §6.8 ("a parabolic sagging moment with the peak at midspan and
   // a linear shear crossing zero there"). They are skipped because the shape is
   // still wrong, and the cause is NOT in this file.
   //

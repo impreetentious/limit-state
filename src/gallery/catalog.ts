@@ -43,7 +43,7 @@ export function gallerySources(): GallerySource[] {
   return [...presets, ...solutions];
 }
 
-/** 3D gallery sources — the spatial teaching presets. */
+/** 3D gallery sources — the spatial teaching presets. docs/FEM-SPEC.md §14 4J. */
 export function gallerySources3d(): GallerySource3d[] {
   return PRESETS_3D.filter((preset) => preset.id !== 'blank').map((preset) => ({
     id: `preset3d-${preset.id}`,

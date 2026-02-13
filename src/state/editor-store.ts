@@ -38,11 +38,11 @@ export interface EditorStore {
   notice: string | null;
   resultDiagram: ResultDiagram;
   showDeformed: boolean;
-  /** Timoshenko (shear-flexible) analysis option. */
+  /** Timoshenko (shear-flexible) analysis option. docs/FEM-SPEC.md §14 2A. */
   shearFlexible: boolean;
-  /** P-Δ second-order statics. */
+  /** P-Δ second-order statics. docs/FEM-SPEC.md §14 2B. */
   secondOrder: boolean;
-  /** Active constrained-budget challenge id, or null. */
+  /** Active constrained-budget challenge id, or null. docs/FEM-SPEC.md §14 2G. */
   activeChallengeId: string | null;
   setMode: (mode: AppMode) => void;
   setTool: (tool: EditorTool) => void;

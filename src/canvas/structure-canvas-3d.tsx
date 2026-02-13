@@ -21,10 +21,10 @@ import { projectPointToFrame, resolveWorkplaneFrame, type WorkplaneSpec } from '
 const PAPER = 0xf4f1ea;
 const INK = 0x1a1d21;
 const BLUE = 0x2456a4;
-/** LOD hysteresis. Far → lines; near → extruded cylinders. */
+/** LOD hysteresis — docs/FEM-SPEC.md §14 3R. Far → lines; near → extruded cylinders. */
 const LOD_ENTER_LINES = 42;
 const LOD_EXIT_LINES = 28;
-/** Force line LOD above this member count (rebuild cost + fill rate). */
+/** Force line LOD above this member count (rebuild cost + fill rate). docs/FEM-SPEC.md §14 3R. */
 const FORCE_LINES_AT_MEMBERS = 64;
 /** Shared unit cylinder (scale radius/length per member). */
 const UNIT_CYLINDER = new THREE.CylinderGeometry(1, 1, 1, 6, 1);
@@ -34,7 +34,7 @@ export interface StructureCanvas3dProps {
   analysis: StaticAnalysis3d;
   showDeformed: boolean;
   modeGhost?: { result: EigenResult; mode: number; phase: number };
-  /** Live Newmark / traffic displacement (6 DOF/node). */
+  /** Live Newmark / traffic displacement (6 DOF/node). docs/FEM-SPEC.md §14. */
   dynamicDisplacement?: Float64Array;
   /** Traffic axle markers along the deck polyline. */
   trafficAxles?: Array<{ x: number; y: number; z: number }>;
@@ -49,7 +49,7 @@ export interface StructureCanvas3dProps {
   selectedNodeId?: number | null;
   selectedMemberId?: number | null;
   selectedMemberIds?: readonly number[];
-  /** Optional per-member overlay: 'axial' | 'shear' | 'moment' colors + widths by force magnitude. */
+  /** Optional per-member overlay: 'axial' | 'shear' | 'moment' colors + widths by force magnitude. docs/FEM-SPEC.md §14 4F. */
   diagram?: 'none' | 'axial' | 'shear' | 'moment';
 }
 
@@ -280,7 +280,7 @@ export function StructureCanvas3d({
   );
 }
 
-/** Faint space-portal sketch for empty 3D canvas. */
+/** Faint space-portal sketch for empty 3D canvas. docs/FEM-SPEC.md §14 3Q. */
 function buildEmptyGhost(): THREE.Group {
   const g = new THREE.Group();
   const mat = new THREE.LineDashedMaterial({
@@ -391,7 +391,7 @@ function rebuildStructure(
       maxAxial = Math.max(maxAxial, Math.abs(elementForces[i * 12]!));
   }
 
-  // Per-member N / V / M magnitudes for optional overlay.
+  // Per-member N / V / M magnitudes for optional overlay. docs/FEM-SPEC.md §14 4F.
   const diagram = props.diagram ?? 'none';
   const diagramValues =
     diagram !== 'none' && mesh3 && elementForces
@@ -485,7 +485,7 @@ function rebuildGhost(root: THREE.Group, props: StructureCanvas3dProps): void {
   }
 }
 
-/** Update ghost line endpoints for the current phase without reallocating. */
+/** Update ghost line endpoints for the current phase without reallocating. docs/FEM-SPEC.md §14 3R. */
 function updateGhostPhase(root: THREE.Group, props: StructureCanvas3dProps): void {
   const { analysis, modeGhost } = props;
   if (!modeGhost || analysis.kind !== 'stable' || root.children.length === 0) return;
@@ -521,7 +521,7 @@ function memberAxial(
 /**
  * Per-member peak magnitude for the chosen result diagram. Axial N = |Fx|;
  * shear V = max √(Fy² + Fz²) at either end; moment M = max √(My² + Mz²) at
- * either end.
+ * either end. docs/FEM-SPEC.md §14 4F.
  */
 function memberDiagramMagnitudes(
   diagram: 'axial' | 'shear' | 'moment',
@@ -551,7 +551,7 @@ function memberDiagramMagnitudes(
   return out;
 }
 
-/** Uniform blue → red intensity for a normalized [0,1] diagram value. */
+/** Uniform blue → red intensity for a normalized [0,1] diagram value. docs/FEM-SPEC.md §14 4F. */
 function diagramColorHex(ratio: number): number {
   const t = Math.max(0, Math.min(1, ratio));
   // Blueprint blue → paper → deep red (mirror stressColorHex scale).

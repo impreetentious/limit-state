@@ -69,7 +69,7 @@ function cable(
   b: number,
   section: SectionSpec = { kind: 'rect', b: 0.02, h: 0.02 },
 ): MemberSpec3d {
-  // Keep St. Venant torsion (tx) so condensation stays nonsingular at pin anchors.
+  // Keep St. Venant torsion (tx) so condensation stays nonsingular at pin anchors. docs/FEM-SPEC.md §14 3X.
   const bendingOnly: EndReleases3d = { tx: false, ty: true, tz: true };
   return {
     id,
@@ -221,7 +221,7 @@ export function spaceDeckDemo(): EditorModel3d {
   };
 }
 
-/** Simply-supported beam along +X — diagrams + traffic. */
+/** Simply-supported beam along +X — diagrams + traffic. docs/FEM-SPEC.md §7 #1. */
 export function simpleBeam3d(): EditorModel3d {
   const L = 8;
   return {
@@ -245,7 +245,7 @@ export function simpleBeam3d(): EditorModel3d {
 
 /**
  * Spatial Pratt: two parallel planes of the §7 Pratt with transverse ties.
- * Bottom chord of the −Y plane is the traffic deck.
+ * Bottom chord of the −Y plane is the traffic deck. docs/FEM-SPEC.md §7 #2.
  */
 export function prattTruss3d(): EditorModel3d {
   const W = 4;
@@ -299,7 +299,7 @@ export function prattTruss3d(): EditorModel3d {
   };
 }
 
-/** Two-span cantilever bridge — twin girders on fixed piers. */
+/** Two-span cantilever bridge — twin girders on fixed piers. docs/FEM-SPEC.md §7 #3. */
 export function cantileverBridge3d(): EditorModel3d {
   const W = 3;
   const xs = [-12, -4, 4, 12];
@@ -340,7 +340,7 @@ export function cantileverBridge3d(): EditorModel3d {
   };
 }
 
-/** Radio mast — spaghetti column, ramp story. */
+/** Radio mast — spaghetti column, ramp story. docs/FEM-SPEC.md §7 #4 / §14 3V. */
 export function radioMast3d(): EditorModel3d {
   return {
     v: 2,
@@ -365,6 +365,7 @@ export function radioMast3d(): EditorModel3d {
  * Twin-girder slender deck — modal f₁ vertical, f₂ St. Venant torsion.
  * Tuned ~60 m × 6 m, 4 spans; open I-girders keep GJ low so torsion appears early.
  * Honesty: this is linear St. Venant torsion, not Tacoma aeroelastic flutter / warping.
+ * docs/FEM-SPEC.md §7 #5 / §14 Phase 3 Polish.
  */
 export function slenderDeck3d(): EditorModel3d {
   const L = 60;
@@ -472,7 +473,7 @@ export function guyedMast3d(): EditorModel3d {
   };
 }
 
-/** Fixed-base portal for plastic pushover (3D cousin of G19). */
+/** Fixed-base portal for plastic pushover (3D cousin of G19). docs/FEM-SPEC.md §14 3W. */
 export function portalPushover3d(): EditorModel3d {
   const h = 4;
   const b = 8;

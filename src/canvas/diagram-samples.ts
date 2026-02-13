@@ -8,7 +8,7 @@ export interface Point {
 }
 
 /**
- * Ordinate sampling for the classic A/S/M diagrams.
+ * docs/FEM-SPEC.md §6.8 — ordinate sampling for the classic A/S/M diagrams.
  *
  * Kept separate from the canvas so it stays pure and testable: the drawing code
  * only maps these model-space ordinates through `toScreen`. Sampling at
