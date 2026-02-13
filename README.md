@@ -63,7 +63,7 @@ server uses port 3012 by default), then run `npm run screenshots` with `SHOT_BAS
 Static, client-side, no backend. Nothing is deployed yet; both pipelines are committed and ready:
 
 - **GitHub Pages** — push to `main`; `.github/workflows/ci.yml` builds and deploys (enable Pages → Source: GitHub Actions in repo settings, once).
-- **GitLab Pages** — `.gitlab-ci.yml` builds and publishes on push to `main`. It is an unused mirror today: the repository has no GitLab remote, so this pipeline only becomes live once a GitLab project exists and is added as a remote.
+- **GitLab Pages** — `.gitlab-ci.yml` builds and publishes on push to `main`. The GitLab project exists and `gitlab/main` is in sync with `origin/main`, so this pipeline is live; publishing only needs Pages enabled on that project.
 
 Both set `BASE_PATH` for project-site subpaths; for a custom domain or root site, set it to `''` in the pipeline. Or `npm run build` and drop `out/` on any static host.
 
@@ -77,4 +77,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ---
 
-**Version:** v0.10.3
+**Version:** v0.10.4
