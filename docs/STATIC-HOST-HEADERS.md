@@ -46,7 +46,7 @@ GitHub Pages and GitLab Pages do not support custom response headers. Deploying 
 policy above is documentation rather than enforcement, and the deployment is only as strong as the
 host allows. If enforced headers matter for the chosen public URL, deploy behind a host that can set
 them — Vercel, Netlify, Cloudflare Pages, or any reverse proxy — rather than assuming this file takes
-effect. This bears directly on owner item 2, the deployment-target choice.
+effect. This bears directly on the deployment-target choice.
 
 ## Changing this policy
 
@@ -56,5 +56,5 @@ an off-origin reference. Update all three together, then re-run `npm run build &
 the suite serves the built export under the deployed `BASE_PATH`, so a policy that breaks the eigen
 worker fails the gate rather than shipping.
 
-Host-specific tuning and verification of the deployed response headers remain an owner step at deploy
-time; nothing here has been checked against a live host.
+Host-specific tuning and verification of the deployed response headers remain a deployment-time
+step; nothing here has been checked against a live host.

@@ -12,7 +12,7 @@ const EXPECTED = {
   nvmrc: '22.22.0',
   engines: '>=22',
   workflow: '.github/workflows/ci.yml',
-  ciNode: '22.22.0',
+  gitlab: '.gitlab-ci.yml',
 };
 
 function markerVersion(file) {
@@ -38,8 +38,6 @@ if (existsSync(path.join(root, 'package-lock.json'))) {
 }
 
 // README.md, package.json, and the lockfile root are the release-version surfaces.
-// Nothing else is gated: the build-time handover log is disposable by design, so no gate
-// may ever require its presence.
 for (const file of ['README.md']) {
   const found = markerVersion(file);
   if (!found) errors.push(`${file} missing **Version:** vX.Y.Z marker`);
@@ -58,9 +56,15 @@ if (ciNodeFile) {
     errors.push(`${EXPECTED.workflow} node-version-file ${ciNodeFile} != .nvmrc`);
 } else {
   const ciNode = workflow.match(/^\s*node-version:\s*['"]?([^'"\s]+)['"]?\s*$/m)?.[1];
-  if (ciNode !== EXPECTED.ciNode) {
-    errors.push(`${EXPECTED.workflow} node-version ${ciNode ?? 'missing'} != ${EXPECTED.ciNode}`);
+  if (ciNode !== nvm) {
+    errors.push(`${EXPECTED.workflow} node-version ${ciNode ?? 'missing'} != ${nvm}`);
   }
+}
+
+const gitlab = read(EXPECTED.gitlab);
+const gitlabNode = gitlab.match(/^image:\s*node:([^\s]+)\s*$/m)?.[1];
+if (gitlabNode !== nvm) {
+  errors.push(`${EXPECTED.gitlab} Node image ${gitlabNode ?? 'missing'} != ${nvm}`);
 }
 
 if (errors.length) {

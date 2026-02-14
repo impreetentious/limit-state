@@ -1,7 +1,7 @@
 {
   "name": "limit-state",
   "private": true,
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Limit State — a structural sandbox that tells the truth. True FEM core, playful surface.",
   "license": "MIT",
   "repository": {
@@ -46,8 +46,8 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^24.10.10",
-    "@types/react": "^19.2.11",
+    "@types/node": "^24.10.11",
+    "@types/react": "^19.2.13",
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.182.0",
     "oxlint": "^1.43.0",
