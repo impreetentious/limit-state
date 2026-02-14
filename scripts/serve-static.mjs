@@ -20,7 +20,12 @@ const types = new Map([
 ]);
 
 function resolveRequest(pathname) {
-  const decoded = decodeURIComponent(pathname);
+  let decoded;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
   const candidate = normalize(join(root, decoded));
   if (candidate !== root && !candidate.startsWith(`${root}${sep}`)) return null;
 

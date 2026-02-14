@@ -3,8 +3,9 @@
  * Run against a local static server serving `out/`.
  * docs/FEM-SPEC.md §14 3Z.
  *
- *   npx serve out -l 4173
- *   node scripts/capture-screenshots.mjs
+ *   npm run build
+ *   npm start
+ *   npm run screenshots
  */
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -15,7 +16,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const docs = join(root, 'docs');
 mkdirSync(docs, { recursive: true });
 
-const base = process.env.SHOT_BASE ?? 'http://127.0.0.1:4173';
+const base = process.env.SHOT_BASE ?? 'http://127.0.0.1:3012';
 
 async function settle(page, ms = 800) {
   await page.waitForTimeout(ms);

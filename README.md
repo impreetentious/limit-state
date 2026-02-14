@@ -85,4 +85,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ---
 
-**Version:** v0.11.1
+**Version:** v0.11.2
