@@ -1,7 +1,6 @@
 /**
  * The honesty gates — docs/FEM-SPEC.md §9. Tolerances are measured, not aspirational
- * (they were validated numerically before the plan was written; see §13.A).
- * Each milestone converts its `it.todo` rows into real tests.
+ * and are validated against the reference values in §13.A.
  */
 import { describe, expect, it } from 'vitest';
 import {

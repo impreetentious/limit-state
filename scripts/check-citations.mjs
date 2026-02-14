@@ -1,6 +1,5 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 /**
  * Ensure every numbered solver-spec citation in source resolves to a real
@@ -8,7 +7,6 @@ import { fileURLToPath } from 'node:url';
  * technical contract rather than to an accidental or renamed section.
  */
 const SPEC = 'docs/FEM-SPEC.md';
-const SELF = path.relative(process.cwd(), fileURLToPath(import.meta.url));
 const ROOTS = ['src', 'scripts', 'tests'];
 const EXTRA_FILES = ['next.config.ts'];
 const EXTENSIONS = new Set(['.ts', '.tsx', '.mjs', '.js', '.css']);
@@ -41,7 +39,7 @@ if (specHeadings.size === 0) {
 }
 
 const files = [...(await Promise.all(ROOTS.map(filesUnder))).flat(), ...EXTRA_FILES].filter(
-  (file) => EXTENSIONS.has(path.extname(file)) && path.normalize(file) !== SELF,
+  (file) => EXTENSIONS.has(path.extname(file)),
 );
 
 const unresolved = [];

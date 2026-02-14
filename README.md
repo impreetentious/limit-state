@@ -36,10 +36,10 @@ The solver is verified against closed-form solutions on every test run — canti
 
 ## Run it
 
-Requires Node 22+.
+Requires Node 22+; CI and `.nvmrc` pin Node 22.22.0.
 
 ```bash
-npm install
+npm ci
 npm run dev        # local dev server on http://localhost:3000
 ```
 
@@ -48,22 +48,31 @@ The 3D view needs WebGL; eigen solves run in a Web Worker.
 ## Verify
 
 ```bash
+npm run check:version
+npm audit --omit=dev --audit-level=high
 npm run typecheck
-npm test           # solver checks against the closed-form benchmarks
 npm run lint
+npm run check:citations
 npm run format:check
 npm run build      # static export in out/
+npm run check:csp
+npm run budget:bundle
+npm test           # solver checks against the closed-form benchmarks
+npx playwright install chromium
+npm run test:e2e   # Chromium tests against the static export
 ```
 
-To refresh README stills after a UI change: `npm run build && node scripts/serve-static.mjs out` (the
-server uses port 3012 by default), then run `npm run screenshots` with `SHOT_BASE` pointing at it.
+To refresh README stills after a UI change, run `npm run build && npm start` (port 3012 by default),
+then run `npm run screenshots` in another terminal.
 
 ## Deploy
 
-Static, client-side, no backend. Nothing is deployed yet; both pipelines are committed and ready:
+Static, client-side, no backend. The repository includes pipelines for both major Pages hosts:
 
-- **GitHub Pages** — push to `main`; `.github/workflows/ci.yml` builds and deploys (enable Pages → Source: GitHub Actions in repo settings, once).
-- **GitLab Pages** — `.gitlab-ci.yml` builds and publishes on push to `main`. The GitLab project exists and `gitlab/main` is in sync with `origin/main`, so this pipeline is live; publishing only needs Pages enabled on that project.
+- **GitHub Pages** — `.github/workflows/ci.yml` verifies pull requests and deploys green pushes to
+  `main`. Set Pages → Source to GitHub Actions in the repository settings.
+- **GitLab Pages** — `.gitlab-ci.yml` runs the same gates and publishes `out/` from green pushes to
+  `main`.
 
 Both set `BASE_PATH` for project-site subpaths; for a custom domain or root site, set it to `''` in the pipeline. Or `npm run build` and drop `out/` on any static host.
 
@@ -77,7 +86,7 @@ rather than enforcement — worth weighing when choosing the deployment target.
 
 ## Stack
 
-Next.js (static export) · React 19 · TypeScript (strict) · Zustand · Canvas2D + three.js (3D). The FEM kernel (`src/fem/`) is hand-rolled on `Float64Array` with **zero numerics dependencies** — Euler–Bernoulli frame elements (2D + 12-DOF space frame), LDLᵀ / skyline+RCM free solves, subspace-iteration eigenanalysis, Newmark-β dynamics. Eigen solves run in a Web Worker; traffic re-solves are single back-substitutions, which is why it holds 60 fps.
+Next.js (static export) · React 19 · TypeScript (strict) · Zustand · Canvas2D + three.js (3D). The FEM kernel (`src/fem/`) is hand-rolled on `Float64Array` with **zero numerics dependencies** — Euler–Bernoulli frame elements (2D + 12-DOF space frame), LDLᵀ / skyline+RCM free solves, subspace-iteration eigenanalysis, Newmark-β dynamics. Eigen solves run in a Web Worker, and traffic reuses cached factorizations for single back-substitutions.
 
 ## License
 
@@ -85,4 +94,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ---
 
-**Version:** v0.11.2
+**Version:** v0.11.3

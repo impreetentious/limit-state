@@ -5,8 +5,9 @@ solver maths, the data model and sharing format, the UI contract, the presets, t
 protocol, the honesty gates, the decision log, the verified constants, and the numbered feature
 requirements.
 
-**This document is authoritative.** Source comments cite it by section number; where a source
-comment and this document disagree, this document wins until an owner ruling says otherwise.
+**This document is authoritative.** Source comments cite it by section number; when implementation
+and specification disagree, bring them back into agreement and record intentional contract changes
+here.
 
 Scope note: this is a **teaching** structural tool. It states its own honesty ceilings — true
 aeroelastic flutter, warping torsion, and member-level lateral-torsional buckling are out of
@@ -16,9 +17,9 @@ scope and must stay labelled as such. Never fake a result the product cannot tru
 
 ## 3. Architecture
 
-**Stack:** Next.js 16 (App Router, `output: 'export'` — fully static) + React 19 + TypeScript (strict) + Zustand. Rendering: single Canvas2D layer for the structure (devicePixelRatio-aware), React/CSS for chrome. Eigen solves in a Web Worker (`new Worker(new URL('./eigen.worker.ts', import.meta.url))` — bundled natively by Next); statics and Newmark stepping on the main thread (they're back-substitutions — see budgets). Tests: Vitest (standalone `vitest.config.ts`; independent of Next's bundler). Lint: oxlint. Deploy: GitHub Pages, with a committed GitLab Pages mirror (`.github/workflows/ci.yml`, `.gitlab-ci.yml`); no GitLab remote exists yet, so that mirror is unused. **Zero runtime numerics dependencies** — the solver is hand-rolled on `Float64Array`; that is the portfolio point and the auditability guarantee.
+**Stack:** Next.js 16 (App Router, `output: 'export'` — fully static) + React 19 + TypeScript (strict) + Zustand. Rendering: single Canvas2D layer for the structure (devicePixelRatio-aware), React/CSS for chrome. Eigen solves in a Web Worker (`new Worker(new URL('./eigen.worker.ts', import.meta.url))` — bundled natively by Next); statics and Newmark stepping on the main thread (they're back-substitutions — see budgets). Tests: Vitest (standalone `vitest.config.ts`; independent of Next's bundler). Lint: oxlint. Deploy configurations target GitHub Pages and GitLab Pages (`.github/workflows/ci.yml`, `.gitlab-ci.yml`). **Zero runtime numerics dependencies** — the solver is hand-rolled on `Float64Array`, keeping the numerical core auditable.
 
-Next.js notes (owner platform choice — see §12): SSR is intentionally unused; every interactive surface is a `'use client'` component and the app exports to plain static files in `out/`. Subpath hosting uses the `BASE_PATH` env var (set per pipeline; empty for custom domains) since static export has no relative-base mode. `next build` type-checks the whole project (tsconfig `include` covers `fem/` and tests), so CI order is build → test. The fem/ kernel and its tests are bundler-agnostic — the framework can change again without touching them.
+Next.js notes (see §12): SSR is intentionally unused; every interactive surface is a `'use client'` component and the app exports to plain static files in `out/`. Subpath hosting uses the `BASE_PATH` env var (set per pipeline; empty for custom domains) since static export has no relative-base mode. `next build` type-checks the whole project (tsconfig `include` covers `fem/` and tests), so CI order is build → test. The fem/ kernel and its tests are bundler-agnostic — the framework can change again without touching them.
 
 Why not SVG/WebGL: SVG per-frame attribute churn is the wrong tool at hundreds of members; WebGL is over-tooled for line art. Why no node-graph lib: a structural editor's semantics (grid snap, supports, member splitting) share nothing with dataflow canvases.
 
@@ -217,7 +218,7 @@ Each step is a timeline entry: "① Member 7 buckled → ② load redistributed,
 
 Spaghetti is deliberate: the classroom spaghetti-bridge tradition, with honest numbers. Sections: solid rect (b,h), box (b,h,t), I-beam (b,h,t_f,t_w), tube (d,t) — A, I≡I_z, I_y, c, A_s, J derived in code and unit-tested against hand calcs. Default: steel box 200×200×8 mm.
 
-**Section inertia for 3D (Phase 3):** local y is the section "width" axis, local z the "depth" axis matching 2D's in-plane bending. So `I` (2D) ≡ `I_z = b h³/12` (rect); `I_y = h b³/12`. St. Venant torsion `J`: solid rect series approx; thin tube `J = 2I`; thin closed box `J = 4 A_m² / ∮ ds/t`; I-beam open-section approx (flanges + web). Warping torsion is out of scope — label in-app when 3D UI lands.
+**Section inertia for 3D (Phase 3):** local y is the section "width" axis, local z the "depth" axis matching 2D's in-plane bending. So `I` (2D) ≡ `I_z = b h³/12` (rect); `I_y = h b³/12`. St. Venant torsion `J`: solid rect series approx; thin tube `J = 2I`; thin closed box `J = 4 A_m² / ∮ ds/t`; I-beam open-section approx (flanges + web). Warping torsion is out of scope and is labelled as such in the 3D results.
 
 ### 4.9 Space-frame element
 
@@ -330,13 +331,9 @@ IBM Plex Sans (UI) + IBM Plex Mono (numbers). Paper `#f4f1ea`, ink `#1a1d21`, bl
 
 ### 6.8 A/S/M diagram ordinates
 
-> **Provenance.** This section is reconstructed from the implementation and its tests, not recovered
-> from an earlier draft. The contract below was written from what
-> `src/canvas/diagram-samples.ts` and `src/canvas/__tests__/diagram-samples.test.ts` actually
-> enforce, plus the acceptance criteria those tests name but do not yet pass. It is placed in §6
-> because the diagrams are a results-display surface, not a preset. Treat the numbered requirements
-> as authoritative; treat the provenance note as a standing invitation to correct them if an
-> original ruling turns up.
+This section is the normative contract for the diagram sampling implemented in
+`src/canvas/diagram-samples.ts` and verified by
+`src/canvas/__tests__/diagram-samples.test.ts`.
 
 The axial, shear, and moment diagrams are pedagogy, not decoration. Their job is to make the shape
 of the internal actions legible, so the contract is about shape, not only about extremes.
@@ -362,7 +359,7 @@ comparable and a zero-action model cannot divide by zero.
 2. the moment at each simply supported end is essentially zero (< 2 % of the peak), and
 3. the shear diagram is linear and changes sign at midspan.
 
-**Ratified contract — GAP-10 (owner, 2026-01-22).** `recoverElementForces` publishes the local
+**Internal-action recovery contract.** `recoverElementForces` publishes the local
 element end-force vector
 `f_local = k_local · (T · u_global) + FEA`, where `FEA` is the assembled fixed-end action vector
 for member loads. The display layer maps the local vector to the internal-action convention:
@@ -372,9 +369,8 @@ fit; the UDL and midspan point-load oracles in
 pin moments directly against the recovery layer.
 
 The downstream utilization, influence-line, pushover, and traffic paths use the same mapped
-actions. The former `it.skip` criteria in `src/canvas/__tests__/diagram-samples.test.ts` are now
-active: the simple-beam moment is parabolic with a midspan peak and zero pin moments, and shear
-changes sign at midspan.
+actions. The simple-beam checks assert a parabolic moment diagram with a midspan peak and zero pin
+moments, plus a shear diagram that changes sign at midspan.
 
 **Slender-deck traffic re-derivation (GAP-10 follow-through).** The preset is a 60 m simply
 supported span with `w_g = ρAg = 5,912.233152 N/m`, `M_y = f_y I/c = 2,908,160 N·m`, and gravity
@@ -451,35 +447,40 @@ All in `fem/__tests__/`, Vitest, node environment. These exact tolerances were m
 | G35 3D gallery round-trip  | curated v2 `#mu=` hashes in gallery.json                    | `decodeModel3d` matches authored source; hash < 32 kB                 | exact                              |
 | G36 3D editor history      | undo/redo + `MEMBER_HARD_LIMIT_3D`                          | counts restored; adds past the cap rejected; load/reset clear history | exact                              |
 
-**G29 supersedes the planned 4B criterion.** Phase 4B was specced as a simply-supported spatial beam with an `L/4` influence peak. A single-element pinned-pinned space frame is singular about its own axis, so the shipped gate uses a clamped-clamped deck and its exact `L/8` midspan peak instead. The planar `L/4` case stays covered by G17 in 2D. Accepted by the owner (date not recorded — the original stamp named a date that had not yet occurred).
+**G29 spatial influence criterion.** A single-element pinned-pinned space frame is singular about
+its own axis, so the gate uses a clamped-clamped deck and its exact `L/8` midspan peak. The planar
+simply-supported `L/4` case remains covered by G17 in 2D.
 
-Gates G1–G36 are real Vitest checks (not `it.todo`) and must stay green. CI runs version coherence, typecheck, lint, a read-only format check, build, the bundle budget, a Playwright static-export smoke, and tests on pushes to `main` and pull requests; deploy only from green `main`. The GitLab pipeline mirrors the non-browser check steps and also runs version coherence before deploy; the GitLab project and remote exist and are in sync with `origin`, so it is live rather than dormant. Phase 3 PRs must keep every prior 2D gate green.
+Gates G1–G37 are real Vitest checks (not `it.todo`) and must stay green. Both CI configurations run
+version coherence, the production dependency audit, typecheck, lint, citation and format checks,
+build, CSP and bundle checks, Playwright against the static export, and the complete Vitest suite.
+Deployment occurs only from a green `main` build.
 
 ---
 
 ## 12. Decision log
 
-| Decision                                                    | Alternatives                            | Why                                                                                                                                                                                                                                                                                                                |
-| ----------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2D plane frames first                                       | 3D immediately                          | 3D triples UI + solver surface, adds torsion/LTB, and would have killed the Phase 1 timeline. The 2D core carries the initial pedagogy; 3D is the marquee Phase 3 continuation of v1.                                                                                                                              |
-| Euler–Bernoulli default; Timoshenko optional (2A)           | Timoshenko-only                         | shear deformation < 2% for slender members that dominate bridges/towers; E-B keeps matrices textbook-clean as the default. Timoshenko is an analysis toggle with φ = 12EI/(G A_s L²) and gate G14.                                                                                                                 |
-| "Tacoma-style" honesty                                      | pretend 2D flutter                      | true Tacoma = torsional aeroelastic flutter, impossible in-plane; we ship honest bending resonance + an in-app note. Faking it would break the product's one promise.                                                                                                                                              |
-| Auto-mesh ×2 hidden                                         | user meshing                            | measured 0.75%/0.39% errors invisible at UI precision; meshing UI is expert noise                                                                                                                                                                                                                                  |
-| Dense LDLᵀ (2D + early 3D)                                  | sparse/skyline                          | Teaching sizes; dense typed-array factor < 5 ms at n ≲ 300 free DOF                                                                                                                                                                                                                                                |
-| Skyline + RCM free factor (3S)                              | keep dense only                         | Dense ~587 ms @ ~1.5k free DOF; skyline+RCM ~23 ms — closes §3 budget for editor lattices                                                                                                                                                                                                                          |
-| Subspace iteration                                          | full Jacobi on K                        | Jacobi is O(n³) on the full matrix — fine at 300 DOF, not 1200; subspace reuses the LDLᵀ solve we already have                                                                                                                                                                                                     |
-| Quasi-static traffic                                        | moving-mass dynamics                    | envelope + smooth sweep deliver the pedagogy; Phase 2H adds optional moving-mass Newmark (lumped vehicle M) as the honest ~10–30% amplification cousin                                                                                                                                                             |
-| Added: collapse cascade                                     | stop at first failure                   | redistribution → progressive collapse is the single most instructive thing a sandbox can show, and quasi-static re-solve makes it cheap and true                                                                                                                                                                   |
-| Added: capacity/weight readout                              | gamified scoring                        | one true number beats stars; makes shared URLs competitive without a backend                                                                                                                                                                                                                                       |
-| Added: honesty badges (deformation ×N, quasi-static labels) | silent exaggeration                     | they cost nothing and are the brand                                                                                                                                                                                                                                                                                |
-| Cut: earthquake story (superseded by §14 2C)                | —                                       | Was deferred in Phase 1; now shipped as Phase 2C with base excitation −M·ι·ü_g and Sa spectrum                                                                                                                                                                                                                     |
-| Cut: tension-only cables (superseded by §14 2E)             | —                                       | Was deferred in Phase 1; now shipped as Phase 2E with slack iteration + guyed-mast preset                                                                                                                                                                                                                          |
-| No runtime numerics deps                                    | math.js et al.                          | auditability + portfolio signal; hand-rolled kernel is the point                                                                                                                                                                                                                                                   |
-| Next.js static export                                       | Vite                                    | owner's platform choice for long-term consistency across projects. Static export preserves the no-backend contract. Accepted costs: `BASE_PATH` must be set per host (no relative-base mode) and framework weight for a client-only app. Kernel + tests are bundler-agnostic, so the switch touched only the shell |
-| Dual CI (GitHub + GitLab)                                   | pick one                                | keeps the option of migrating primary hosting; both pipelines are thin mirrors of the same commands, so drift risk is low. Only the GitHub pipeline is live — no GitLab remote exists yet                                                                                                                          |
-| three.js for Phase 3 WebGL                                  | stay on Canvas2D; Babylon; raw WebGL    | First new runtime dep since v1. Orbit/pan + extruded LOD need a scene graph; three is the smallest mature fit. Kernel stays dep-free. Added with the Phase 3 rendering slice.                                                                                                                                      |
-| Playwright (devDep) for README stills (3Z)                  | manual OS screenshots; Puppeteer        | Deterministic Build/Test 2D+3D captures via `scripts/capture-screenshots.mjs` against `out/`. Dev-only — not a runtime dep.                                                                                                                                                                                        |
-| GAP-10 internal-action recovery (owner, 2026-01-22)         | keep `k·u − FEA`; alter fixtures to fit | Physics requires `k·u + FEA` for the stored fixed-end actions, followed by the §6.8 end-action display mapping. UDL and point-load recovery oracles, diagram gates, influence G17, and downstream utilization/traffic paths were re-derived against that contract.                                                 |
+| Decision                                             | Alternatives                            | Why                                                                                                                                                                                                                                               |
+| ---------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2D plane frames as the base model                    | 3D-only core                            | The 2D core keeps the introductory mechanics legible; the 3D layer adds torsion and spatial behavior while reusing the dimension-agnostic solver pieces.                                                                                          |
+| Euler–Bernoulli default; Timoshenko optional (2A)    | Timoshenko-only                         | shear deformation < 2% for slender members that dominate bridges/towers; E-B keeps matrices textbook-clean as the default. Timoshenko is an analysis toggle with φ = 12EI/(G A_s L²) and gate G14.                                                |
+| "Tacoma-style" honesty                               | pretend 2D flutter                      | true Tacoma = torsional aeroelastic flutter, impossible in-plane; we ship honest bending resonance + an in-app note. Faking it would break the product's one promise.                                                                             |
+| Auto-mesh ×2 hidden                                  | user meshing                            | measured 0.75%/0.39% errors invisible at UI precision; meshing UI is expert noise                                                                                                                                                                 |
+| Dense LDLᵀ (2D + early 3D)                           | sparse/skyline                          | Teaching sizes; dense typed-array factor < 5 ms at n ≲ 300 free DOF                                                                                                                                                                               |
+| Skyline + RCM free factor (3S)                       | keep dense only                         | Dense storage is prohibitive around 1.5k free DOF; the current skyline+RCM profile stays in single-digit milliseconds at that scale and meets the §3 target around 300 elements.                                                                  |
+| Subspace iteration                                   | full Jacobi on K                        | Jacobi is O(n³) on the full matrix — fine at 300 DOF, not 1200; subspace reuses the LDLᵀ solve we already have                                                                                                                                    |
+| Quasi-static traffic                                 | moving-mass dynamics                    | envelope + smooth sweep deliver the pedagogy; Phase 2H adds optional moving-mass Newmark (lumped vehicle M) as the honest ~10–30% amplification cousin                                                                                            |
+| Collapse cascade                                     | stop at first failure                   | Redistribution makes progressive collapse visible, and quasi-static re-solving keeps the sequence computationally tractable and explicitly labelled.                                                                                              |
+| Capacity/weight readout                              | gamified scoring                        | A dimensional engineering ratio is more informative than an opaque score and works without a backend.                                                                                                                                             |
+| Honesty badges (deformation ×N, quasi-static labels) | silent exaggeration                     | They keep visual staging distinct from computed onset values.                                                                                                                                                                                     |
+| Earthquake story (2C)                                | omit dynamic base excitation            | Base excitation −M·ι·ü_g plus the Sa spectrum exposes a distinct dynamic load case without claiming site-specific prediction.                                                                                                                     |
+| Tension-only cables (2E)                             | compression-capable cable members       | Slack iteration matches the element's intended unilateral behavior and supports the guyed-mast teaching preset.                                                                                                                                   |
+| No runtime numerics deps                             | math.js et al.                          | A hand-rolled, typed-array kernel keeps the numerical implementation auditable.                                                                                                                                                                   |
+| Next.js static export                                | Vite                                    | Static export preserves the no-backend contract. Accepted costs: `BASE_PATH` must be set per host (no relative-base mode) and framework weight for a client-only app. Kernel + tests remain bundler-agnostic.                                     |
+| Dual CI (GitHub + GitLab)                            | pick one                                | Both configurations run the same verification gates and preserve a choice of Pages host; activation and host settings are deployment concerns rather than repository state.                                                                       |
+| three.js for Phase 3 WebGL                           | stay on Canvas2D; Babylon; raw WebGL    | Orbit/pan plus extruded LOD need a scene graph; three is the smallest mature fit. The kernel stays dependency-free.                                                                                                                               |
+| Playwright (devDep) for README stills (3Z)           | manual OS screenshots; Puppeteer        | Automated Build/Test 2D+3D captures via `scripts/capture-screenshots.mjs` against `out/`. Dev-only — not a runtime dependency.                                                                                                                    |
+| Internal-action recovery                             | keep `k·u − FEA`; alter fixtures to fit | Physics requires `k·u + FEA` for the stored fixed-end actions, followed by the §6.8 end-action display mapping. UDL and point-load recovery oracles, diagram gates, influence G17, and downstream utilization/traffic paths verify that contract. |
 
 ---
 
@@ -513,10 +514,11 @@ feature must do; all of them are implemented.
 
 ### Spatial requirements (3-series)
 
-The marquee. Same truth contract, one dimension up. Build order is load-bearing: solver first and gated before any UI, rendering second, editor last, then the stories, then the closeout items below.
+The 3D implementation applies the same truth contract one dimension up while keeping the solver,
+rendering, editor, and story boundaries explicit.
 
 - **Solver:** 12-DOF space-frame element — formulas in §4.9 (axial EA/L, St. Venant torsion GJ/L, biaxial bending, triad transform, releases, 12×12 K_g and consistent M). Kernel lives under `fem/space/` so the 2D path stays untouched. Solver core (LDLᵀ, subspace iteration, Newmark) is dimension-agnostic and reused via `modalAssembled` / `bucklingAssembled`. Gates **G22–G27** (tip closed forms, 2D↔3D regression, space corner, embed Euler, 3D modal, spatial buckling).
-- **Rendering:** three.js WebGL layer (first new runtime dep since v1 — decision-log row required); orbit/pan camera; members as extruded sections (LOD: lines when zoomed out); stress color/width mapping carried over; mode ghosts in 3D.
+- **Rendering:** three.js WebGL layer; orbit/pan camera; members as extruded sections (LOD: lines when zoomed out); stress color/width mapping carried over; mode ghosts in 3D.
 - **Editor:** workplane model — draw in a gizmo-selected plane (ground, elevation, **custom**); replicate/extrude; node/member semantics unchanged. Schema v2 (`v: 2`, z coords, roll angles) with automatic v1→v2 migration in `serialize.ts` — old share URLs must keep working (gate **G28**). Ground + XZ/YZ + **custom (3-click)** shipped (3T).
 - **Stories in 3D:** wind direction dial; traffic deck polyline; buckling includes spatial modes; honesty note: warping / member-level LTB out of scope.
 - **Polish:** presets rebuilt as 3D scenes (slender deck St. Venant torsional cousin + Tacoma note refresh), landing refresh, performance pass.
@@ -529,7 +531,7 @@ Spatial parity items completing the 3-series.
 | --- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 3P  | 3D preset polish                        | Spatial §7 rebuilds; twin-girder slender deck with early St. Venant torsional mode; Tacoma honesty graduated (2D = bending cousin, 3D f₂ = torsion — not flutter).                                                                                                         |
 | 3Q  | Landing refresh                         | Empty/first-load 2D + 3D states earn their pixels; brand + one clear invitation to draw or load a preset; no dashboard clutter.                                                                                                                                            |
-| 3R  | Performance pass                        | Profile at editor soft/hard member caps and ~1–5k DOF 3D; harden WebGL LOD; keep 60 fps traffic / Newmark budgets (§3). Document measured numbers in the status footer when done.                                                                                          |
+| 3R  | Performance pass                        | Profile at editor soft/hard member caps and ~1–5k DOF 3D; harden WebGL LOD; keep 60 fps traffic / Newmark budgets (§3); expose measured numbers in the status footer.                                                                                                      |
 | 3S  | Skyline (or confirmed dense)            | Profile global K at n ≳ 5k DOF. If dense factor blows the §3 budget, ship skyline/profile storage for assembled K (and matching free-DOF factor path). If dense stays inside budget with headroom, record the measurement and keep dense — either outcome closes the item. |
 | 3T  | Custom workplanes                       | Editor workplane beyond ground/XZ/YZ: user-defined plane (origin + two axes or point-normal), draw/extrude against it.                                                                                                                                                     |
 | 3U  | 3D share URLs                           | Wire Share in 3D to `encodeModel3d` / `decodeModel3d`; load `#m`/`#mu` v2 hashes on boot; keep v1 hashes decoding via migrate. Round-trip property test for authored 3D presets.                                                                                           |

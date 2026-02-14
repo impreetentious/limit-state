@@ -5,10 +5,9 @@ import { expect, test } from 'playwright/test';
  * gates prove the numbers; this proves a preset actually reaches the canvas in the shipped
  * export, including the A/S/M diagram surface specified in §6.8.
  *
- * Deliberately shape-only. §6.8 records GAP-10 open: the internal-action sign convention is
- * unsettled, so the moment diagram's sign and end values are NOT yet verified and this
- * suite must not imply they are. It asserts the diagram controls are reachable and render,
- * which is true today, and leaves the numeric contract to G37 once the kernel decision lands.
+ * This browser check is deliberately shape-only: it verifies that the diagram controls are
+ * reachable and render. G37 covers the numerical sign and end-value contract directly in the
+ * kernel, where failures are easier to diagnose precisely.
  */
 
 test('a preset loads, solves, and exposes its result diagrams', async ({ page }) => {
