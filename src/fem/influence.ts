@@ -247,7 +247,7 @@ function sectionMoment(
   }
   if (indices.length === 1) {
     const index = indices[0]!;
-    const Ma = result.elementForces[index * 5 + 2]!;
+    const Ma = -result.elementForces[index * 5 + 2]!;
     const Mb = result.elementForces[index * 5 + 4]!;
     return 0.5 * (Ma + Mb);
   }
@@ -257,7 +257,7 @@ function sectionMoment(
   const right = indices[1]!;
   const leftHasLoad = elementHasFixedEnd(loads, left);
   const rightHasLoad = elementHasFixedEnd(loads, right);
-  if (leftHasLoad && !rightHasLoad) return -endMoment(mesh, result, right, 'a');
+  if (leftHasLoad && !rightHasLoad) return endMoment(mesh, result, right, 'a');
   if (rightHasLoad && !leftHasLoad) return endMoment(mesh, result, left, 'b');
   if (loadedElement === left) return -endMoment(mesh, result, right, 'a');
   if (loadedElement === right) return endMoment(mesh, result, left, 'b');
@@ -273,7 +273,7 @@ function endMoment(
   const element = mesh.elements[elementIndex]!;
   const raw =
     end === 'a'
-      ? result.elementForces[elementIndex * 5 + 2]!
+      ? -result.elementForces[elementIndex * 5 + 2]!
       : result.elementForces[elementIndex * 5 + 4]!;
   // Deck members drawn right-to-left reverse the local sagging-positive sense.
   return element.cos >= 0 ? raw : -raw;

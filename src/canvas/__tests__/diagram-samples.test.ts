@@ -39,33 +39,9 @@ describe('A/S/M diagram sampling', () => {
     }
   });
 
-  // ------------------------------------------------------------------
-  // GAP-10 IS NOT COMPLETE. The two cases below are the acceptance criteria
-  // from docs/FEM-SPEC.md §6.8 ("a parabolic sagging moment with the peak at midspan and
-  // a linear shear crossing zero there"). They are skipped because the shape is
-  // still wrong, and the cause is NOT in this file.
-  //
-  // `recoverElementForces` (src/fem/statics.ts:205-212) publishes raw element
-  // NODAL forces — the forces the nodes apply to the element — as if they were
-  // internal-action ordinates:
-  //
-  //     out[offset + 1] = localForce[1];   // Fy at A
-  //     out[offset + 3] = localForce[4];   // Fy at B
-  //     out[offset + 2] = localForce[2];   // M  at A
-  //     out[offset + 4] = localForce[5];   // M  at B
-  //
-  // The internal-action convention negates the B-end shear and the A-end
-  // moment (V(0)=Fy1, V(L)=-Fy2, M(0)=-M1, M(L)=+M2). Consumed raw, the
-  // gravity-loaded simple beam reports |M| = wL^2/24 at BOTH pinned supports,
-  // where a simply supported end moment must be exactly 0 — `mesh.ts:109-114`
-  // constrains only the translations, so rotation there is free.
-  //
-  // Fixing it means settling that convention in the kernel, which is also read
-  // by influence.ts:250-251, pushover.ts:177-178, second-order.ts:147-148 and
-  // the utilization recovery. That is a kernel decision with its own gates, not
-  // a canvas change, so it is left flagged rather than guessed at here.
-  // ------------------------------------------------------------------
-  it.skip('gives the gravity-loaded simple beam a sagging parabolic moment peaking at midspan', () => {
+  // GAP-10 is ratified in docs/FEM-SPEC.md §6.8. Recovery publishes local
+  // end actions; sampleDiagram applies the display convention there.
+  it('gives the gravity-loaded simple beam a sagging parabolic moment peaking at midspan', () => {
     const { analysis, members } = simpleBeamAnalysis();
     const samples = sampleDiagram(members, analysis, 'moment').byMember.get(members[0]!.id) ?? [];
     const magnitudes = samples.map((sample) => Math.abs(sample.value));
@@ -77,7 +53,7 @@ describe('A/S/M diagram sampling', () => {
     expect(magnitudes.at(-1)!).toBeLessThan(magnitudes[peakIndex]! * 0.02);
   });
 
-  it.skip('gives the same beam a shear that changes sign at midspan', () => {
+  it('gives the same beam a shear that changes sign at midspan', () => {
     const { analysis, members } = simpleBeamAnalysis();
     const samples = sampleDiagram(members, analysis, 'shear').byMember.get(members[0]!.id) ?? [];
     const values = samples.map((sample) => sample.value);

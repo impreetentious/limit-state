@@ -58,9 +58,11 @@ export function sampleDiagram(
         x: analysis.mesh.coords[2 * element.nb]!,
         y: analysis.mesh.coords[2 * element.nb + 1]!,
       };
+      // Recovery publishes local element-end actions. The diagram convention is
+      // V(0)=+Fy1, V(L)=-Fy2, M(0)=-M1, M(L)=+M2 (§6.8).
       const va = analysis.result.elementForces[offset + 1]!;
-      const vb = analysis.result.elementForces[offset + 3]!;
-      const ma = analysis.result.elementForces[offset + 2]!;
+      const vb = -analysis.result.elementForces[offset + 3]!;
+      const ma = -analysis.result.elementForces[offset + 2]!;
       const mb = analysis.result.elementForces[offset + 4]!;
 
       for (let step = 0; step <= DIAGRAM_STATIONS; step++) {

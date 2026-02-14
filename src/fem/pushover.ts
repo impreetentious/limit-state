@@ -174,7 +174,7 @@ function endMoment(
     element.memberId === memberId ? [index] : [],
   );
   if (indices.length === 0) return 0;
-  if (end === 'a') return analysis.result.elementForces[indices[0]! * 5 + 2]!;
+  if (end === 'a') return -analysis.result.elementForces[indices[0]! * 5 + 2]!;
   return analysis.result.elementForces[indices[indices.length - 1]! * 5 + 4]!;
 }
 

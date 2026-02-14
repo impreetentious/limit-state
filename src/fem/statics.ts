@@ -184,7 +184,7 @@ export function elementForcesAtDisplacement(
   return recoverElementForces(mesh, u, fixedEnd);
 }
 
-/** Element force recovery f_local = k_cond(Tu_e) − f_fixedEnd. docs/FEM-SPEC.md §4.1. */
+/** Element force recovery f_local = k_cond(Tu_e) + f_fixedEnd. docs/FEM-SPEC.md §4.1. */
 function recoverElementForces(
   mesh: AnalysisMesh,
   u: Float64Array,
@@ -197,7 +197,7 @@ function recoverElementForces(
     const stiffness = elementLocalStiffness(element, mesh.shearFlexible);
     const localForce = new Float64Array(6);
     for (let row = 0; row < 6; row++) {
-      let value = -fixedEnd[index * 6 + row]!;
+      let value = fixedEnd[index * 6 + row]!;
       for (let column = 0; column < 6; column++)
         value += stiffness[row * 6 + column]! * localU[column]!;
       localForce[row] = value;
@@ -229,23 +229,22 @@ function recoverUtilization(
     const start = memberOffset.get(element.memberId) ?? 0;
     memberOffset.set(element.memberId, start + element.L);
     const N = forces[offset]!;
-    const ma = forces[offset + 2]!;
+    const ma = -forces[offset + 2]!;
     const mb = forces[offset + 4]!;
     const atA = fiberUtilization(N, ma, element.A, element.I, element.c, element.fy);
     const atB = fiberUtilization(N, mb, element.A, element.I, element.c, element.fy);
     let maximumUtilization = Math.max(atA, atB);
     let station = atA >= atB ? 0 : element.L;
     const localYLoad = elementTransverseUdl?.[index] ?? 0;
-    // The published end-force convention stores the local-A internal shear and
-    // moment with the opposite sign to an in-span free body. Convert once, then
-    // apply M(x) = M1 + V1 x − w x² / 2 for downward-positive w.
+    // Apply the §6.8 internal-action convention once, then use
+    // M(x) = M(0) + V(0) x − w x² / 2 for downward-positive w.
     const w = -localYLoad;
-    const v1 = -forces[offset + 1]!;
-    const v2 = forces[offset + 3]!;
+    const v1 = forces[offset + 1]!;
+    const v2 = -forces[offset + 3]!;
     if (!element.releaseA && !element.releaseB && w !== 0 && v1 * v2 < 0 && v1 !== v2) {
       const x = (element.L * v1) / (v1 - v2);
       if (x > 0 && x < element.L) {
-        const moment = -ma + v1 * x - (w * x * x) / 2;
+        const moment = ma + v1 * x - (w * x * x) / 2;
         const interior = fiberUtilization(N, moment, element.A, element.I, element.c, element.fy);
         if (interior > maximumUtilization) {
           maximumUtilization = interior;

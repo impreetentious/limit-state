@@ -188,8 +188,8 @@ describe('2D support constraints', () => {
       throw new Error(`Expected a stable beam, got ${analysis.kind}.`);
 
     const [N, va, ma, vb, mb] = analysis.result.elementForces;
-    const v1 = -va!;
-    const v2 = vb!;
+    const v1 = va!;
+    const v2 = -vb!;
     const xStar = (mesh.elements[0]!.L * v1) / (v1 - v2);
     const mStar = -ma! + v1 * xStar - (10_000 * xStar ** 2) / 2;
     const endpoint = Math.max(Math.abs(ma!), Math.abs(mb!));
