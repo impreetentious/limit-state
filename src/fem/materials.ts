@@ -138,7 +138,7 @@ export function sectionDepth(s: SectionSpec): number {
  * Plastic section modulus Z (first moment of area about the plastic NA).
  * docs/FEM-SPEC.md §14 2F: M_p = Z · f_y.
  */
-export function plasticModulus(s: SectionSpec): number {
+function plasticModulus(s: SectionSpec): number {
   switch (s.kind) {
     case 'rect':
       return (s.b * s.h * s.h) / 4;

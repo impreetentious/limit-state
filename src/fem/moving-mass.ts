@@ -34,7 +34,7 @@ export function assembleMassWithVehicle(
  * Add vehicle point masses to translational diagonals only.
  * Split m·(1−ξ) to end a and m·ξ to end b. docs/FEM-SPEC.md §4.1 / §14 2H.
  */
-export function addLumpedVehicleMass(
+function addLumpedVehicleMass(
   M: Float64Array,
   mesh: AnalysisMesh,
   contacts: readonly VehicleContact[],

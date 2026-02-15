@@ -21,7 +21,7 @@ export type InfluenceQuantity =
   | { kind: 'axial'; memberId: number }
   | { kind: 'moment'; memberId: number; at: 'a' | 'b' | 'mid' };
 
-export interface InfluenceSample {
+interface InfluenceSample {
   station: number;
   x: number;
   y: number;
@@ -35,7 +35,7 @@ export interface InfluenceLine {
   peak: { station: number; value: number };
 }
 
-export interface InfluenceScenario {
+interface InfluenceScenario {
   model: EditorModel;
   mesh: AnalysisMesh;
   route: DeckSegment[];
@@ -52,10 +52,7 @@ export interface InfluenceEnvelope {
 }
 
 /** Factor the deck once; subsequent unit-load stations are back-substitutions. docs/FEM-SPEC.md §14 2D. */
-export function prepareInfluence(
-  model: EditorModel,
-  options: AnalysisOptions = {},
-): InfluenceScenario {
+function prepareInfluence(model: EditorModel, options: AnalysisOptions = {}): InfluenceScenario {
   const mesh = buildMesh(model, options);
   const route = buildDeckRoute(model, mesh);
   return {
@@ -82,7 +79,7 @@ export function computeInfluenceLine(
 }
 
 /** Re-use a prepared deck factorization for an influence sweep. docs/FEM-SPEC.md §14 2D. */
-export function computeInfluenceLineAt(
+function computeInfluenceLineAt(
   scenario: InfluenceScenario,
   quantity: InfluenceQuantity,
   stepMeters?: number,
@@ -112,7 +109,7 @@ export function computeInfluenceLineAt(
 }
 
 /** Unit-load response at one deck station. docs/FEM-SPEC.md §14 2D. */
-export function sampleInfluenceAt(
+function sampleInfluenceAt(
   scenario: InfluenceScenario,
   station: number,
   quantity: InfluenceQuantity,

@@ -13,13 +13,13 @@ import type { AnalysisOptions, EditorModel } from './types';
 const MAX_PUSHOVER_STEPS = 24;
 const MOMENT_TOL = 1e-9;
 
-export interface PushoverHinge {
+interface PushoverHinge {
   memberId: number;
   end: 'a' | 'b';
   loadFactor: number;
 }
 
-export interface PushoverPoint {
+interface PushoverPoint {
   /** Proportional factor on the model's lateral reference loads. */
   loadFactor: number;
   /** Total base shear (sum of support |R_x| resisting the lateral pattern), N. */

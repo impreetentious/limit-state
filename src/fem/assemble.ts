@@ -55,7 +55,7 @@ export function kLocal(E: number, A: number, I: number, L: number, phi = 0): Flo
 }
 
 /** Element φ from mesh analysis option and section shear props. docs/FEM-SPEC.md §14 2A. */
-export function elementPhi(element: Element, shearFlexible: boolean): number {
+function elementPhi(element: Element, shearFlexible: boolean): number {
   if (!shearFlexible) return 0;
   return shearFactor(element.E, element.I, element.G, element.As, element.L);
 }

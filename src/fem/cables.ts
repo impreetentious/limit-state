@@ -6,7 +6,7 @@
 import { assembleLoadCase, type LoadAssembly } from './assemble';
 import { buildMesh } from './mesh';
 import { solveStatic, type StaticAnalysis } from './statics';
-import type { AnalysisOptions, EditorModel, MemberSpec } from './types';
+import type { AnalysisOptions, EditorModel } from './types';
 
 const MAX_CABLE_ITERATIONS = 10;
 /** Axial force below this (N) counts as slack / inactive. docs/FEM-SPEC.md §14 2E. */
@@ -218,10 +218,4 @@ function sameSet(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
   if (a.size !== b.size) return false;
   for (const value of a) if (!b.has(value)) return false;
   return true;
-}
-
-/** Ensure cable members carry truss releases. docs/FEM-SPEC.md §14 2E. */
-export function normalizeCableMember(member: MemberSpec): MemberSpec {
-  if (!member.cableOnly) return member;
-  return { ...member, releaseA: true, releaseB: true };
 }
