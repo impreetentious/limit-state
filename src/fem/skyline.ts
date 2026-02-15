@@ -66,7 +66,7 @@ export function profileFromDofGroups(
 }
 
 /** Index of K[i,j] in packed storage, or -1 if outside the envelope (value is 0). Assumes i ≥ j. */
-export function skylineIndex(K: SkylineMatrix, i: number, j: number): number {
+function skylineIndex(K: SkylineMatrix, i: number, j: number): number {
   if (j < K.firstCol[i]!) return -1;
   return K.diagIndex[i]! - (i - j);
 }
@@ -84,7 +84,7 @@ export function skylineAdd(K: SkylineMatrix, i: number, j: number, v: number): v
   K.values[index] = K.values[index]! + v;
 }
 
-export function skylineGet(K: SkylineMatrix, i: number, j: number): number {
+function skylineGet(K: SkylineMatrix, i: number, j: number): number {
   const row = i >= j ? i : j;
   const col = i >= j ? j : i;
   const index = skylineIndex(K, row, col);
@@ -194,32 +194,33 @@ export function factorSkylineLDLT(K: SkylineMatrix): SkylineFactorResult {
     maxDiagonal = Math.max(maxDiagonal, Math.abs(K.values[diagIndex[i]!]!));
   const mechanismTolerance = 1e-10 * maxDiagonal;
 
-  const get = (row: number, col: number): number => {
-    if (col < firstCol[row]!) return 0;
-    return ld[diagIndex[row]! - (row - col)]!;
-  };
-  const set = (row: number, col: number, value: number): void => {
-    ld[diagIndex[row]! - (row - col)] = value;
-  };
-
   for (let i = 0; i < n; i++) {
-    for (let j = firstCol[i]!; j < i; j++) {
-      let value = get(i, j);
-      const k0 = Math.max(firstCol[i]!, firstCol[j]!);
-      for (let k = k0; k < j; k++) value -= get(i, k) * d[k]! * get(j, k);
-      if (!(Math.abs(d[j]!) > 0)) return { ok: false, mechanism: { freeDofIndex: j } };
-      set(i, j, value / d[j]!);
+    const firstI = firstCol[i]!;
+    const diagonalI = diagIndex[i]!;
+    for (let j = firstI; j < i; j++) {
+      const entryI = diagonalI - (i - j);
+      let value = ld[entryI]!;
+      const firstCommon = Math.max(firstI, firstCol[j]!);
+      let indexI = diagonalI - (i - firstCommon);
+      let indexJ = diagIndex[j]! - (j - firstCommon);
+      for (let k = firstCommon; k < j; k++) {
+        value -= ld[indexI++]! * d[k]! * ld[indexJ++]!;
+      }
+      const pivotJ = d[j]!;
+      if (!(Math.abs(pivotJ) > 0)) return { ok: false, mechanism: { freeDofIndex: j } };
+      ld[entryI] = value / pivotJ;
     }
-    let pivot = get(i, i);
-    for (let k = firstCol[i]!; k < i; k++) {
-      const lik = get(i, k);
+    let pivot = ld[diagonalI]!;
+    let entryI = diagonalI - (i - firstI);
+    for (let k = firstI; k < i; k++) {
+      const lik = ld[entryI++]!;
       pivot -= lik * lik * d[k]!;
     }
     if (!Number.isFinite(pivot) || pivot <= mechanismTolerance) {
       return { ok: false, mechanism: { freeDofIndex: i } };
     }
     d[i] = pivot;
-    set(i, i, 1);
+    ld[diagonalI] = 1;
   }
 
   return {
@@ -239,24 +240,21 @@ export function solveSkylineFactored(factor: SkylineFactor, rhs: Float64Array): 
   const { n, firstCol, diagIndex, ld, d } = factor;
   if (rhs.length !== n) throw new Error('Skyline RHS length does not match the factor.');
   const y = new Float64Array(n);
-  const z = new Float64Array(n);
   const x = new Float64Array(n);
-
-  const L = (row: number, col: number): number => ld[diagIndex[row]! - (row - col)]!;
 
   for (let i = 0; i < n; i++) {
     let value = rhs[i]!;
-    for (let j = firstCol[i]!; j < i; j++) value -= L(i, j) * y[j]!;
+    let entry = diagIndex[i]! - (i - firstCol[i]!);
+    for (let j = firstCol[i]!; j < i; j++) value -= ld[entry++]! * y[j]!;
     y[i] = value;
-    z[i] = value / d[i]!;
+    x[i] = value / d[i]!;
   }
-  for (let i = n - 1; i >= 0; i--) {
-    let value = z[i]!;
-    for (let row = i + 1; row < n; row++) {
-      if (i < firstCol[row]!) continue;
-      value -= L(row, i) * x[row]!;
+  for (let row = n - 1; row >= 0; row--) {
+    const value = x[row]!;
+    let entry = diagIndex[row]! - (row - firstCol[row]!);
+    for (let col = firstCol[row]!; col < row; col++) {
+      x[col] = x[col]! - ld[entry++]! * value;
     }
-    x[i] = value;
   }
   return x;
 }
@@ -265,7 +263,7 @@ export function solveSkylineFactored(factor: SkylineFactor, rhs: Float64Array): 
  * Reverse Cuthill–McKee ordering for free-DOF indices (0..n-1).
  * Returns `perm` where perm[newIndex] = oldIndex. docs/FEM-SPEC.md §14 3S.
  */
-export function rcmOrder(adjacency: ReadonlyArray<ReadonlyArray<number>>): Int32Array {
+function rcmOrder(adjacency: ReadonlyArray<ReadonlyArray<number>>): Int32Array {
   const n = adjacency.length;
   const perm = new Int32Array(n);
   if (n === 0) return perm;
@@ -302,7 +300,7 @@ export function rcmOrder(adjacency: ReadonlyArray<ReadonlyArray<number>>): Int32
 }
 
 /** Build free-DOF adjacency (undirected) from element DOF groups. */
-export function freeAdjacency(
+function freeAdjacency(
   freeDofs: Int32Array,
   groups: ReadonlyArray<ReadonlyArray<number>>,
 ): number[][] {

@@ -199,18 +199,6 @@ export function newmarkStep(
   return mass ? { ...next, system: undefined } : next;
 }
 
-/** Exact SDOF DAF for a harmonic force, used by the honest live meter. docs/FEM-SPEC.md §4.6. */
-export function dynamicAmplificationRatio(
-  forceOmega: number,
-  naturalOmega: number,
-  zeta: number,
-): number {
-  if (!(forceOmega >= 0) || !(naturalOmega > 0) || !(zeta >= 0))
-    throw new Error('DAF inputs must be non-negative with a positive natural frequency.');
-  const ratio = forceOmega / naturalOmega;
-  return 1 / Math.sqrt((1 - ratio * ratio) ** 2 + (2 * zeta * ratio) ** 2);
-}
-
 /**
  * Influence vector ι with unity on global-x translational DOFs (base excitation).
  * docs/FEM-SPEC.md §14 2C.

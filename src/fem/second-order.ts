@@ -103,7 +103,7 @@ export function solveSecondOrderStatic(
 }
 
 /** Per-element tension-positive axial force from a static result. docs/FEM-SPEC.md §4.1. */
-export function elementAxial(result: StaticResult, elementCount: number): Float64Array {
+function elementAxial(result: StaticResult, elementCount: number): Float64Array {
   if (result.elementForces.length < elementCount * 5) {
     throw new Error('Static result does not carry one force record per analysis element.');
   }

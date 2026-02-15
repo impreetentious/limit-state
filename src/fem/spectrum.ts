@@ -4,7 +4,7 @@
  */
 import type { GroundMotionRecord } from './records';
 
-export interface SpectrumPoint {
+interface SpectrumPoint {
   freqHz: number;
   /** Pseudo-acceleration Sa = ω² · max|u| (m/s²). */
   sa: number;
@@ -99,7 +99,7 @@ export function responseSpectrum(
 }
 
 /** Default log-spaced sweep 0.1–10 Hz (81 points). docs/FEM-SPEC.md §14 2C. */
-export function spectrumFrequencies(minHz = 0.1, maxHz = 10, count = 81): number[] {
+function spectrumFrequencies(minHz = 0.1, maxHz = 10, count = 81): number[] {
   if (!(minHz > 0) || !(maxHz > minHz) || !(count >= 2))
     throw new Error('Invalid spectrum frequency grid.');
   const out: number[] = [];

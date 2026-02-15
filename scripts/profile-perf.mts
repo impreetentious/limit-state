@@ -1,16 +1,17 @@
 /**
- * Phase 3 closeout 3R — measure assemble / factor / resolve budgets.
+ * Phase 3 closeout 3R — measure assembly, factorization, cached backsolve,
+ * and complete solve/recovery costs.
  * Run: npm run profile:perf
  * docs/FEM-SPEC.md §3 performance budgets / §14 3R.
  */
-import { assembleK3d } from '../src/fem/space/assemble';
+import { assembleK3d, assembleLoadCase3d } from '../src/fem/space/assemble';
 import { buildMesh3d, NO_RELEASES, type EditorModel3d } from '../src/fem/space';
-import { prepareStaticSystem3d } from '../src/fem/space/statics';
-import { skylineNnz } from '../src/fem/skyline';
-import { analyzeStaticModel } from '../src/fem/statics';
-import { assembleK, assembleM } from '../src/fem/assemble';
+import { prepareStaticSystem3d, solveStatic3d } from '../src/fem/space/statics';
+import { skylineNnz, solveSkylineFactored } from '../src/fem/skyline';
+import { prepareStaticSystem, solveStatic } from '../src/fem/statics';
+import { assembleK, assembleLoadCase, assembleM } from '../src/fem/assemble';
 import { buildMesh } from '../src/fem/mesh';
-import { factorLDLT, freeMatrix } from '../src/fem/solve';
+import { factorLDLT, freeMatrix, freeVector, solveFactored } from '../src/fem/solve';
 import { PRESETS } from '../src/presets/scenes';
 import { prattTruss3d, slenderDeck3d, spaceFrameDemo } from '../src/presets/scenes3d';
 import type { EditorModel } from '../src/fem/types';
@@ -91,11 +92,18 @@ function report2d(label: string, model: EditorModel): void {
     const K = assembleK(mesh);
     factorLDLT(freeMatrix(K, mesh.ndof, mesh.freeDofs), mesh.freeDofs.length);
   });
-  const resolveMs = timeMs(() => {
-    analyzeStaticModel(model);
+  const system = prepareStaticSystem(mesh);
+  const loads = assembleLoadCase(mesh, { gravity: model.loads.gravity, points: [] });
+  if (!('factor' in system)) throw new Error(`${label} is a mechanism; cannot profile solve.`);
+  const freeLoad = freeVector(loads.F, mesh.freeDofs);
+  const backsolveMs = timeMs(() => {
+    solveFactored(system.factor, freeLoad);
+  });
+  const solveMs = timeMs(() => {
+    solveStatic(mesh, loads, system);
   }, 3);
   console.log(
-    `2D ${label.padEnd(22)} members=${String(model.members.length).padStart(3)} ndof=${String(mesh.ndof).padStart(5)} free=${String(mesh.freeDofs.length).padStart(5)}  assemble+M ${assembleMs.toFixed(2)}ms  factor ${factorMs.toFixed(2)}ms  analyze ${resolveMs.toFixed(2)}ms`,
+    `2D ${label.padEnd(22)} members=${String(model.members.length).padStart(3)} ndof=${String(mesh.ndof).padStart(5)} free=${String(mesh.freeDofs.length).padStart(5)}  assemble+M ${assembleMs.toFixed(2)}ms  factor ${factorMs.toFixed(2)}ms  backsolve ${backsolveMs.toFixed(2)}ms  solve+recover ${solveMs.toFixed(2)}ms`,
   );
 }
 
@@ -108,11 +116,20 @@ function report3d(label: string, model: EditorModel3d): void {
     prepareStaticSystem3d(mesh);
   });
   const K = assembleK3d(mesh);
-  const resolveMs = timeMs(() => {
-    prepareStaticSystem3d(mesh);
+  const system = prepareStaticSystem3d(mesh);
+  const loads = assembleLoadCase3d(mesh, { gravity: model.loads.gravity });
+  if (!('factor' in system)) throw new Error(`${label} is a mechanism; cannot profile solve.`);
+  const freeLoad = freeVector(loads.F, mesh.freeDofs);
+  const reorderedLoad = new Float64Array(freeLoad.length);
+  for (let i = 0; i < freeLoad.length; i++) reorderedLoad[i] = freeLoad[system.freePerm[i]!]!;
+  const backsolveMs = timeMs(() => {
+    solveSkylineFactored(system.factor, reorderedLoad);
+  });
+  const solveMs = timeMs(() => {
+    solveStatic3d(mesh, loads.F, system, loads.elementFixedEnd);
   }, 3);
   console.log(
-    `3D ${label.padEnd(22)} members=${String(model.members.length).padStart(3)} ndof=${String(mesh.ndof).padStart(5)} free=${String(mesh.freeDofs.length).padStart(5)} nnz=${String(skylineNnz(K)).padStart(7)}  assembleK ${assembleMs.toFixed(2)}ms  factor ${factorMs.toFixed(2)}ms  prepare ${resolveMs.toFixed(2)}ms`,
+    `3D ${label.padEnd(22)} members=${String(model.members.length).padStart(3)} ndof=${String(mesh.ndof).padStart(5)} free=${String(mesh.freeDofs.length).padStart(5)} nnz=${String(skylineNnz(K)).padStart(7)}  assembleK ${assembleMs.toFixed(2)}ms  factor ${factorMs.toFixed(2)}ms  backsolve ${backsolveMs.toFixed(2)}ms  solve+recover ${solveMs.toFixed(2)}ms`,
   );
 }
 
@@ -131,4 +148,5 @@ report3d('Pratt 3D', prattTruss3d());
 // ~0.3k–1.5k DOF lattices (dense factor cost grows ~n³ — feeds 3S skyline decision)
 report3d('lattice 2×2×2', lattice3d(2, 2, 2));
 report3d('lattice 3×2×2', lattice3d(3, 2, 2));
+report3d('lattice 5×3×2', lattice3d(5, 3, 2));
 report3d('lattice 4×3×3', lattice3d(4, 3, 3));
