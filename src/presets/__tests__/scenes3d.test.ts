@@ -30,7 +30,7 @@ describe('3D presets (Phase 3 polish)', () => {
       expect(mesh.elements.length).toBeGreaterThan(0);
       expect(mesh.freeDofs.length).toBeGreaterThan(0);
       const analysis = analyzeStaticModel3d(model);
-      expect(analysis.kind === 'invalid').toBe(false);
+      expect(analysis.kind, model.name).toBe('stable');
     }
   });
 
@@ -79,6 +79,6 @@ describe('3D presets (Phase 3 polish)', () => {
     expect(model.nodes).toHaveLength(14);
     expect(model.deck).toEqual([1, 2, 3]);
     expect(model.members.some((m) => m.releaseA.ty && m.releaseB.tz)).toBe(true);
-    expect(analyzeStaticModel3d(model).kind).not.toBe('invalid');
+    expect(analyzeStaticModel3d(model).kind).toBe('stable');
   });
 });

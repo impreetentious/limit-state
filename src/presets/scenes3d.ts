@@ -224,6 +224,8 @@ export function spaceDeckDemo(): EditorModel3d {
 /** Simply-supported beam along +X — diagrams + traffic. docs/FEM-SPEC.md §7 #1. */
 export function simpleBeam3d(): EditorModel3d {
   const L = 8;
+  const bendingPin: EndReleases3d = { tx: false, ty: true, tz: true };
+  const member = frame(1, 1, 2);
   return {
     v: 2,
     name: 'Simple beam',
@@ -232,10 +234,12 @@ export function simpleBeam3d(): EditorModel3d {
       { id: 1, x: -L / 2, y: 0, z: 0 },
       { id: 2, x: L / 2, y: 0, z: 0 },
     ],
-    members: [frame(1, 1, 2)],
+    // Fix one torsional reference while releasing bending at both member ends;
+    // this preserves simply-supported vertical response without a free twist DOF.
+    members: [{ ...member, releaseA: bendingPin, releaseB: bendingPin }],
     supports: [
-      { node: 1, kind: 'pin' },
-      { node: 2, kind: 'rollerZ' },
+      { node: 1, kind: 'fixed' },
+      { node: 2, kind: 'pin' },
     ],
     loads: { gravity: true, points: [] },
     deck: [1],
@@ -262,14 +266,15 @@ export function prattTruss3d(): EditorModel3d {
   const members: MemberSpec3d[] = [];
   let mid = 1;
   const addPlane = (o: number) => {
-    // Bottom chord, top chord, end posts, diagonals / verticals — same topology as 2D Pratt.
-    members.push(truss(mid++, o + 1, o + 2));
-    members.push(truss(mid++, o + 2, o + 3));
-    members.push(truss(mid++, o + 3, o + 4));
-    members.push(truss(mid++, o + 1, o + 5));
-    members.push(truss(mid++, o + 5, o + 6));
-    members.push(truss(mid++, o + 6, o + 7));
-    members.push(truss(mid++, o + 7, o + 4));
+    // Frame chords/end posts give each plane rotational continuity; the web
+    // members retain pinned bending releases and carry primarily axial force.
+    members.push(frame(mid++, o + 1, o + 2, TRUSS_BAR));
+    members.push(frame(mid++, o + 2, o + 3, TRUSS_BAR));
+    members.push(frame(mid++, o + 3, o + 4, TRUSS_BAR));
+    members.push(frame(mid++, o + 1, o + 5, TRUSS_BAR));
+    members.push(frame(mid++, o + 5, o + 6, TRUSS_BAR));
+    members.push(frame(mid++, o + 6, o + 7, TRUSS_BAR));
+    members.push(frame(mid++, o + 7, o + 4, TRUSS_BAR));
     members.push(truss(mid++, o + 5, o + 2));
     members.push(truss(mid++, o + 2, o + 6));
     members.push(truss(mid++, o + 6, o + 3));
@@ -277,10 +282,17 @@ export function prattTruss3d(): EditorModel3d {
   };
   addPlane(0);
   addPlane(7);
-  // Transverse ties at every corresponding node.
+  // Rigid transverse cross-beams connect the two pin-jointed truss planes and
+  // restrain joint rotations that are otherwise free in the spatial model.
   for (let i = 1; i <= 7; i++) {
-    members.push(truss(mid++, i, i + 7, { kind: 'rect', b: 0.06, h: 0.06 }));
+    members.push(frame(mid++, i, i + 7, { kind: 'rect', b: 0.06, h: 0.06 }));
   }
+  // Plan bracing prevents the twin planes from racking as a spatial mechanism.
+  members.push(truss(mid++, 1, 9));
+  members.push(truss(mid++, 2, 10));
+  members.push(truss(mid++, 3, 11));
+  members.push(truss(mid++, 5, 13));
+  members.push(truss(mid++, 6, 14));
   return {
     v: 2,
     name: 'Pratt truss',
@@ -503,7 +515,7 @@ export function portalPushover3d(): EditorModel3d {
  * Geometry is simplified (straight cable chords, no main-cable sag iteration).
  * docs/FEM-SPEC.md §14 3X.
  */
-export function suspensionSpan3d(): EditorModel3d {
+function suspensionSpan3d(): EditorModel3d {
   const L = 40;
   const W = 4;
   const towerH = 12;
@@ -577,6 +589,3 @@ export const PRESETS_3D: PresetScene3d[] = [
   { id: 'portal-pushover', label: '12 · Portal pushover', build: portalPushover3d },
   { id: 'suspension', label: '13 · Suspension span', build: suspensionSpan3d },
 ];
-
-/** @deprecated Prefer PRESETS_3D — kept for existing imports. */
-export const DEMOS_3D = PRESETS_3D;

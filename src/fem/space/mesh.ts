@@ -11,7 +11,6 @@ import type {
   EditorModel3d,
   Element3d,
   EndReleases3d,
-  MemberSpec3d,
   SupportSpec3d,
 } from './types';
 import { NO_RELEASES, TRUSS_RELEASES } from './types';
@@ -205,37 +204,4 @@ function validateSupports(
       throw new Error(`Node ${support.node} has more than one support.`);
     supported.add(support.node);
   }
-}
-
-/** Convenience: planar XY cantilever matching the 2D G1 setup. docs/FEM-SPEC.md §4.9 gate G23. */
-export function planarCantileverModel(opts?: {
-  L?: number;
-  section?: MemberSpec3d['section'];
-  material?: MemberSpec3d['material'];
-}): EditorModel3d {
-  const L = opts?.L ?? 1;
-  return {
-    v: 2,
-    name: 'planar-cantilever',
-    seed: 0,
-    nodes: [
-      { id: 1, x: 0, y: 0, z: 0 },
-      { id: 2, x: L, y: 0, z: 0 },
-    ],
-    members: [
-      {
-        id: 1,
-        a: 1,
-        b: 2,
-        material: opts?.material ?? 'steel-s355',
-        section: opts?.section ?? { kind: 'rect', b: 0.1, h: 0.2 },
-        releaseA: NO_RELEASES,
-        releaseB: NO_RELEASES,
-        roll: 0,
-        cableOnly: false,
-      },
-    ],
-    supports: [{ node: 1, kind: 'fixed' }],
-    loads: { gravity: false, points: [] },
-  };
 }
