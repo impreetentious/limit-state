@@ -319,7 +319,7 @@ export function migrateV1toV2(model: EditorModel): EditorModel3d {
 }
 
 /** Map a v1 story into the 3D story union (wind gains directionDeg = 0). docs/FEM-SPEC.md §14 3U. */
-export function migrateStoryTo3d(story: StorySpec): NonNullable<EditorModel3d['story']> {
+function migrateStoryTo3d(story: StorySpec): NonNullable<EditorModel3d['story']> {
   if (story.kind === 'traffic') {
     return {
       kind: 'traffic',

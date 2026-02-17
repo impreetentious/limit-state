@@ -17,26 +17,15 @@ import { extrudeModel3d, replicateModel3d, scaleVec, type Vec3 } from './ops3d';
 import {
   frameExtrudeAxis,
   frameFromThreePoints,
-  projectPointToFrame,
   resolveWorkplaneFrame,
-  type WorkplaneKind,
   type WorkplaneSpec,
 } from './workplane';
 
-/** @deprecated Prefer WorkplaneKind — kept for existing imports. */
-export type Workplane = WorkplaneKind;
 export type EditorTool3d =
-  | 'select'
-  | 'node'
-  | 'member'
-  | 'support'
-  | 'load'
-  | 'deck'
-  | 'delete'
-  | 'workplane';
-export type ResultDiagram3d = 'none' | 'axial' | 'shear' | 'moment';
+  'select' | 'node' | 'member' | 'support' | 'load' | 'deck' | 'delete' | 'workplane';
+type ResultDiagram3d = 'none' | 'axial' | 'shear' | 'moment';
 
-export type Selection3d =
+type Selection3d =
   | { kind: 'none' }
   | { kind: 'node'; id: number }
   | { kind: 'member'; id: number }
@@ -44,10 +33,8 @@ export type Selection3d =
   | { kind: 'members'; ids: number[] };
 
 /** Three-click custom workplane definition in progress. docs/FEM-SPEC.md §14 3T. */
-export type WorkplanePick =
-  | { step: 0 }
-  | { step: 1; origin: Vec3 }
-  | { step: 2; origin: Vec3; alongU: Vec3 };
+type WorkplanePick =
+  { step: 0 } | { step: 1; origin: Vec3 } | { step: 2; origin: Vec3; alongU: Vec3 };
 
 interface EditorState3d {
   model: EditorModel3d;
@@ -140,7 +127,7 @@ export const MEMBER_HARD_LIMIT_3D = 200;
 export const MEMBER_SOFT_LIMIT_3D = 120;
 
 /** Deep-ish snapshot for undo/redo. Editor models stay small; clone the shell. */
-export function cloneModel3d(model: EditorModel3d): EditorModel3d {
+function cloneModel3d(model: EditorModel3d): EditorModel3d {
   return {
     ...model,
     nodes: model.nodes.map((node) => ({ ...node })),
@@ -666,13 +653,3 @@ export const useEditorStore3d = create<EditorState3d>((rawSet, get) => {
     },
   };
 });
-
-/** Project a world hit onto the active workplane. docs/FEM-SPEC.md §14 Phase 3 / 3T. */
-export function projectToWorkplane(
-  point: { x: number; y: number; z: number },
-  plane: WorkplaneSpec | WorkplaneKind,
-): { x: number; y: number; z: number } {
-  const spec: WorkplaneSpec =
-    typeof plane === 'string' ? { kind: plane === 'custom' ? 'ground' : plane } : plane;
-  return projectPointToFrame(point, resolveWorkplaneFrame(spec));
-}

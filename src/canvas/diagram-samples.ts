@@ -2,7 +2,7 @@ import type { StaticAnalysis } from '../fem/statics';
 import type { MemberSpec } from '../fem/types';
 import type { ResultDiagram } from '../state/editor-store';
 
-export interface Point {
+interface Point {
   x: number;
   y: number;
 }
@@ -16,7 +16,7 @@ export interface Point {
  * extreme renders a UDL moment as a flat block and a shear that never crosses
  * zero, which is exactly the pedagogy the diagrams exist for.
  */
-export interface DiagramSample {
+interface DiagramSample {
   /** Model-space position along the member. */
   point: Point;
   /** Ordinate value at that station: N, V, or M. */

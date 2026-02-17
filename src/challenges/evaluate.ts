@@ -62,7 +62,7 @@ export function abutmentsOnly(model: EditorModel): boolean {
 }
 
 /** Mid-deck traffic yield capacity in kN, or undefined when the deck is missing/invalid. docs/FEM-SPEC.md §14 2G. */
-export function midspanTruckCapacitykN(
+function midspanTruckCapacitykN(
   model: EditorModel,
   options: AnalysisOptions = {},
 ): number | undefined {
@@ -237,4 +237,3 @@ function formatLength(m: number): string {
 }
 
 /** Re-export for callers that only need the constraints shape. */
-export type { ChallengeConstraints };

@@ -13,8 +13,6 @@ export interface WorkplaneFrame {
   n: Vec3;
 }
 
-export type WorkplaneKind = 'ground' | 'xz' | 'yz' | 'custom';
-
 export type WorkplaneSpec =
   | { kind: 'ground' | 'xz' | 'yz' }
   | { kind: 'custom'; frame: WorkplaneFrame };
@@ -63,10 +61,6 @@ function cross(a: Vec3, b: Vec3): Vec3 {
 
 function sub(a: Vec3, b: Vec3): Vec3 {
   return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
-}
-
-function add(a: Vec3, b: Vec3): Vec3 {
-  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
 }
 
 function norm(v: Vec3): number {
@@ -122,16 +116,4 @@ export function frameFromPointNormal(origin: Vec3, normal: Vec3): WorkplaneFrame
   const v = unit(cross(n, u));
   if (!v) return undefined;
   return { origin: { ...origin }, u, v, n };
-}
-
-/** Snap a world point onto the plane then optionally grid-snap in (u,v). */
-export function snapOnFrame(p: Vec3, frame: WorkplaneFrame, gridSnap: boolean): Vec3 {
-  const onPlane = projectPointToFrame(p, frame);
-  if (!gridSnap) return onPlane;
-  const rel = sub(onPlane, frame.origin);
-  let su = dot(rel, frame.u);
-  let sv = dot(rel, frame.v);
-  su = Math.round(su * 2) / 2;
-  sv = Math.round(sv * 2) / 2;
-  return add(frame.origin, add(scaleVec(frame.u, su), scaleVec(frame.v, sv)));
 }
