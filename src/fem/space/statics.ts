@@ -293,7 +293,7 @@ export function externalWork3d(u: Float64Array, F: Float64Array): number {
 }
 
 /** Map a singular free-partition pivot (RCM order) back to an editor node. docs/FEM-SPEC.md §4.3 / §14 3V. */
-export function mechanismEditorNode3d(
+function mechanismEditorNode3d(
   mesh: AnalysisMesh3d,
   freeDofIndex: number,
   freePerm: Int32Array,

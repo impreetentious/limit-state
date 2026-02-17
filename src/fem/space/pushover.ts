@@ -9,13 +9,13 @@ import type { EditorModel3d, EndReleases3d } from './types';
 const MAX_PUSHOVER_STEPS = 24;
 const MOMENT_TOL = 1e-9;
 
-export interface PushoverHinge3d {
+interface PushoverHinge3d {
   memberId: number;
   end: 'a' | 'b';
   loadFactor: number;
 }
 
-export interface PushoverPoint3d {
+interface PushoverPoint3d {
   loadFactor: number;
   baseShear: number;
   roofDisp: number;

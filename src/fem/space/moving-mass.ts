@@ -22,7 +22,7 @@ export function assembleMassWithVehicle3d(
   return M;
 }
 
-export function addLumpedVehicleMass3d(
+function addLumpedVehicleMass3d(
   M: Float64Array,
   mesh: AnalysisMesh3d,
   contacts: readonly VehicleContact[],

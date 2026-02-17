@@ -175,7 +175,7 @@ export type FailureReport =
   | { kind: 'resonance'; mode: number; freqHz: number; daf: number; consequence?: 'yield' }
   | { kind: 'stable'; capacityFactor: number; governedBy: 'yield' | 'buckling'; memberId: number };
 
-export interface CascadeStep {
+interface CascadeStep {
   action: 'hinge' | 'remove';
   memberId: number;
   detail: string; // human sentence for the timeline

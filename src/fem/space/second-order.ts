@@ -17,7 +17,7 @@ import type { AnalysisMesh3d, AnalysisOptions3d, EditorModel3d, StaticResult3d }
 const RELATIVE_N_TOLERANCE = 1e-6;
 const MAX_ITERATIONS = 20;
 
-export type SecondOrderAnalysis3d =
+type SecondOrderAnalysis3d =
   | {
       kind: 'stable';
       mesh: AnalysisMesh3d;
@@ -133,7 +133,7 @@ export function solveSecondOrderStatic3d(
 }
 
 /** Tension-positive axial force per element from 3D element force blocks (12 per element). */
-export function elementAxial3d(result: StaticResult3d, elementCount: number): Float64Array {
+function elementAxial3d(result: StaticResult3d, elementCount: number): Float64Array {
   const N = new Float64Array(elementCount);
   for (let index = 0; index < elementCount; index++) {
     // At end A the local Fx reaction is compressive-positive: tension N = −Fx_a.
