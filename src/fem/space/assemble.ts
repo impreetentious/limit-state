@@ -425,7 +425,7 @@ export function assembleLoadCase3d(
  * Uniform local distributed load (wx, wy, wz) N/m → 12 local fixed-end forces.
  * Axial lumps half; bending blocks match §4.2 / §4.9 RH signs. docs/FEM-SPEC.md §4.2.
  */
-export function uniformFixedEnd3d(wx: number, wy: number, wz: number, L: number): Float64Array {
+function uniformFixedEnd3d(wx: number, wy: number, wz: number, L: number): Float64Array {
   const f = new Float64Array(12);
   f[0] = (-wx * L) / 2;
   f[6] = (-wx * L) / 2;

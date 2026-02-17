@@ -5,13 +5,13 @@
 import { assembleLoadCase3d, type LoadAssembly3d } from './assemble';
 import { buildMesh3d } from './mesh';
 import { solveStatic3d, type StaticAnalysis3d } from './statics';
-import type { AnalysisOptions3d, EditorModel3d, MemberSpec3d } from './types';
+import type { AnalysisOptions3d, EditorModel3d } from './types';
 
 const MAX_CABLE_ITERATIONS = 10;
 const SLACK_FORCE = 1e-6;
 const REACTIVATE_ELONGATION = 1e-12;
 
-export interface CableSolveResult3d {
+interface CableSolveResult3d {
   analysis: StaticAnalysis3d;
   activeCables: number[];
   slackCables: number[];
@@ -225,14 +225,4 @@ function sameSet(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
   if (a.size !== b.size) return false;
   for (const value of a) if (!b.has(value)) return false;
   return true;
-}
-
-/** Ensure cable members carry bending releases (keep torsion). docs/FEM-SPEC.md §14 3X. */
-export function normalizeCableMember3d(member: MemberSpec3d): MemberSpec3d {
-  if (!member.cableOnly) return member;
-  return {
-    ...member,
-    releaseA: { tx: false, ty: true, tz: true },
-    releaseB: { tx: false, ty: true, tz: true },
-  };
 }

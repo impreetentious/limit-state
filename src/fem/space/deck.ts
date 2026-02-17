@@ -12,7 +12,7 @@ export interface DeckSegment3d {
   elements: Array<{ index: number; reversed: boolean }>;
 }
 
-export interface DeckStationHit3d {
+interface DeckStationHit3d {
   station: number;
   element: number;
   xi: number;

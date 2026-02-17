@@ -1,6 +1,6 @@
 /**
- * Phase 3 space-frame types. Parallel to the 2D editor model; schema v2
- * migration lands with the 3D editor. docs/FEM-SPEC.md §4.9 / §14 Phase 3.
+ * Space-frame types parallel to the 2D editor model. Share schema v2 carries
+ * the spatial representation. docs/FEM-SPEC.md §4.9 / §14 Phase 3.
  */
 
 export interface NodeSpec3d {
@@ -38,7 +38,7 @@ export interface MemberSpec3d {
   cableOnly?: boolean;
 }
 
-export interface PointLoad3d {
+interface PointLoad3d {
   node: number;
   fx: number;
   fy: number;

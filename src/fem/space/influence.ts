@@ -22,7 +22,7 @@ export type InfluenceQuantity3d =
   /** Section bending magnitude at end or midpoint: √(My² + Mz²) with 'moment' at 'a'|'b'|'mid'. */
   | { kind: 'moment'; memberId: number; at: 'a' | 'b' | 'mid'; axis?: 'y' | 'z' | 'mag' };
 
-export interface InfluenceSample3d {
+interface InfluenceSample3d {
   station: number;
   x: number;
   y: number;
@@ -37,7 +37,7 @@ export interface InfluenceLine3d {
   peak: { station: number; value: number };
 }
 
-export interface InfluenceScenario3d {
+interface InfluenceScenario3d {
   model: EditorModel3d;
   mesh: AnalysisMesh3d;
   route: DeckSegment3d[];
@@ -52,7 +52,7 @@ export interface InfluenceEnvelope3d {
 }
 
 /** Factor the deck once. docs/FEM-SPEC.md §14 4B. */
-export function prepareInfluence3d(model: EditorModel3d): InfluenceScenario3d {
+function prepareInfluence3d(model: EditorModel3d): InfluenceScenario3d {
   const mesh = buildMesh3d(model);
   const route = buildDeckRoute3d(model, mesh);
   return {
@@ -75,7 +75,7 @@ export function computeInfluenceLine3d(
 }
 
 /** Re-use a prepared scenario. docs/FEM-SPEC.md §14 4B. */
-export function computeInfluenceLineAt3d(
+function computeInfluenceLineAt3d(
   scenario: InfluenceScenario3d,
   quantity: InfluenceQuantity3d,
   stepMeters?: number,
@@ -103,7 +103,7 @@ export function computeInfluenceLineAt3d(
 }
 
 /** Unit −Z-load response at one deck station. docs/FEM-SPEC.md §14 4B. */
-export function sampleInfluenceAt3d(
+function sampleInfluenceAt3d(
   scenario: InfluenceScenario3d,
   station: number,
   quantity: InfluenceQuantity3d,
