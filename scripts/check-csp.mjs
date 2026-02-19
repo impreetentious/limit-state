@@ -3,10 +3,10 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 // The shipped policy lives in three places that must never drift apart: the host
-// config for Vercel, the host config for the local `serve` preview that the
-// Playwright suite runs against, and the human-readable document an operator
-// reads when deploying somewhere else. This script is what makes "must never
-// drift" enforceable.
+// config for Vercel, the `serve.json` policy that `scripts/serve-static.mjs`
+// applies to the preview the Playwright suite runs against, and the
+// human-readable document an operator reads when deploying somewhere else. This
+// script is what makes "must never drift" enforceable.
 const DOC = 'docs/STATIC-HOST-HEADERS.md';
 const VERCEL = 'vercel.json';
 const SERVE = 'serve.json';

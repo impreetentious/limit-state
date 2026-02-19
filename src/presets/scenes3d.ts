@@ -511,15 +511,30 @@ export function portalPushover3d(): EditorModel3d {
 }
 
 /**
- * Simple suspension teaching span — deck + two hanging cables to towers.
- * Geometry is simplified (straight cable chords, no main-cable sag iteration).
- * docs/FEM-SPEC.md §14 3X.
+ * Simple suspension teaching span — deck between two towers, hangers relieving
+ * midspan. Geometry is simplified (straight cable chords, no main-cable sag
+ * iteration). docs/FEM-SPEC.md §14 3X.
+ *
+ * Two properties this scene has to hold, both covered by the preset gates:
+ *
+ * 1. It stands because the deck runs tower to tower and bears on the tower legs
+ *    at deck level — not because of the hangers. Every hanger is tension-only, so
+ *    a scheme that leaned on them for restraint would drop back to a mechanism
+ *    the moment a lateral load slackened one.
+ * 2. The hangers still have to earn their place: with them the deck carries its
+ *    own weight with a capacity factor of ~1.6 and settles ~33 mm; strip them and
+ *    the same deck yields. That contrast is the lesson.
+ *
+ * The span is sized to the sections. Cable thrust grows with span², and at 40 m
+ * these girders and 20 mm hangers are overstressed several times over — the
+ * scene only reads honestly at this scale.
  */
 function suspensionSpan3d(): EditorModel3d {
-  const L = 40;
+  const L = 20;
   const W = 4;
-  const towerH = 12;
-  const deckZ = 4;
+  const towerH = 6;
+  const deckZ = 2;
+  const TOWER: SectionSpec = { kind: 'box', b: 0.3, h: 0.3, t: 0.02 };
   return {
     v: 2,
     name: 'Suspension span',
@@ -539,27 +554,45 @@ function suspensionSpan3d(): EditorModel3d {
       { id: 12, x: L / 4, y: W / 2, z: deckZ },
       { id: 13, x: 0, y: -W / 2, z: deckZ },
       { id: 14, x: 0, y: W / 2, z: deckZ },
+      // Tower legs at deck level — the deck's bearing points.
+      { id: 15, x: -L / 2, y: -W / 2, z: deckZ },
+      { id: 16, x: -L / 2, y: W / 2, z: deckZ },
+      { id: 17, x: L / 2, y: -W / 2, z: deckZ },
+      { id: 18, x: L / 2, y: W / 2, z: deckZ },
     ],
     members: [
-      frame(1, 1, 5, { kind: 'box', b: 0.3, h: 0.3, t: 0.02 }),
-      frame(2, 2, 6, { kind: 'box', b: 0.3, h: 0.3, t: 0.02 }),
-      frame(3, 3, 7, { kind: 'box', b: 0.3, h: 0.3, t: 0.02 }),
-      frame(4, 4, 8, { kind: 'box', b: 0.3, h: 0.3, t: 0.02 }),
-      frame(5, 9, 13, GIRDER),
-      frame(6, 13, 11, GIRDER),
-      frame(7, 10, 14, GIRDER),
-      frame(8, 14, 12, GIRDER),
-      frame(9, 9, 10, CROSS_BEAM),
-      frame(10, 13, 14, CROSS_BEAM),
-      frame(11, 11, 12, CROSS_BEAM),
-      cable(12, 5, 9),
-      cable(13, 6, 10),
-      cable(14, 7, 11),
-      cable(15, 8, 12),
-      cable(16, 5, 13),
-      cable(17, 6, 14),
-      cable(18, 7, 13),
-      cable(19, 8, 14),
+      // Tower legs, split at deck level so the deck can bear on them.
+      frame(1, 1, 15, TOWER),
+      frame(2, 2, 16, TOWER),
+      frame(3, 3, 17, TOWER),
+      frame(4, 4, 18, TOWER),
+      frame(5, 15, 5, TOWER),
+      frame(6, 16, 6, TOWER),
+      frame(7, 17, 7, TOWER),
+      frame(8, 18, 8, TOWER),
+      // −Y girder, tower to tower (the painted traffic path).
+      frame(9, 15, 9, GIRDER),
+      frame(10, 9, 13, GIRDER),
+      frame(11, 13, 11, GIRDER),
+      frame(12, 11, 17, GIRDER),
+      // +Y girder.
+      frame(13, 16, 10, GIRDER),
+      frame(14, 10, 14, GIRDER),
+      frame(15, 14, 12, GIRDER),
+      frame(16, 12, 18, GIRDER),
+      frame(17, 15, 16, CROSS_BEAM),
+      frame(18, 9, 10, CROSS_BEAM),
+      frame(19, 13, 14, CROSS_BEAM),
+      frame(20, 11, 12, CROSS_BEAM),
+      frame(21, 17, 18, CROSS_BEAM),
+      cable(22, 5, 9),
+      cable(23, 6, 10),
+      cable(24, 7, 11),
+      cable(25, 8, 12),
+      cable(26, 5, 13),
+      cable(27, 6, 14),
+      cable(28, 7, 13),
+      cable(29, 8, 14),
     ],
     supports: [
       { node: 1, kind: 'fixed' },
@@ -568,7 +601,7 @@ function suspensionSpan3d(): EditorModel3d {
       { node: 4, kind: 'fixed' },
     ],
     loads: { gravity: true, points: [] },
-    deck: [5, 6],
+    deck: [9, 10, 11, 12],
     story: { kind: 'traffic', weightkN: 150, speed: 8, movingMass: false },
   };
 }

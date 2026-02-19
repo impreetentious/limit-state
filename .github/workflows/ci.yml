@@ -8,9 +8,12 @@ on:
 permissions:
   contents: read
 
+# Superseded pull-request runs are cancelled. Pushes to main are not: cancelling
+# the run would abort the deploy job with it, and a half-applied Pages deployment
+# is worse than a redundant verification pass.
 concurrency:
-  group: pages-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -52,6 +55,9 @@ jobs:
     needs: check
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     permissions:
       contents: read
       pages: write

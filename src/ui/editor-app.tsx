@@ -957,18 +957,40 @@ export function EditorApp(): React.JSX.Element {
   }, [loadModel, setNotice]);
 
   const shareModel = async () => {
+    let hash: string;
     try {
-      const hash = viewDimension === '3d' ? await encodeModel3d(model3d) : await encodeModel(model);
-      window.history.replaceState(null, '', hash);
-      await navigator.clipboard?.writeText(window.location.href);
-      setNotice(
-        viewDimension === '3d'
-          ? '3D share link copied — the model stays entirely in the URL.'
-          : 'Share link copied — the model stays entirely in the URL.',
-      );
-      if (viewDimension === '3d') setNotice3d('3D share link copied — schema v2 in the URL hash.');
+      hash = viewDimension === '3d' ? await encodeModel3d(model3d) : await encodeModel(model);
     } catch {
       setNotice('Share link could not be encoded.');
+      if (viewDimension === '3d') setNotice3d('3D share link could not be encoded.');
+      return;
+    }
+    window.history.replaceState(null, '', hash);
+
+    // The address bar now carries the model either way. Only the clipboard write
+    // can still fail — no permission, or no Clipboard API off a secure origin —
+    // and claiming "copied" when it did not is exactly the kind of unearned
+    // statement this product does not make.
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      copied = true;
+    } catch {
+      copied = false;
+    }
+
+    const prefix = viewDimension === '3d' ? '3D share link' : 'Share link';
+    setNotice(
+      copied
+        ? `${prefix} copied — the model stays entirely in the URL.`
+        : `${prefix} is in the address bar — copy it from there.`,
+    );
+    if (viewDimension === '3d') {
+      setNotice3d(
+        copied
+          ? '3D share link copied — schema v2 in the URL hash.'
+          : '3D share link is in the address bar — schema v2 in the URL hash.',
+      );
     }
   };
 
@@ -1419,13 +1441,13 @@ export function EditorApp(): React.JSX.Element {
               <p className="landing-invite-line">Draw on the workplane — or open a 3D preset.</p>
             </div>
           )}
-          {viewDimension === '3d' && model3d.members.length > 0 && (
+          {viewDimension === '3d' && mode === 'build' && model3d.members.length > 0 && (
             <div className="demo3d-note" role="note">
               Extrude/Replicate to go spatial · Deck paints a traffic polyline · Stories: wind /
               traffic / EQ / ramp / pushover
             </div>
           )}
-          {viewDimension === '3d' && (
+          {viewDimension === '3d' && mode === 'test' && (
             <TestConsole3d
               model={model3d}
               modalFreqHz={
@@ -1608,34 +1630,6 @@ export function EditorApp(): React.JSX.Element {
               )}
             </div>
           )}
-          {viewDimension === '2d' && analysis.kind === 'divergent' && (
-            <div className="shear-note" role="alert">
-              {analysis.message}
-            </div>
-          )}
-          {viewDimension === '3d' && analysis3d.kind === 'divergent' && (
-            <div className="shear-note" role="alert">
-              {analysis3d.message}
-            </div>
-          )}
-          {viewDimension === '2d' && stockyMembers.length > 0 && (
-            <div className="shear-note" role="note">
-              Shear flexibility matters when L/h &lt; 10 —{' '}
-              {stockyMembers.length === 1
-                ? `member ${stockyMembers[0]} is`
-                : `${stockyMembers.length} members are`}{' '}
-              stocky{shearFlexible ? '' : '; enable Timoshenko to include it'}.
-            </div>
-          )}
-          {viewDimension === '3d' && stockyMembers3d.length > 0 && (
-            <div className="shear-note" role="note">
-              Shear flexibility matters when L/h &lt; 10 —{' '}
-              {stockyMembers3d.length === 1
-                ? `member ${stockyMembers3d[0]} is`
-                : `${stockyMembers3d.length} members are`}{' '}
-              stocky{shearFlexible3d ? '' : '; enable Timoshenko to include it'}.
-            </div>
-          )}
           {viewDimension === '2d' && analysis.kind === 'stable' && analysis.secondOrder && (
             <div className="pdelta-badge" role="status">
               P-Δ ×{analysis.secondOrder.momentAmplification.toFixed(2)} moment · ×
@@ -1712,88 +1706,123 @@ export function EditorApp(): React.JSX.Element {
                 responsiveness.
               </div>
             )}
-          {(viewDimension === '3d' ? analysis3d.kind === 'stable' : analysis.kind === 'stable') && (
-            <div className="eigen-panel" aria-live="polite">
-              <span>Modal + Buckling{viewDimension === '3d' ? ' (3D)' : ''}</span>
-              {viewDimension === '2d' && eigen.kind === 'loading' && <p>Solving in worker…</p>}
-              {viewDimension === '2d' && eigen.kind === 'error' && (
-                <p className="eigen-error">{eigen.message}</p>
-              )}
-              {viewDimension === '3d' && eigen3dState.kind === 'loading' && (
-                <p>Solving in worker…</p>
-              )}
-              {viewDimension === '3d' && eigen3dState.kind === 'error' && (
-                <p className="eigen-error">{eigen3dState.message}</p>
-              )}
-              {((viewDimension === '2d' && eigen.kind === 'ready') ||
-                (viewDimension === '3d' && eigen3d)) &&
-                activeEigen && (
-                  <>
-                    <div className="mode-family" aria-label="Mode shape family">
-                      <button
-                        type="button"
-                        className={modeFamily === 'modal' ? 'active' : ''}
-                        onClick={() => {
-                          setModeFamily('modal');
-                          setSelectedMode(0);
-                        }}
-                      >
-                        Modal
-                      </button>
-                      <button
-                        type="button"
-                        className={modeFamily === 'buckling' ? 'active' : ''}
-                        onClick={() => {
-                          setModeFamily('buckling');
-                          setSelectedMode(0);
-                        }}
-                      >
-                        Buckling
-                      </button>
-                    </div>
-                    <div className="mode-list" aria-label="Animated mode shapes">
-                      {Array.from(activeEigen.values, (value, index) => (
-                        <button
-                          key={index}
-                          type="button"
-                          className={selectedMode === index ? 'active' : ''}
-                          onClick={() => setSelectedMode(index)}
-                        >
-                          {modeFamily === 'modal'
-                            ? `f${index + 1} ${(value / (Math.PI * 2)).toFixed(2)} Hz`
-                            : `λ${index + 1} ${value.toFixed(2)}`}
-                        </button>
-                      ))}
-                    </div>
-                    <p>
-                      {modeFamily === 'modal'
-                        ? `mode shape normalized — ${reducedMotion ? 'static (reduced motion)' : `animating at ${(animationHz ?? 0).toFixed(2)} Hz${nativeAnimationHz && nativeAnimationHz > 2 ? ' (display slowed ×4)' : ''}`}`
-                        : `buckling mode normalized — ${reducedMotion ? 'static (reduced motion)' : 'illustrative animation, not displacement'}`}
-                    </p>
-                    {viewDimension === '3d' &&
-                      model3d.name === 'Slender deck' &&
-                      modeFamily === 'modal' &&
-                      selectedMode === 1 && (
-                        <p className="honesty-note">
-                          f₂ is St. Venant torsion (girders out of phase) — not aeroelastic flutter;
-                          warping torsion out of scope.
-                        </p>
-                      )}
-                    <p>
-                      {(
-                        viewDimension === '3d'
-                          ? eigen3d?.buckling.values[0]
-                          : eigen.kind === 'ready'
-                            ? eigen.buckling.values[0]
-                            : undefined
-                      )
-                        ? `λcr ${(viewDimension === '3d' ? eigen3d!.buckling.values[0]! : (eigen as { kind: 'ready'; buckling: EigenResult }).buckling.values[0]!).toFixed(2)} × reference load`
-                        : 'No buckling under this load direction.'}
-                    </p>
-                  </>
+          {/* One column, so a shear note pushes the eigen panel down instead of
+              being painted over by it. Anchored where the eigen panel sits alone,
+              which keeps the note-free case unchanged. */}
+          <div className="canvas-stack">
+            {viewDimension === '2d' && analysis.kind === 'divergent' && (
+              <div className="shear-note" role="alert">
+                {analysis.message}
+              </div>
+            )}
+            {viewDimension === '3d' && analysis3d.kind === 'divergent' && (
+              <div className="shear-note" role="alert">
+                {analysis3d.message}
+              </div>
+            )}
+            {viewDimension === '2d' && stockyMembers.length > 0 && (
+              <div className="shear-note" role="note">
+                Shear flexibility matters when L/h &lt; 10 —{' '}
+                {stockyMembers.length === 1
+                  ? `member ${stockyMembers[0]} is`
+                  : `${stockyMembers.length} members are`}{' '}
+                stocky{shearFlexible ? '' : '; enable Timoshenko to include it'}.
+              </div>
+            )}
+            {viewDimension === '3d' && stockyMembers3d.length > 0 && (
+              <div className="shear-note" role="note">
+                Shear flexibility matters when L/h &lt; 10 —{' '}
+                {stockyMembers3d.length === 1
+                  ? `member ${stockyMembers3d[0]} is`
+                  : `${stockyMembers3d.length} members are`}{' '}
+                stocky{shearFlexible3d ? '' : '; enable Timoshenko to include it'}.
+              </div>
+            )}
+            {(viewDimension === '3d'
+              ? analysis3d.kind === 'stable'
+              : analysis.kind === 'stable') && (
+              <div className="eigen-panel" aria-live="polite">
+                <span>Modal + Buckling{viewDimension === '3d' ? ' (3D)' : ''}</span>
+                {viewDimension === '2d' && eigen.kind === 'loading' && <p>Solving in worker…</p>}
+                {viewDimension === '2d' && eigen.kind === 'error' && (
+                  <p className="eigen-error">{eigen.message}</p>
                 )}
-            </div>
-          )}
+                {viewDimension === '3d' && eigen3dState.kind === 'loading' && (
+                  <p>Solving in worker…</p>
+                )}
+                {viewDimension === '3d' && eigen3dState.kind === 'error' && (
+                  <p className="eigen-error">{eigen3dState.message}</p>
+                )}
+                {((viewDimension === '2d' && eigen.kind === 'ready') ||
+                  (viewDimension === '3d' && eigen3d)) &&
+                  activeEigen && (
+                    <>
+                      <div className="mode-family" aria-label="Mode shape family">
+                        <button
+                          type="button"
+                          className={modeFamily === 'modal' ? 'active' : ''}
+                          onClick={() => {
+                            setModeFamily('modal');
+                            setSelectedMode(0);
+                          }}
+                        >
+                          Modal
+                        </button>
+                        <button
+                          type="button"
+                          className={modeFamily === 'buckling' ? 'active' : ''}
+                          onClick={() => {
+                            setModeFamily('buckling');
+                            setSelectedMode(0);
+                          }}
+                        >
+                          Buckling
+                        </button>
+                      </div>
+                      <div className="mode-list" aria-label="Animated mode shapes">
+                        {Array.from(activeEigen.values, (value, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            className={selectedMode === index ? 'active' : ''}
+                            onClick={() => setSelectedMode(index)}
+                          >
+                            {modeFamily === 'modal'
+                              ? `f${index + 1} ${(value / (Math.PI * 2)).toFixed(2)} Hz`
+                              : `λ${index + 1} ${value.toFixed(2)}`}
+                          </button>
+                        ))}
+                      </div>
+                      <p>
+                        {modeFamily === 'modal'
+                          ? `mode shape normalized — ${reducedMotion ? 'static (reduced motion)' : `animating at ${(animationHz ?? 0).toFixed(2)} Hz${nativeAnimationHz && nativeAnimationHz > 2 ? ' (display slowed ×4)' : ''}`}`
+                          : `buckling mode normalized — ${reducedMotion ? 'static (reduced motion)' : 'illustrative animation, not displacement'}`}
+                      </p>
+                      {viewDimension === '3d' &&
+                        model3d.name === 'Slender deck' &&
+                        modeFamily === 'modal' &&
+                        selectedMode === 1 && (
+                          <p className="honesty-note">
+                            f₂ is St. Venant torsion (girders out of phase) — not aeroelastic
+                            flutter; warping torsion out of scope.
+                          </p>
+                        )}
+                      <p>
+                        {(
+                          viewDimension === '3d'
+                            ? eigen3d?.buckling.values[0]
+                            : eigen.kind === 'ready'
+                              ? eigen.buckling.values[0]
+                              : undefined
+                        )
+                          ? `λcr ${(viewDimension === '3d' ? eigen3d!.buckling.values[0]! : (eigen as { kind: 'ready'; buckling: EigenResult }).buckling.values[0]!).toFixed(2)} × reference load`
+                          : 'No buckling under this load direction.'}
+                      </p>
+                    </>
+                  )}
+              </div>
+            )}
+          </div>
           {viewDimension === '2d' && mode === 'test' && (
             <TestConsole
               model={model}

@@ -22,7 +22,14 @@ import {
 } from './workplane';
 
 export type EditorTool3d =
-  'select' | 'node' | 'member' | 'support' | 'load' | 'deck' | 'delete' | 'workplane';
+  | 'select'
+  | 'node'
+  | 'member'
+  | 'support'
+  | 'load'
+  | 'deck'
+  | 'delete'
+  | 'workplane';
 type ResultDiagram3d = 'none' | 'axial' | 'shear' | 'moment';
 
 type Selection3d =
@@ -34,7 +41,9 @@ type Selection3d =
 
 /** Three-click custom workplane definition in progress. docs/FEM-SPEC.md §14 3T. */
 type WorkplanePick =
-  { step: 0 } | { step: 1; origin: Vec3 } | { step: 2; origin: Vec3; alongU: Vec3 };
+  | { step: 0 }
+  | { step: 1; origin: Vec3 }
+  | { step: 2; origin: Vec3; alongU: Vec3 };
 
 interface EditorState3d {
   model: EditorModel3d;

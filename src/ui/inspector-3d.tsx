@@ -315,7 +315,7 @@ function NumberField({
   return (
     <label className="field">
       <span>{label}</span>
-      <div className="number-with-unit">
+      <div className="number-input">
         <input
           type="number"
           value={Number.isFinite(value) ? value : ''}

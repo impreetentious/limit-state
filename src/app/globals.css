@@ -292,12 +292,19 @@ kbd {
   width: 100%;
 }
 
+/* Bottom-right, mirroring the 2D `.test-console`: the eigen panel is top-left and
+   this panel grows upward with the story chrome, so sharing that column hides it.
+   The height cap keeps a tall story from outgrowing short viewports. */
 .wind3d-panel {
   position: absolute;
-  left: 0.75rem;
-  bottom: 0.75rem;
+  right: 0.85rem;
+  bottom: 0.85rem;
   z-index: 2;
   width: min(16rem, calc(100% - 1.5rem));
+  /* Stay clear of the eigen panel's band (top 3.95rem, ~10rem tall) so a narrow
+     canvas cannot stack the two on top of each other; overflow scrolls instead. */
+  max-height: calc(100% - 15rem);
+  overflow-y: auto;
   padding: 0.65rem 0.75rem;
   background: color-mix(in srgb, var(--paper) 92%, transparent);
   border: 1px solid rgba(26, 29, 33, 0.16);
@@ -335,9 +342,12 @@ kbd {
   color: color-mix(in srgb, var(--ink) 58%, transparent);
 }
 
+/* Build-mode hint. Anchored to the bottom band, not the top one: `.result-controls`
+   is left-anchored and wide in 3D, so a top-centred note collides with the
+   Deformed / Timoshenko / P-Δ toggles at common viewport widths. */
 .demo3d-note {
   position: absolute;
-  top: 0.75rem;
+  bottom: 0.85rem;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1;
@@ -476,11 +486,23 @@ kbd {
   accent-color: var(--accent);
 }
 
-.shear-note {
+/* Left-hand overlay column: shear/divergence notes stacked above the eigen panel.
+   They were each absolutely positioned in the same band, so whichever painted
+   last covered the others. */
+.canvas-stack {
   position: absolute;
+  top: 3.95rem;
   left: 0.85rem;
-  top: 3.35rem;
-  max-width: min(28rem, calc(100% - 12rem));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  max-width: calc(100% - 1.7rem);
+  max-height: calc(100% - 4.8rem);
+}
+
+.shear-note {
+  max-width: min(28rem, 100%);
   padding: 0.28rem 0.45rem;
   border: 1px solid rgba(36, 86, 164, 0.28);
   background: rgba(244, 241, 234, 0.94);
@@ -509,10 +531,7 @@ kbd {
 }
 
 .eigen-panel {
-  position: absolute;
-  top: 3.95rem;
-  left: 0.85rem;
-  max-width: min(21rem, calc(100% - 1.7rem));
+  max-width: min(21rem, 100%);
   padding: 0.48rem 0.58rem;
   border: 1px solid rgba(26, 29, 33, 0.15);
   background: rgba(244, 241, 234, 0.94);
@@ -549,6 +568,11 @@ kbd {
   align-items: center;
   gap: 0.25rem;
   margin-top: 0.4rem;
+}
+
+/* Five story tabs exceed the panel width; wrap rather than spill past its border. */
+.mode-family {
+  flex-wrap: wrap;
 }
 
 .mode-family button {
@@ -782,6 +806,95 @@ kbd {
   color: #63307f;
   font-family: var(--font-mono);
   font-size: 0.67rem;
+}
+
+/* 3D wind DAF meter, f₁…f₄ marks, and per-mode energy bars. docs/FEM-SPEC.md §14 4C. */
+.wind3d-daf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+}
+
+.wind3d-resonance {
+  padding: 0.1rem 0.28rem;
+  border: 1px solid rgba(124, 63, 156, 0.35);
+  background: rgba(124, 63, 156, 0.12);
+  color: #63307f;
+}
+
+.wind3d-freq-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  margin-top: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+}
+
+.wind3d-freq-marks span {
+  padding: 0.12rem 0.26rem;
+  border: 1px solid rgba(26, 29, 33, 0.16);
+  color: rgba(26, 29, 33, 0.7);
+}
+
+/* The forcing frequency is within 10% of this mode — the resonance warning band. */
+.wind3d-freq-marks span.near {
+  border-color: rgba(124, 63, 156, 0.45);
+  background: rgba(124, 63, 156, 0.14);
+  color: #63307f;
+}
+
+.wind3d-modal-bars {
+  display: grid;
+  gap: 0.16rem;
+  margin-top: 0.4rem;
+}
+
+.wind3d-modal-row {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.wind3d-modal-label {
+  color: rgba(26, 29, 33, 0.6);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+}
+
+.wind3d-modal-track {
+  height: 0.4rem;
+  border: 1px solid rgba(26, 29, 33, 0.14);
+  background: rgba(26, 29, 33, 0.05);
+}
+
+.wind3d-modal-fill {
+  height: 100%;
+  min-width: 1px;
+  background: rgba(124, 63, 156, 0.55);
+}
+
+/* 3D member count + stability lint in the tool rail. docs/FEM-SPEC.md §14 4G. */
+.rail-lint {
+  display: block;
+  margin-top: 0.5rem;
+  color: rgba(26, 29, 33, 0.62);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.rail-lint.soft {
+  color: #a46012;
+}
+
+.rail-lint.hard {
+  color: var(--danger);
 }
 
 .test-console-header button {
@@ -1090,6 +1203,21 @@ kbd {
   margin: 0 0 0.45rem;
   font-size: 1.05rem;
   letter-spacing: -0.02em;
+}
+
+/* Schema-v2 marker on 3D entries. docs/FEM-SPEC.md §14 4J. */
+.gallery-badge {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.1rem 0.32rem;
+  border: 1px solid rgba(36, 86, 164, 0.4);
+  background: rgba(36, 86, 164, 0.1);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
 }
 
 .gallery-card p {

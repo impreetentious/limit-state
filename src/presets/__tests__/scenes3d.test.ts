@@ -4,34 +4,44 @@
  */
 import { describe, expect, it } from 'vitest';
 import { analyzeStaticModel3d, buildMesh3d, modal3d } from '../../fem/space';
-import {
-  cantileverBridge3d,
-  prattTruss3d,
-  simpleBeam3d,
-  slenderDeck3d,
-  slenderMastDemo,
-  spaceDeckDemo,
-  spacePortalDemo,
-} from '../scenes3d';
+import { PRESETS_3D, prattTruss3d, slenderDeck3d } from '../scenes3d';
 
 describe('3D presets (Phase 3 polish)', () => {
-  it('builds every teaching preset without a mechanism', () => {
-    for (const build of [
-      simpleBeam3d,
-      prattTruss3d,
-      cantileverBridge3d,
-      slenderDeck3d,
-      slenderMastDemo,
-      spacePortalDemo,
-      spaceDeckDemo,
-    ]) {
-      const model = build();
+  // Drives the shipped menu itself, not a hand-listed subset: a preset that is
+  // added to PRESETS_3D but forgotten here is exactly how an unsolvable scene
+  // reaches the presets dropdown and the curated gallery.
+  it('builds every teaching preset in the menu without a mechanism', () => {
+    const scenes = PRESETS_3D.filter((preset) => preset.id !== 'blank');
+    expect(scenes.length).toBe(PRESETS_3D.length - 1);
+
+    for (const preset of scenes) {
+      const model = preset.build();
       const mesh = buildMesh3d(model);
-      expect(mesh.elements.length).toBeGreaterThan(0);
-      expect(mesh.freeDofs.length).toBeGreaterThan(0);
+      expect(mesh.elements.length, preset.id).toBeGreaterThan(0);
+      expect(mesh.freeDofs.length, preset.id).toBeGreaterThan(0);
       const analysis = analyzeStaticModel3d(model);
-      expect(analysis.kind, model.name).toBe('stable');
+      expect(analysis.kind, `${preset.id} (${model.name})`).toBe('stable');
     }
+  });
+
+  // 3X: the hangers must carry load, not merely decorate. Deleting them leaves a
+  // deck that still stands (it bears on the towers) but sags substantially more.
+  it('suspension span: tension-only hangers relieve the deck and are not its restraint', () => {
+    const model = PRESETS_3D.find((preset) => preset.id === 'suspension')!.build();
+    const withoutHangers = { ...model, members: model.members.filter((m) => !m.cableOnly) };
+
+    const sag = (candidate: typeof model) => {
+      const analysis = analyzeStaticModel3d(candidate);
+      expect(analysis.kind).toBe('stable');
+      const u = (analysis as Extract<typeof analysis, { kind: 'stable' }>).result.u;
+      let maxUz = 0;
+      for (let node = 0; u.length > node * 6; node++) {
+        maxUz = Math.max(maxUz, Math.abs(u[node * 6 + 2]!));
+      }
+      return maxUz;
+    };
+
+    expect(sag(model)).toBeLessThan(0.5 * sag(withoutHangers));
   });
 
   it('slender deck: f₁ vertical heave, f₂ St. Venant torsion (opposite girder uz)', () => {
