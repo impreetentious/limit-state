@@ -18,7 +18,7 @@ import {
 } from '../fem/statics';
 import type { AnalysisMesh, AnalysisOptions, EditorModel } from '../fem/types';
 
-export interface TrafficAxle {
+interface TrafficAxle {
   station: number;
   x: number;
   y: number;

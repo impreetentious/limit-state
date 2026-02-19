@@ -74,7 +74,7 @@ export function prepareEarthquake(
 }
 
 /** Absolute nodal load at time t: gravity/points + −M·ι·ü_g(t). docs/FEM-SPEC.md §14 2C. */
-export function earthquakeLoadAt(scenario: EarthquakeScenario, time: number): Float64Array {
+function earthquakeLoadAt(scenario: EarthquakeScenario, time: number): Float64Array {
   const load = new Float64Array(scenario.baseLoad);
   const ug = groundAccelAt(scenario.record, time);
   const excitation = baseExcitationLoad(scenario.mass, scenario.mesh.ndof, scenario.iota, ug);

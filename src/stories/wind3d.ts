@@ -67,7 +67,7 @@ export function windDirectionUnit(directionDeg: number): { x: number; y: number;
   return { x: Math.cos(rad), y: Math.sin(rad), z: 0 };
 }
 
-export function windLoadAt3d(scenario: WindScenario3d, time: number): Float64Array {
+function windLoadAt3d(scenario: WindScenario3d, time: number): Float64Array {
   const load = new Float64Array(scenario.baseLoad);
   const increment = windIncrementForMultiplier3d(
     scenario,

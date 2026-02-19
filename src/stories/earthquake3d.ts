@@ -78,13 +78,14 @@ export function prepareEarthquake3d(model: EditorModel3d): EarthquakeScenario3d 
 }
 
 /** ι with unity on global-X translational DOFs. docs/FEM-SPEC.md §14 2C / 3W. */
-export function influenceVectorHorizontal3d(mesh: AnalysisMesh3d, axis: 0 | 1 = 0): Float64Array {
+function influenceVectorHorizontal3d(mesh: AnalysisMesh3d, axis: 0 | 1 = 0): Float64Array {
   const iota = new Float64Array(mesh.ndof);
-  for (let node = 0; mesh.ndof > node * 6; node++) iota[6 * node + axis] = 1;
+  const nodeCount = mesh.ndof / 6;
+  for (let node = 0; node < nodeCount; node++) iota[6 * node + axis] = 1;
   return iota;
 }
 
-export function earthquakeLoadAt3d(scenario: EarthquakeScenario3d, time: number): Float64Array {
+function earthquakeLoadAt3d(scenario: EarthquakeScenario3d, time: number): Float64Array {
   const load = new Float64Array(scenario.baseLoad);
   const ug = groundAccelAt(scenario.record, time);
   const excitation = baseExcitationLoad(scenario.mass, scenario.mesh.ndof, scenario.iota, ug);

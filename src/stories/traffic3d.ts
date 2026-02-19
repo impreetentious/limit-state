@@ -33,7 +33,7 @@ import {
 } from '../fem/space/statics';
 import type { AnalysisMesh3d, EditorModel3d } from '../fem/space/types';
 
-export interface TrafficAxle3d {
+interface TrafficAxle3d {
   station: number;
   x: number;
   y: number;
