@@ -267,8 +267,12 @@ export function EditorApp(): React.JSX.Element {
       elements: source.elements.map((element) => ({ ...element, R: element.R.slice() })),
     };
     const elementN = new Float64Array(mesh.elements.length);
+    // Tension-positive N = −Fx at end A, signed: a member in tension stiffens
+    // the structure against buckling, so forcing every member into compression
+    // would report a load factor for a state the model is not in.
+    // docs/FEM-SPEC.md §4.5 / §4.9.
     for (let index = 0; index < elementN.length; index++)
-      elementN[index] = -Math.abs(analysis3d.result.elementForces[index * 12]!);
+      elementN[index] = -analysis3d.result.elementForces[index * 12]!;
     const requestedModes = mesh.ndof > 1500 ? 4 : 8;
     const nModes = Math.min(requestedModes, Math.max(1, mesh.freeDofs.length - 1));
     worker.postMessage({ id, dimension: '3d', mesh, elementN, nModes }, [

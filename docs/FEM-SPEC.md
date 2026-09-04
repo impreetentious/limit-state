@@ -259,7 +259,7 @@ k_y = EI_y / L³ ·
 
 ## 5. Data model & sharing
 
-`fem/types.ts` is the single source of truth (already scaffolded). Serialization schema v1 (JSON):
+`fem/types.ts` is the single source of truth. Serialization schema v1 (JSON):
 
 ```json
 {
@@ -372,7 +372,7 @@ The downstream utilization, influence-line, pushover, and traffic paths use the 
 actions. The simple-beam checks assert a parabolic moment diagram with a midspan peak and zero pin
 moments, plus a shear diagram that changes sign at midspan.
 
-**Slender-deck traffic re-derivation (GAP-10 follow-through).** The preset is a 60 m simply
+**Slender-deck traffic re-derivation.** The preset is a 60 m simply
 supported span with `w_g = ρAg = 5,912.233152 N/m`, `M_y = f_y I/c = 2,908,160 N·m`, and gravity
 midspan moment `w_g L²/8 = 2,660,504.9184 N·m` (`U_g = 0.9148413149`). A vehicle front axle at
 station 0 is on the pin and its rear axle is off-deck, so it adds no member action and has no
@@ -407,51 +407,54 @@ Preset files are data (`presets/*.ts` exporting schema-v1 objects with authored 
 
 All in `fem/__tests__/`, Vitest, node environment. These exact tolerances were measured during planning; regressions are bugs, not "numerical noise."
 
-| Gate                       | Setup                                                       | Expect                                                                | Tol                                |
-| -------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------- |
-| G1 tip deflection          | cantilever, 1 elem, tip P                                   | PL³/3EI and θ = PL²/2EI                                               | 1e−10 rel                          |
-| G2 SS midspan UDL          | 2 subdivisions, consistent FEF                              | 5wL⁴/384EI at mid-node                                                | 1e−10 rel (nodal exactness of E-B) |
-| G3 Euler buckling          | pinned column, 2 elem                                       | π²EI/L²                                                               | +0.8% (measured +0.75%)            |
-| G3b Euler buckling         | 4 elem                                                      | π²EI/L²                                                               | +0.1% (measured +0.051%)           |
-| G4 SS beam ω₁              | 2 elem, consistent mass                                     | π²√(EI/ρAL⁴)                                                          | +0.5% (measured +0.39%)            |
-| G5 K symmetry & Betti      | random frames (seeded)                                      | Kᵀ = K; δ_ab = δ_ba                                                   | 1e−9                               |
-| G6 mechanism detect        | unsupported / underbraced models                            | flagged, correct node                                                 | exact                              |
-| G7 releases                | truss vs frame same geometry                                | truss members carry M ≈ 0                                             | 1e−8                               |
-| G8 Newmark SDOF            | ζ = 2%, r = 1, 50 cycles                                    | steady amp = static × 1/(2ζ)                                          | 2%                                 |
-| G9 Rayleigh fit            | ζ at ω₁, ω₂                                                 | modal ζ₁ = ζ₂ = target                                                | 1e−6                               |
-| G10 sections               | each section kind                                           | A, I vs hand calc                                                     | 1e−12                              |
-| G11 share round-trip       | property: random models                                     | decode(encode(m)) = m                                                 | exact                              |
-| G12 cascade golden         | preset 4 overload                                           | exact step sequence                                                   | frozen fixture                     |
-| G13 load positioning       | P at ξ sweep                                                | reactions sum to P; continuity at nodes                               | 1e−10                              |
-| G14 Timoshenko tip         | cantilever, shearFlexible, tip P                            | PL³/3EI + PL/(G A_s)                                                  | 1e−9 rel                           |
-| G15 P-Δ amplification      | beam-column, tip H + axial P                                | moment amp ≈ tan(μ)/μ ≈ 1/(1−P/P_cr)                                  | 2%                                 |
-| G16 earthquake spectrum    | SDOF Sa peak vs Newmark SDOF                                | peak Sa match                                                         | 2%                                 |
-| G17 influence midspan M    | SS beam, unit-load deck sweep                               | piecewise-linear η peak L/4                                           | exact                              |
-| G18 tension-only cables    | guyed mast, tip lateral load                                | load-side guy slack, restraint taut                                   | golden                             |
-| G19 plastic pushover       | fixed portal, eaves H                                       | collapse H vs 4M_p/h                                                  | 3%                                 |
-| G20 challenges + gallery   | 4 budget challenges + curated hashes                        | starter fail / solution pass; gallery.json `#mu=` round-trip          | exact                              |
-| G21 moving-mass traffic    | SS beam, parked vehicle + lumped M                          | mass conserved; Newmark settles to quasi-static midspan               | 2%                                 |
-| G22 3D cantilever tip      | 1 space-frame elem; tip P_y, P_z, T_x                       | PL³/3EI + TL/GJ closed forms                                          | 1e−10 rel                          |
-| G23 2D↔3D regression       | G1 cantilever as 3D XY-plane model, out-of-plane DOFs fixed | tip matches 2D analyzeStaticModel                                     | 1e−9 rel                           |
-| G24 space corner frame     | two orthogonal members, tip load off both axes              | reactions ∑F = P; K symmetric; energy W=U                             | 1e−9                               |
-| G25 3D Euler buckling      | pinned column, 2 space-frame elems, 2D DOF pattern embedded | π²EI/L² (matches G3)                                                  | +0.8%                              |
-| G26 3D modal               | SS beam 2 elems (embed + biaxial Iy≠Iz)                     | ω₁ ≈ π²√(EI/ρAL⁴); biaxial ∝ √I                                       | +0.5%                              |
-| G27 spatial buckling       | pinned column along Z, both bending planes free, G=1        | λ_cr = π² E I_min / L²                                                | +0.8%                              |
-| G28 schema v2 migrate      | golden v1 URL + migrateV1toV2                               | v1 decode identical; v2 round-trip; z=0 planar                        | exact                              |
-| G29 3D influence midspan M | clamped-clamped deck, unit-load station sweep               | η peak = L/8 at midspan                                               | 1e−6 rel                           |
-| G30 3D traffic envelope    | deck station sweep, two-axle                                | monotonic under repeated merges; ≥ single-station \|M\|               | exact                              |
-| G31 3D wind DAF            | synthetic modal coords driven at f₁                         | measured DAF = 1/(2ζ); resonance fires only inside ±10% / 1.5× / ζ<5% | 2%                                 |
-| G32 3D Timoshenko tip      | stubby cantilever (L/h = 3), shearFlexible, tip P           | PL³/3EI_y + PL/(G A_s)                                                | 1e−6 rel                           |
-| G33 3D P-Δ amplification   | space beam-column, tip H + axial P = 0.25 P_cr              | M amp ≈ tan(μ)/μ ≈ 1/(1−P/P_cr); linear recovery at P=0               | 2%                                 |
-| G34 3D live cable slack    | guyed mast through `analyzeStaticModel3d`                   | load-side guy slack, restraint guy taut                               | golden                             |
-| G35 3D gallery round-trip  | curated v2 `#mu=` hashes in gallery.json                    | `decodeModel3d` matches authored source; hash < 32 kB                 | exact                              |
-| G36 3D editor history      | undo/redo + `MEMBER_HARD_LIMIT_3D`                          | counts restored; adds past the cap rejected; load/reset clear history | exact                              |
+| Gate                       | Setup                                                           | Expect                                                                       | Tol                                |
+| -------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------- |
+| G1 tip deflection          | cantilever, 1 elem, tip P                                       | PL³/3EI and θ = PL²/2EI                                                      | 1e−10 rel                          |
+| G2 SS midspan UDL          | 2 subdivisions, consistent FEF                                  | 5wL⁴/384EI at mid-node                                                       | 1e−10 rel (nodal exactness of E-B) |
+| G3 Euler buckling          | pinned column, 2 elem                                           | π²EI/L²                                                                      | +0.8% (measured +0.75%)            |
+| G3b Euler buckling         | 4 elem                                                          | π²EI/L²                                                                      | +0.1% (measured +0.051%)           |
+| G4 SS beam ω₁              | 2 elem, consistent mass                                         | π²√(EI/ρAL⁴)                                                                 | +0.5% (measured +0.39%)            |
+| G5 K symmetry & Betti      | random frames (seeded)                                          | Kᵀ = K; δ_ab = δ_ba                                                          | 1e−9                               |
+| G6 mechanism detect        | unsupported / underbraced models                                | flagged, correct node                                                        | exact                              |
+| G7 releases                | truss vs frame same geometry                                    | truss members carry M ≈ 0                                                    | 1e−8                               |
+| G8 Newmark SDOF            | ζ = 2%, r = 1, 50 cycles                                        | steady amp = static × 1/(2ζ)                                                 | 2%                                 |
+| G9 Rayleigh fit            | ζ at ω₁, ω₂                                                     | modal ζ₁ = ζ₂ = target                                                       | 1e−6                               |
+| G10 sections               | each section kind                                               | A, I vs hand calc                                                            | 1e−12                              |
+| G11 share round-trip       | property: random models                                         | decode(encode(m)) = m                                                        | exact                              |
+| G12 cascade golden         | preset 4 overload                                               | exact step sequence                                                          | frozen fixture                     |
+| G13 load positioning       | P at ξ sweep                                                    | reactions sum to P; continuity at nodes                                      | 1e−10                              |
+| G14 Timoshenko tip         | cantilever, shearFlexible, tip P                                | PL³/3EI + PL/(G A_s)                                                         | 1e−9 rel                           |
+| G15 P-Δ amplification      | beam-column, tip H + axial P                                    | moment amp ≈ tan(μ)/μ ≈ 1/(1−P/P_cr)                                         | 2%                                 |
+| G16 earthquake spectrum    | SDOF Sa peak vs Newmark SDOF                                    | peak Sa match                                                                | 2%                                 |
+| G17 influence midspan M    | SS beam, unit-load deck sweep                                   | piecewise-linear η peak L/4                                                  | exact                              |
+| G18 tension-only cables    | guyed mast, tip lateral load                                    | load-side guy slack, restraint taut                                          | golden                             |
+| G19 plastic pushover       | fixed portal, eaves H                                           | collapse H vs 4M_p/h                                                         | 3%                                 |
+| G20 challenges + gallery   | 4 budget challenges + curated hashes                            | starter fail / solution pass; gallery.json `#mu=` round-trip                 | exact                              |
+| G21 moving-mass traffic    | SS beam, parked vehicle + lumped M                              | mass conserved; Newmark settles to quasi-static midspan                      | 2%                                 |
+| G22 3D cantilever tip      | 1 space-frame elem; tip P_y, P_z, T_x                           | PL³/3EI + TL/GJ closed forms                                                 | 1e−10 rel                          |
+| G23 2D↔3D regression       | G1 cantilever as 3D XY-plane model, out-of-plane DOFs fixed     | tip matches 2D analyzeStaticModel                                            | 1e−9 rel                           |
+| G24 space corner frame     | two orthogonal members, tip load off both axes                  | reactions ∑F = P; K symmetric; energy W=U                                    | 1e−9                               |
+| G25 3D Euler buckling      | pinned column, 2 space-frame elems, 2D DOF pattern embedded     | π²EI/L² (matches G3)                                                         | +0.8%                              |
+| G26 3D modal               | SS beam 2 elems (embed + biaxial Iy≠Iz)                         | ω₁ ≈ π²√(EI/ρAL⁴); biaxial ∝ √I                                              | +0.5%                              |
+| G27 spatial buckling       | pinned column along Z, both bending planes free, G=1            | λ_cr = π² E I_min / L²                                                       | +0.8%                              |
+| G28 schema v2 migrate      | golden v1 URL + migrateV1toV2                                   | v1 decode identical; v2 round-trip; z=0 planar                               | exact                              |
+| G29 3D influence midspan M | clamped-clamped deck, unit-load station sweep                   | η peak = L/8 at midspan                                                      | 1e−6 rel                           |
+| G30 3D traffic envelope    | deck station sweep, two-axle                                    | monotonic under repeated merges; ≥ single-station \|M\|                      | exact                              |
+| G31 3D wind DAF            | synthetic modal coords driven at f₁                             | measured DAF = 1/(2ζ); resonance fires only inside ±10% / 1.5× / ζ<5%        | 2%                                 |
+| G32 3D Timoshenko tip      | stubby cantilever (L/h = 3), shearFlexible, tip P               | PL³/3EI_y + PL/(G A_s)                                                       | 1e−6 rel                           |
+| G33 3D P-Δ amplification   | space beam-column, tip H + axial P = 0.25 P_cr                  | M amp ≈ tan(μ)/μ ≈ 1/(1−P/P_cr); linear recovery at P=0                      | 2%                                 |
+| G34 3D live cable slack    | guyed mast through `analyzeStaticModel3d`                       | load-side guy slack, restraint guy taut                                      | golden                             |
+| G35 3D gallery round-trip  | curated v2 `#mu=` hashes in gallery.json                        | `decodeModel3d` matches authored source; hash < 32 kB                        | exact                              |
+| G36 3D editor history      | undo/redo + `MEMBER_HARD_LIMIT_3D`                              | counts restored; adds past the cap rejected; load/reset clear history        | exact                              |
+| G37 A/S/M diagram shape    | gravity-loaded `simple-beam` preset                             | sagging parabolic M peaking at midspan; zero pin moments; shear sign change  | §6.8 criteria                      |
+| G38 3D recovery oracle     | clamped-clamped and propped-cantilever space beams, self-weight | end shear wL/2 and moment wL²/12; hinge moment 0; R_pin 3wL/8; M_fixed wL²/8 | 1e−6 rel                           |
+| G39 fully released bar     | space member released at both ends, self-weight                 | solves as a pin-ended axial bar; reactions wL/2, no end moments              | 1e−9                               |
 
 **G29 spatial influence criterion.** A single-element pinned-pinned space frame is singular about
 its own axis, so the gate uses a clamped-clamped deck and its exact `L/8` midspan peak. The planar
 simply-supported `L/4` case remains covered by G17 in 2D.
 
-Gates G1–G37 are real Vitest checks (not `it.todo`) and must stay green. Both CI configurations run
+Gates G1–G39 are real Vitest checks (not `it.todo`) and must stay green. Both CI configurations run
 version coherence, the production dependency audit, typecheck, lint, citation and format checks,
 build, CSP and bundle checks, Playwright against the static export, and the complete Vitest suite.
 Deployment occurs only from a green `main` build.

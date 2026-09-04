@@ -36,7 +36,7 @@ export function gallerySources(): GallerySource[] {
   const solutions: GallerySource[] = CHALLENGES.map((challenge) => ({
     id: `solution-${challenge.id}`,
     title: `${challenge.label.replace(/^\d+\s·\s/, '')} (reference)`,
-    blurb: `One steel-budget solution for challenge “${challenge.brief}”.`,
+    blurb: `One steel-budget solution for challenge “${challenge.brief.replace(/\.$/, '')}”.`,
     model: CHALLENGE_SOLUTIONS[challenge.id]!,
   }));
 

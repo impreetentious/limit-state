@@ -253,12 +253,19 @@ export function transformToGlobal3d(kLoc: Float64Array, R: Float64Array): Float6
   return out;
 }
 
+/** Shear-flexible block selector, shared by stiffness and load condensation. docs/FEM-SPEC.md §14 4E. */
+function shearOption(
+  element: Element3d,
+  shearFlexible: boolean,
+): { AsY: number; AsZ: number } | undefined {
+  return shearFlexible && element.As !== undefined && element.As > 0
+    ? { AsY: element.As, AsZ: element.As }
+    : undefined;
+}
+
 /** Local element stiffness after rotational end-release condensation. docs/FEM-SPEC.md §4.9 / §14 4E. */
 export function elementLocalStiffness3d(element: Element3d, shearFlexible = false): Float64Array {
-  const shear =
-    shearFlexible && element.As !== undefined && element.As > 0
-      ? { AsY: element.As, AsZ: element.As }
-      : undefined;
+  const shear = shearOption(element, shearFlexible);
   const elastic = kLocal3d(
     element.E,
     element.G,
@@ -292,10 +299,14 @@ export function assembleK3dDense(mesh: AnalysisMesh3d): Float64Array {
 /** Assemble global consistent M. docs/FEM-SPEC.md §4.9. */
 export function assembleM3d(mesh: AnalysisMesh3d): Float64Array {
   const M = new Float64Array(mesh.ndof * mesh.ndof);
+  const shear = mesh.shearFlexible === true;
   for (const element of mesh.elements) {
+    // A release constrains the compatible elastic shape, so the mass uses the
+    // same k-based transform the stiffness does — including its φ terms.
     const local = condenseWithElementReleases(
       mLocal3d(element.rho, element.A, element.Iy, element.Iz, element.L),
       element,
+      shearOption(element, shear),
     );
     addElementMatrix3d(M, mesh.ndof, transformToGlobal3d(local, element.R), element);
   }
@@ -310,7 +321,11 @@ export function assembleKg3d(mesh: AnalysisMesh3d, elementN: Float64Array): Floa
   const Kg = new Float64Array(mesh.ndof * mesh.ndof);
   for (let index = 0; index < mesh.elements.length; index++) {
     const element = mesh.elements[index]!;
-    const local = condenseWithElementReleases(kgLocal3d(elementN[index]!, element.L), element);
+    const local = condenseWithElementReleases(
+      kgLocal3d(elementN[index]!, element.L),
+      element,
+      shearOption(element, mesh.shearFlexible === true),
+    );
     addElementMatrix3d(Kg, mesh.ndof, transformToGlobal3d(local, element.R), element);
   }
   return Kg;
@@ -318,7 +333,7 @@ export function assembleKg3d(mesh: AnalysisMesh3d, elementN: Float64Array): Floa
 
 export interface LoadAssembly3d {
   F: Float64Array;
-  /** Local fixed-end forces, 12 per element — subtracted in stress recovery. docs/FEM-SPEC.md §4.2. */
+  /** Condensed local fixed-end forces, 12 per element — added in stress recovery. docs/FEM-SPEC.md §4.2 / §6.8. */
   elementFixedEnd: Float64Array;
 }
 
@@ -478,18 +493,26 @@ function addEquivalentLocalLoad3d(
   fixedEndByElement: Float64Array,
 ): void {
   const element = mesh.elements[elementIndex]!;
+  // A released end cannot carry the element's fixed-end moment, so the actions
+  // are condensed exactly as the stiffness is before they reach either the
+  // global load vector or the recovery layer. docs/FEM-SPEC.md §4.1 / §4.9.
+  const condensed = condenseFixedEnd3d(
+    fixedEnd,
+    element,
+    shearOption(element, mesh.shearFlexible === true),
+  );
   for (let i = 0; i < 12; i++) {
     const offset = elementIndex * 12 + i;
-    fixedEndByElement[offset] = fixedEndByElement[offset]! + fixedEnd[i]!;
+    fixedEndByElement[offset] = fixedEndByElement[offset]! + condensed[i]!;
   }
   // Applied nodal loads = −Tᵀ f_fixed (T = blkdiag(R,…)).
   const R = element.R;
   const dofs = elementDofs3d(element);
   for (let blk = 0; blk < 4; blk++) {
     const o = blk * 3;
-    const lx = -fixedEnd[o]!;
-    const ly = -fixedEnd[o + 1]!;
-    const lz = -fixedEnd[o + 2]!;
+    const lx = -condensed[o]!;
+    const ly = -condensed[o + 1]!;
+    const lz = -condensed[o + 2]!;
     // global = Rᵀ · local
     global[dofs[o]!] = global[dofs[o]!]! + R[0]! * lx + R[3]! * ly + R[6]! * lz;
     global[dofs[o + 1]!] = global[dofs[o + 1]!]! + R[1]! * lx + R[4]! * ly + R[7]! * lz;
@@ -549,16 +572,37 @@ function pushReleases(out: number[], base: number, r: EndReleases3d): void {
 }
 
 /**
- * Static condensation of released rotational DOFs using the element's elastic
- * release transform (Cᵀ A C). docs/FEM-SPEC.md §4.1 / §4.9 / §14 4E.
+ * Split the released rotations into the ones static condensation can handle and
+ * the ones it cannot. θx released at *both* ends leaves the element's torsion as
+ * a rigid-body mode, so k_rr is singular and `k_kr k_rr⁻¹ k_rk` is undefined.
+ * The physics is simply that such a bar transmits no torque, so those DOFs are
+ * dropped (zero rows and columns) instead of condensed. Every other release
+ * pair sits in its own non-singular 2×2 bending block. docs/FEM-SPEC.md §4.9.
  */
-function condenseWithElementReleases(
-  matrix: Float64Array,
+function releasePartition3d(element: Element3d): { condensed: number[]; dropped: number[] } {
+  const dropped = element.releaseA.tx && element.releaseB.tx ? [3, 9] : [];
+  const condensed = releasedRotations3d(element).filter((dof) => !dropped.includes(dof));
+  return { condensed, dropped };
+}
+
+/** Copy with the given DOF rows and columns zeroed. */
+function withoutDofs(matrix: Float64Array, dropped: readonly number[]): Float64Array {
+  const out = Float64Array.from(matrix);
+  for (const dof of dropped) {
+    for (let i = 0; i < N; i++) {
+      out[dof * N + i] = 0;
+      out[i * N + dof] = 0;
+    }
+  }
+  return out;
+}
+
+/** The element's elastic stiffness, with torsion removed when it is fully released. */
+function releaseBasis3d(
   element: Element3d,
+  dropped: readonly number[],
   shear?: { AsY: number; AsZ: number },
 ): Float64Array {
-  const released = releasedRotations3d(element);
-  if (released.length === 0) return matrix;
   const elastic = kLocal3d(
     element.E,
     element.G,
@@ -569,7 +613,23 @@ function condenseWithElementReleases(
     element.L,
     shear,
   );
-  const transform = releaseTransform3d(elastic, released);
+  return dropped.length > 0 ? withoutDofs(elastic, dropped) : elastic;
+}
+
+/**
+ * Static condensation of released rotational DOFs using the element's elastic
+ * release transform (Cᵀ A C). docs/FEM-SPEC.md §4.1 / §4.9 / §14 4E.
+ */
+function condenseWithElementReleases(
+  matrix: Float64Array,
+  element: Element3d,
+  shear?: { AsY: number; AsZ: number },
+): Float64Array {
+  const { condensed: released, dropped } = releasePartition3d(element);
+  if (released.length === 0 && dropped.length === 0) return matrix;
+  const working = dropped.length > 0 ? withoutDofs(matrix, dropped) : matrix;
+  if (released.length === 0) return working;
+  const transform = releaseTransform3d(releaseBasis3d(element, dropped, shear), released);
   const condensed = new Float64Array(N * N);
   for (let row = 0; row < N; row++) {
     for (let column = 0; column < N; column++) {
@@ -577,12 +637,40 @@ function condenseWithElementReleases(
       for (let i = 0; i < N; i++) {
         const left = transform[i * N + row]!;
         if (left === 0) continue;
-        for (let j = 0; j < N; j++) value += left * matrix[i * N + j]! * transform[j * N + column]!;
+        for (let j = 0; j < N; j++)
+          value += left * working[i * N + j]! * transform[j * N + column]!;
       }
       condensed[row * N + column] = value;
     }
   }
   return condensed;
+}
+
+/**
+ * Condense a local fixed-end action vector alongside the stiffness releases:
+ * f_cond = Cᵀ f, which is `f_k − k_kr k_rr⁻¹ f_r` on the kept DOFs and zero on
+ * the released ones — the 12-DOF twin of the 2D `condenseFixedEnd`. Skipping it
+ * hands a hinge the element's fixed-end moment, which both perturbs the solve
+ * and reports a moment at a released end. docs/FEM-SPEC.md §4.1 / §4.9.
+ */
+function condenseFixedEnd3d(
+  fixedEnd: Float64Array,
+  element: Element3d,
+  shear?: { AsY: number; AsZ: number },
+): Float64Array {
+  const { condensed: released, dropped } = releasePartition3d(element);
+  if (released.length === 0 && dropped.length === 0) return fixedEnd;
+  const working = Float64Array.from(fixedEnd);
+  for (const dof of dropped) working[dof] = 0;
+  if (released.length === 0) return working;
+  const transform = releaseTransform3d(releaseBasis3d(element, dropped, shear), released);
+  const out = new Float64Array(N);
+  for (let column = 0; column < N; column++) {
+    let value = 0;
+    for (let i = 0; i < N; i++) value += transform[i * N + column]! * working[i]!;
+    out[column] = value;
+  }
+  return out;
 }
 
 function releaseTransform3d(k: Float64Array, released: number[]): Float64Array {

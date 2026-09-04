@@ -2,7 +2,7 @@
  * Subspace iteration for the two generalized symmetric eigenproblems:
  *   modal    K φ = ω² M φ
  *   buckling K φ = μ (−K_g) φ,  λ_cr = 1 / max(μ > 0)
- * Jacobi eigensolver on the p×p Ritz block. docs/FEM-SPEC.md §4.5. M4 (runs in worker).
+ * Jacobi eigensolver on the p×p Ritz block; runs in the worker. docs/FEM-SPEC.md §4.5.
  *
  * Measured accuracy at 2 sub-elements/member: buckling +0.75%, ω₁ +0.39% (gates G3, G4).
  */

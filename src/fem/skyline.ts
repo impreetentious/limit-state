@@ -24,8 +24,7 @@ export interface SkylineFactor {
 }
 
 export type SkylineFactorResult =
-  | { ok: true; factor: SkylineFactor }
-  | { ok: false; mechanism: { freeDofIndex: number } };
+  { ok: true; factor: SkylineFactor } | { ok: false; mechanism: { freeDofIndex: number } };
 
 /** Build a zero skyline from a first-column profile. docs/FEM-SPEC.md §14 3S. */
 export function createSkyline(firstCol: Int32Array): SkylineMatrix {
@@ -274,9 +273,14 @@ function rcmOrder(adjacency: ReadonlyArray<ReadonlyArray<number>>): Int32Array {
   for (let start = 0; start < n; start++) {
     if (visited[start]) continue;
     // Pick a peripheral-ish start: minimum degree in this unseen component.
+    // The search must stay inside the component — a global minimum-degree pick
+    // can seed a different one, and since the outer loop only ever moves
+    // forward, `start`'s component would then be dropped from `components`
+    // entirely and `perm` would stop being a permutation.
+    const component = reachableFrom(adjacency, visited, start);
     let seed = start;
-    for (let i = start; i < n; i++) {
-      if (!visited[i] && degree[i]! < degree[seed]!) seed = i;
+    for (const node of component) {
+      if (degree[node]! < degree[seed]!) seed = node;
     }
     const queue: number[] = [seed];
     visited[seed] = 1;
@@ -297,6 +301,25 @@ function rcmOrder(adjacency: ReadonlyArray<ReadonlyArray<number>>): Int32Array {
   }
   for (let i = 0; i < n; i++) perm[i] = components[i]!;
   return perm;
+}
+
+/** Nodes reachable from `start`, ignoring the ones already ordered. */
+function reachableFrom(
+  adjacency: ReadonlyArray<ReadonlyArray<number>>,
+  visited: Uint8Array,
+  start: number,
+): number[] {
+  const seen = new Set<number>([start]);
+  const stack = [start];
+  while (stack.length) {
+    const node = stack.pop()!;
+    for (const neighbour of adjacency[node]!) {
+      if (visited[neighbour] || seen.has(neighbour)) continue;
+      seen.add(neighbour);
+      stack.push(neighbour);
+    }
+  }
+  return [...seen];
 }
 
 /** Build free-DOF adjacency (undirected) from element DOF groups. */

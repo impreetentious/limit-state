@@ -22,14 +22,7 @@ import {
 } from './workplane';
 
 export type EditorTool3d =
-  | 'select'
-  | 'node'
-  | 'member'
-  | 'support'
-  | 'load'
-  | 'deck'
-  | 'delete'
-  | 'workplane';
+  'select' | 'node' | 'member' | 'support' | 'load' | 'deck' | 'delete' | 'workplane';
 type ResultDiagram3d = 'none' | 'axial' | 'shear' | 'moment';
 
 type Selection3d =
@@ -41,9 +34,7 @@ type Selection3d =
 
 /** Three-click custom workplane definition in progress. docs/FEM-SPEC.md §14 3T. */
 type WorkplanePick =
-  | { step: 0 }
-  | { step: 1; origin: Vec3 }
-  | { step: 2; origin: Vec3; alongU: Vec3 };
+  { step: 0 } | { step: 1; origin: Vec3 } | { step: 2; origin: Vec3; alongU: Vec3 };
 
 interface EditorState3d {
   model: EditorModel3d;
@@ -151,6 +142,36 @@ function cloneModel3d(model: EditorModel3d): EditorModel3d {
     deck: model.deck ? [...model.deck] : undefined,
     story: model.story ? { ...model.story } : undefined,
   };
+}
+
+function sharesNode3d(a: { a: number; b: number }, b: { a: number; b: number }): boolean {
+  return a.a === b.a || a.a === b.b || a.b === b.a || a.b === b.b;
+}
+
+/**
+ * The deck is one contiguous route and `buildDeckRoute3d` rejects anything else.
+ * Deleting a painted member — or a node joining two of them — can split it in
+ * two, so keep the longest surviving run instead of a deck that silently stops
+ * the traffic story. docs/FEM-SPEC.md §14 Phase 3 Stories.
+ */
+function longestContiguousDeck3d(
+  deck: readonly number[] | undefined,
+  members: ReadonlyArray<{ id: number; a: number; b: number }>,
+): number[] {
+  const byId = new Map(members.map((member) => [member.id, member]));
+  let best: number[] = [];
+  let run: number[] = [];
+  for (const id of deck ?? []) {
+    const member = byId.get(id);
+    if (!member) continue;
+    const previous = run.at(-1);
+    if (previous !== undefined && !sharesNode3d(byId.get(previous)!, member)) {
+      if (run.length > best.length) best = run;
+      run = [];
+    }
+    run.push(id);
+  }
+  return run.length > best.length ? run : best;
 }
 
 let nextId = 100;
@@ -441,29 +462,24 @@ export const useEditorStore3d = create<EditorState3d>((rawSet, get) => {
       const { selection, model } = get();
       if (selection.kind === 'node') {
         const id = selection.id;
-        const removedMembers = new Set(
-          model.members.filter((m) => m.a === id || m.b === id).map((m) => m.id),
-        );
+        const members = model.members.filter((m) => m.a !== id && m.b !== id);
         set({
           model: {
             ...model,
             nodes: model.nodes.filter((n) => n.id !== id),
-            members: model.members.filter((m) => m.a !== id && m.b !== id),
+            members,
             supports: model.supports.filter((s) => s.node !== id),
             loads: { ...model.loads, points: model.loads.points.filter((p) => p.node !== id) },
-            deck: (model.deck ?? []).filter((memberId) => !removedMembers.has(memberId)),
+            deck: longestContiguousDeck3d(model.deck, members),
           },
           selection: { kind: 'none' },
           notice: `Deleted node ${id}`,
         });
       } else if (selection.kind === 'member' || selection.kind === 'members') {
         const ids = new Set(selection.kind === 'member' ? [selection.id] : selection.ids);
+        const members = model.members.filter((m) => !ids.has(m.id));
         set({
-          model: {
-            ...model,
-            members: model.members.filter((m) => !ids.has(m.id)),
-            deck: (model.deck ?? []).filter((memberId) => !ids.has(memberId)),
-          },
+          model: { ...model, members, deck: longestContiguousDeck3d(model.deck, members) },
           selection: { kind: 'none' },
           notice: `Deleted ${ids.size} member${ids.size === 1 ? '' : 's'}`,
         });

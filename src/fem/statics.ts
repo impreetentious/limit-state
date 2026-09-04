@@ -153,7 +153,7 @@ export function deformationDisplay(
   pixelsPerMeter: number,
 ): DeformationDisplay {
   let maxMeters = 0;
-  for (let node = 0; mesh.coords.length > node * 2; node++) {
+  for (let node = 0; node < mesh.coords.length / 2; node++) {
     maxMeters = Math.max(maxMeters, Math.hypot(u[3 * node]!, u[3 * node + 1]!));
   }
   if (maxMeters === 0) return { maxMeters, scale: 1 };

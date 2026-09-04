@@ -2,7 +2,7 @@
 
 **A structural sandbox that tells the truth.**
 
-_Limit state design_ is the foundational framework of modern structural engineering: identify the states at which a structure ceases to satisfy its criteria, and design against them. This is the interactive version.
+_Limit state design_ is the foundational framework of modern structural engineering: identify the states at which a structure ceases to satisfy its criteria and design against them. This is the interactive version.
 
 Sketch a bridge or a tower. Watch stress flow through every member, live. Drive a truck across it. Dial wind up to a natural frequency and feel it fight back. And when it fails, Limit State doesn't play an explosion sound — it names the mechanism: _yield_, _buckling (with the eigenmode)_, _resonance (with the mode it excited)_, or _mechanism_ — with the numbers that prove it.
 
@@ -10,8 +10,8 @@ Construction games fake physics with springs. Real finite-element analysis lives
 
 ## What you can do
 
-- **Build (2D + 3D)** — nodes, members, pins, rollers, hinges; steel, aluminum, timber, or spaghetti; real sections (box, I-beam, tube). In 3D: workplanes (ground / elevation / custom), extrude & replicate, deck polylines, and spatial presets from Pratt to twin-girder slender deck.
-- **Test** — load stories in both dimensions: **traffic** across a deck (2D moment envelope + influence lines; 3D quasi-static or moving-mass Newmark), **wind** (steady / sine / gusts — 3D gains a direction dial), **earthquake** base excitation, **ramp** to first limit, and **pushover** with plastic hinges.
+- **Build (2D + 3D)** — nodes, members, pins, rollers, hinges; steel, aluminum, timber, or spaghetti; real sections (box, I-beam, tube). In 3D: workplanes (ground / elevation / custom), extrude & replicate, deck polylines and spatial presets from Pratt to twin-girder slender deck.
+- **Test** — load stories in both dimensions: **traffic** across a deck (2D moment envelope + influence lines; 3D quasi-static or moving-mass Newmark), **wind** (steady / sine / gusts — 3D gains a direction dial), **earthquake** base excitation, **ramp** to first limit and **pushover** with plastic hinges.
 - **Break** — and get a straight answer. A collapse timeline shows load redistributing after the first member goes: _member 7 buckled → member 8 overstressed → hinge → mechanism._ Capacity-to-weight stays on the panel.
 - **Share** — the whole model lives in the URL (schema v1 → 2D, v2 → 3D). No accounts, no server, no data leaves your machine.
 
@@ -27,12 +27,12 @@ Construction games fake physics with springs. Real finite-element analysis lives
 
 Every number is computed by the real method; every flourish is labeled. Deformed shapes carry their exaggeration factor ("×120 — true max 3.2 mm"). The collapse animation is labeled quasi-static. The 2D slender-deck preset shows bending resonance only; its 3D twin-girder cousin exposes a real St. Venant torsional mode.
 
-Two things this sandbox will not fake, and says so in the product:
+Two things this sandbox will not fake and says so in the product:
 
-- **Aeroelastic flutter.** Tacoma Narrows failed by flutter with warping. That is not what the wind story models, and the app never implies otherwise.
+- **Aeroelastic flutter.** Tacoma Narrows failed by flutter with warping. That is not what the wind story models and the app never implies otherwise.
 - **Warping torsion and member-level lateral-torsional buckling.** Out of scope for the element formulation.
 
-The solver is verified against closed-form solutions on every test run — cantilever deflection to 1e−10, Euler buckling to 0.8%, beam frequencies to 0.5%. Those benchmarks are what `npm test` checks, and they run in CI.
+The solver is verified against closed-form solutions on every test run — cantilever deflection to 1e−10, Euler buckling to 0.8%, beam frequencies to 0.5%. Those benchmarks are what `npm test` checks and they run in CI.
 
 ## Run it
 
@@ -79,19 +79,23 @@ Both set `BASE_PATH` for project-site subpaths; for a custom domain or root site
 Whatever host serves the export should send the response headers documented in
 [docs/STATIC-HOST-HEADERS.md](docs/STATIC-HOST-HEADERS.md) — in particular `worker-src 'self'`,
 without which modal and buckling analysis stops working while the rest of the app still renders.
-`vercel.json` and `serve.json` carry the same policy in the two formats hosts read, and
+`vercel.json` and `serve.json` carry the same policy in the two formats hosts read and
 `npm run check:csp` fails if they and the document ever disagree. Note that neither GitHub Pages nor
 GitLab Pages can set custom response headers, so on those two hosts the policy is documentation
 rather than enforcement — worth weighing when choosing the deployment target.
 
 ## Stack
 
-Next.js (static export) · React 19 · TypeScript (strict) · Zustand · Canvas2D + three.js (3D). The FEM kernel (`src/fem/`) is hand-rolled on `Float64Array` with **zero numerics dependencies** — Euler–Bernoulli frame elements (2D + 12-DOF space frame), LDLᵀ / skyline+RCM free solves, subspace-iteration eigenanalysis, Newmark-β dynamics. Eigen solves run in a Web Worker, and traffic reuses cached factorizations for single back-substitutions.
+Next.js (static export) · React 19 · TypeScript (strict) · Zustand · Canvas2D + three.js (3D). The FEM kernel (`src/fem/`) is hand-rolled on `Float64Array` with **zero numerics dependencies** — Euler–Bernoulli frame elements (2D + 12-DOF space frame), LDLᵀ / skyline+RCM free solves, subspace-iteration eigenanalysis, Newmark-β dynamics. Eigen solves run in a Web Worker and traffic reuses cached factorizations for single back-substitutions.
+
+## Contributing
+
+Issues and pull requests are welcome on [GitHub](https://github.com/impreetentious/limit-state). Open an issue before anything substantial, keep changes focused and leave the checks under [Verify](#verify) green.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+Apache-2.0 © 2025-2026 Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v0.12.0
+**Version:** v0.12.1

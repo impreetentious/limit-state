@@ -55,7 +55,7 @@ const E = 1,
   L = 1,
   rho = 1;
 
-describe('element matrices (implemented — scaffold anchor)', () => {
+describe('element matrices', () => {
   it('kLocal is symmetric with textbook entries', () => {
     const k = kLocal(E, A, I, L);
     for (let i = 0; i < 6; i++)
@@ -549,7 +549,7 @@ describe('Phase 2H — moving-mass traffic', () => {
   });
 });
 
-describe('M1 gates — statics', () => {
+describe('statics gates', () => {
   it('G2: SS beam UDL midspan = 5wL⁴/384EI at mid-node, rel err < 1e-10', () => {
     const span = 8;
     const w = 12_000;
@@ -691,7 +691,8 @@ describe('M1 gates — statics', () => {
     const interior = solveMesh(mesh, interiorLoad);
     const reactions = residual(assembleK(mesh), interior.u, interiorLoad, mesh.ndof);
     let verticalReaction = 0;
-    for (let node = 0; mesh.ndof > node * 3; node++) verticalReaction += reactions[3 * node + 1]!;
+    const nodeCount = mesh.ndof / 3;
+    for (let node = 0; node < nodeCount; node++) verticalReaction += reactions[3 * node + 1]!;
     expect(relativeError(verticalReaction, P)).toBeLessThan(1e-10);
 
     const fromLeft = solveMesh(
@@ -716,7 +717,7 @@ describe('M1 gates — statics', () => {
   });
 });
 
-describe('M4 gates — eigenanalysis', () => {
+describe('eigenanalysis gates', () => {
   it('G3: pinned column λ_cr = 9.9438 (2 elem) vs π² = 9.8696, within +0.8% (measured +0.75%)', () => {
     const result = buckling(pinnedColumnMesh(2), Float64Array.of(-1, -1));
     expect(result.kind).toBe('buckling');
@@ -738,7 +739,7 @@ describe('M4 gates — eigenanalysis', () => {
   });
 });
 
-describe('M3 static result recovery', () => {
+describe('static result recovery', () => {
   it('recovers displacements, reactions, and utilization from the editor load case', () => {
     const model = modelFor(
       [
@@ -762,7 +763,7 @@ describe('M3 static result recovery', () => {
   });
 });
 
-describe('M5 gates — dynamics', () => {
+describe('dynamics gates', () => {
   it('G8: Newmark SDOF at resonance, ζ=2%: steady amplitude = static × 25, within 2% after 50 cycles', () => {
     const mesh = unitSdofMesh();
     const damping = rayleighFit(0.02, 1, 1);
@@ -801,7 +802,7 @@ describe('M5 gates — dynamics', () => {
   });
 });
 
-describe('M6/M7 gates — failure & sharing', () => {
+describe('failure & sharing gates', () => {
   it('G12: cascade on overloaded preset 4 reproduces frozen golden step sequence', () => {
     expect(evaluateFailure(overloadedRadioMast(), 1)).toMatchObject({ kind: 'buckling' });
     const cascade = collapseCascade(overloadedRadioMast());

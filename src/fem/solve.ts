@@ -2,7 +2,7 @@ import type { AnalysisMesh } from './types';
 
 /**
  * Dense LDLᵀ factorization + solve on the free-DOF partition, with mechanism
- * detection via pivot magnitude. docs/FEM-SPEC.md §4.3. M1.
+ * detection via pivot magnitude. docs/FEM-SPEC.md §4.3.
  */
 
 export interface Factor {
@@ -13,8 +13,7 @@ export interface Factor {
 }
 
 export type FactorResult =
-  | { ok: true; factor: Factor }
-  | { ok: false; mechanism: { freeDofIndex: number } };
+  { ok: true; factor: Factor } | { ok: false; mechanism: { freeDofIndex: number } };
 
 /**
  * Factor an SPD free-DOF stiffness matrix without pivoting.

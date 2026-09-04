@@ -80,7 +80,7 @@ export function solveStatic3d(
   };
 }
 
-/** Recover local end forces; subtract Hermite fixed-ends when present (traffic). docs/FEM-SPEC.md §4.2. */
+/** Recover local end forces; add the Hermite fixed-ends when present (traffic). docs/FEM-SPEC.md §4.2 / §6.8. */
 export function elementForcesAtDisplacement3d(
   mesh: AnalysisMesh3d,
   u: Float64Array,
@@ -173,8 +173,9 @@ function recoverElementForces3d(
     for (let i = 0; i < 12; i++) {
       let force = 0;
       for (let j = 0; j < 12; j++) force += k[i * 12 + j]! * ul[j]!;
-      const fixed = elementFixedEnd?.[index * 12 + i] ?? 0;
-      out[index * 12 + i] = force - fixed;
+      // f_local = k·(T u) + FEA — the stored actions are fixed-end forces, not
+      // the equivalent nodal loads, so they add. docs/FEM-SPEC.md §6.8.
+      out[index * 12 + i] = force + (elementFixedEnd?.[index * 12 + i] ?? 0);
     }
   }
   return out;
@@ -233,7 +234,7 @@ export function deformationDisplay3d(
   pixelsPerMeter: number,
 ): { maxMeters: number; scale: number } {
   let maxMeters = 0;
-  for (let node = 0; mesh.coords.length > node * 3; node++) {
+  for (let node = 0; node < mesh.coords.length / 3; node++) {
     maxMeters = Math.max(maxMeters, Math.hypot(u[6 * node]!, u[6 * node + 1]!, u[6 * node + 2]!));
   }
   if (maxMeters === 0) return { maxMeters, scale: 1 };

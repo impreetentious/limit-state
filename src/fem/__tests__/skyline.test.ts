@@ -163,4 +163,29 @@ describe('skyline (Phase 3 closeout 3S)', () => {
     const x = solveSkylineFactored(factored.factor, Float64Array.of(1, 0, 0));
     expect(x[0]).toBeCloseTo(0.75, 10);
   });
+
+  it('keeps the RCM ordering a permutation when free DOFs fall into several components', () => {
+    // Two connected free DOFs plus two isolated ones at higher indices. A
+    // minimum-degree seed search that ranges outside the current component
+    // ordered the isolated DOFs first, walked past the connected pair, and
+    // returned a `perm` with a repeated index — silently corrupting K_ff.
+    const freeDofs = Int32Array.of(0, 1, 2, 3);
+    const groups = [[0, 1], [2], [3]];
+    const K = createSkyline(Int32Array.of(0, 0, 2, 3));
+    skylineAdd(K, 0, 0, 4);
+    skylineAdd(K, 1, 0, 1);
+    skylineAdd(K, 1, 1, 5);
+    skylineAdd(K, 2, 2, 6);
+    skylineAdd(K, 3, 3, 7);
+
+    const { Kff, perm } = freeSkyline(K, freeDofs, groups);
+    expect([...perm].sort((a, b) => a - b)).toEqual([0, 1, 2, 3]);
+
+    // Reordering must preserve the matrix, so the diagonal is a permutation of
+    // the original one and the system stays solvable.
+    const dense = skylineToDense(Kff);
+    const diagonal = [0, 1, 2, 3].map((i) => dense[i * 4 + i]!).sort((a, b) => a - b);
+    expect(diagonal).toEqual([4, 5, 6, 7]);
+    expect(factorSkylineLDLT(Kff).ok).toBe(true);
+  });
 });

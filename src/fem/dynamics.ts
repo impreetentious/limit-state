@@ -1,6 +1,6 @@
 /**
  * Newmark-β (γ=1/2, β=1/4) with Rayleigh damping; modal projection for the
- * explainer layer; DAF meter; resonance detection. docs/FEM-SPEC.md §4.6. M5.
+ * explainer layer; DAF meter; resonance detection. docs/FEM-SPEC.md §4.6.
  *
  * Core stepping is dimension-agnostic (`DynamicDofLayout` + assembled K/M) so
  * Phase 3 space-frame stories reuse the same integrator. docs/FEM-SPEC.md §14 Phase 3.
@@ -205,7 +205,8 @@ export function newmarkStep(
  */
 export function influenceVectorX(mesh: AnalysisMesh): Float64Array {
   const iota = new Float64Array(mesh.ndof);
-  for (let node = 0; mesh.ndof > node * 3; node++) iota[3 * node] = 1;
+  const nodeCount = mesh.ndof / 3;
+  for (let node = 0; node < nodeCount; node++) iota[3 * node] = 1;
   return iota;
 }
 

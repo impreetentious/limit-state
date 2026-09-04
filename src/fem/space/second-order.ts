@@ -178,7 +178,8 @@ function recoverResult(
     for (let i = 0; i < 12; i++) {
       let force = 0;
       for (let j = 0; j < 12; j++) force += k[i * 12 + j]! * ul[j]!;
-      elementForces[index * 12 + i] = force - (elementFixedEnd[index * 12 + i] ?? 0);
+      // f_local = k·(T u) + FEA, matching recoverElementForces3d. docs/FEM-SPEC.md §6.8.
+      elementForces[index * 12 + i] = force + (elementFixedEnd[index * 12 + i] ?? 0);
     }
   }
   return { u, elementForces, utilization: new Map(), reactions: new Map() };

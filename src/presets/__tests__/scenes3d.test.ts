@@ -3,6 +3,7 @@
  * docs/FEM-SPEC.md §14 Phase 3 Polish / §7.
  */
 import { describe, expect, it } from 'vitest';
+import { STANDARD_GRAVITY } from '../../fem/assemble';
 import { analyzeStaticModel3d, buildMesh3d, modal3d } from '../../fem/space';
 import { PRESETS_3D, prattTruss3d, slenderDeck3d } from '../scenes3d';
 
@@ -24,6 +25,51 @@ describe('3D presets (Phase 3 polish)', () => {
     }
   });
 
+  // Statics has one invariant no preset may violate: what goes down comes back
+  // up through the supports, and a released end carries no moment. Both are
+  // closed-form, both are checked on the shipped menu rather than a fixture,
+  // and both are silently broken by an uncondensed or wrongly-signed fixed-end
+  // vector. docs/FEM-SPEC.md §4.1 / §4.3 / §6.8.
+  it('balances vertical equilibrium and keeps released ends moment-free in every preset', () => {
+    for (const preset of PRESETS_3D.filter((scene) => scene.id !== 'blank')) {
+      const model = preset.build();
+      const analysis = analyzeStaticModel3d(model);
+      expect(analysis.kind, preset.id).toBe('stable');
+      if (analysis.kind !== 'stable') continue;
+
+      // Self-weight of the mesh that was actually solved — the cable path drops
+      // slack members, so this must come from the analysis, not the model.
+      const selfWeight = model.loads.gravity
+        ? analysis.mesh.elements.reduce(
+            (total, element) => total + element.rho * element.A * element.L * STANDARD_GRAVITY,
+            0,
+          )
+        : 0;
+      const applied = selfWeight - model.loads.points.reduce((total, load) => total + load.fz, 0);
+
+      let support = 0;
+      for (const [, reaction] of analysis.result.reactions) support += reaction.fz;
+      const scale = Math.max(Math.abs(applied), 1);
+      expect(Math.abs(support - applied) / scale, `${preset.id} vertical equilibrium`).toBeLessThan(
+        1e-9,
+      );
+
+      for (const [index, element] of analysis.mesh.elements.entries()) {
+        const base = index * 12;
+        const forces = analysis.result.elementForces;
+        const released: Array<[boolean, number]> = [
+          [element.releaseA.ty, forces[base + 4]!],
+          [element.releaseA.tz, forces[base + 5]!],
+          [element.releaseB.ty, forces[base + 10]!],
+          [element.releaseB.tz, forces[base + 11]!],
+        ];
+        for (const [isReleased, moment] of released) {
+          if (isReleased) expect(moment, `${preset.id} hinge moment`).toBeCloseTo(0, 6);
+        }
+      }
+    }
+  });
+
   // 3X: the hangers must carry load, not merely decorate. Deleting them leaves a
   // deck that still stands (it bears on the towers) but sags substantially more.
   it('suspension span: tension-only hangers relieve the deck and are not its restraint', () => {
@@ -35,7 +81,7 @@ describe('3D presets (Phase 3 polish)', () => {
       expect(analysis.kind).toBe('stable');
       const u = (analysis as Extract<typeof analysis, { kind: 'stable' }>).result.u;
       let maxUz = 0;
-      for (let node = 0; u.length > node * 6; node++) {
+      for (let node = 0; node < u.length / 6; node++) {
         maxUz = Math.max(maxUz, Math.abs(u[node * 6 + 2]!));
       }
       return maxUz;

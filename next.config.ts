@@ -1,5 +1,7 @@
 import type { NextConfig } from 'next';
 
+// Static export: the product ships as files, with no server runtime to trust.
+
 /**
  * Fully static export — no server, no SSR, everything client-side by design.
  *

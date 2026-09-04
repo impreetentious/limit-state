@@ -1,7 +1,5 @@
 /**
  * Element matrices, transforms, assembly, load vectors. docs/FEM-SPEC.md §4.1–§4.3 / §14 2A.
- * The three element matrices below are implemented and tested now (scaffold anchor);
- * assembly and load vectors are M1 work.
  *
  * Local DOF order: [u1, v1, th1, u2, v2, th2]. Tension-positive N, CCW-positive rotation.
  */
@@ -125,7 +123,7 @@ export function transformToGlobal(kLoc: Float64Array, cos: number, sin: number):
   return out;
 }
 
-/** Assemble global K (dense, row-major ndof×ndof). M1 — docs/FEM-SPEC.md §4.3. */
+/** Assemble global K (dense, row-major ndof×ndof). docs/FEM-SPEC.md §4.3. */
 export function assembleK(mesh: AnalysisMesh): Float64Array {
   const K = new Float64Array(mesh.ndof * mesh.ndof);
   for (const element of mesh.elements) {
@@ -169,7 +167,7 @@ export function assembleKg(mesh: AnalysisMesh, elementN: Float64Array): Float64A
   return Kg;
 }
 
-/** Global load vector: nodal + self-weight UDL + in-element point loads (Hermite). M1 — docs/FEM-SPEC.md §4.2. */
+/** Global load vector: nodal + self-weight UDL + in-element point loads (Hermite). docs/FEM-SPEC.md §4.2. */
 export function assembleF(
   mesh: AnalysisMesh,
   opts: {

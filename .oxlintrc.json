@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // Resolved from the installed package, so the schema always matches the pinned oxlint.
   // Deliberate scope: correctness/suspicious with React, a11y, TypeScript, and
   // import checks. Avoid `all`; style/pedantic rules such as sort-keys and
   // explicit return types are disproportionate noise for this app.
@@ -21,6 +22,8 @@
     // Worker postMessage target origins are not applicable to dedicated worker ports.
     "unicorn/require-post-message-target-origin": "off",
     "unicorn/prefer-add-event-listener": "off",
+    // Short domain names in tests/math kernels are clearer than avoiding every shadow.
+    "no-shadow": "off",
     // Existing status/img roles are intentional UI semantics; broader a11y checks stay enabled.
     "jsx-a11y/prefer-tag-over-role": "off"
   },

@@ -5,7 +5,7 @@ import { defaultSection, useEditorStore } from '../editor-store';
 
 afterEach(() => useEditorStore.getState().reset());
 
-describe('editor store — M2 snapshots and build semantics', () => {
+describe('editor store — snapshots and build semantics', () => {
   it('keeps stable IDs through delete, undo, and redo', () => {
     const store = useEditorStore.getState();
     const first = store.addNode(0, 0);
@@ -59,6 +59,46 @@ describe('editor store — M2 snapshots and build semantics', () => {
 
     for (let i = 0; i < 110; i++) useEditorStore.getState().setModelName(`Model ${i}`);
     expect(useEditorStore.getState().past).toHaveLength(100);
+  });
+
+  it('keeps the deck contiguous when a painted member or joining node is deleted', () => {
+    const paint = () => {
+      useEditorStore.getState().reset();
+      const store = useEditorStore.getState();
+      const nodes = [0, 4, 8, 12, 16].map((x) => store.addNode(x, 0));
+      const members = [0, 1, 2, 3].map((index) =>
+        useEditorStore.getState().addMember(nodes[index]!, nodes[index + 1]!)!,
+      );
+      for (const id of members) useEditorStore.getState().toggleDeckMember(id);
+      return { nodes, members };
+    };
+    const contiguous = (deck: readonly number[]) => {
+      const byId = new Map(useEditorStore.getState().model.members.map((m) => [m.id, m]));
+      return deck.every((id, index) => {
+        if (index === 0) return byId.has(id);
+        const previous = byId.get(deck[index - 1]!)!;
+        const current = byId.get(id)!;
+        return (
+          previous.a === current.a ||
+          previous.a === current.b ||
+          previous.b === current.a ||
+          previous.b === current.b
+        );
+      });
+    };
+
+    // Deleting a member out of the middle of the path used to leave two
+    // disjoint runs, which mesh.ts rejects — the whole model stopped analysing.
+    let painted = paint();
+    expect(useEditorStore.getState().model.deck).toHaveLength(4);
+    useEditorStore.getState().deleteMember(painted.members[1]!);
+    expect(contiguous(useEditorStore.getState().model.deck)).toBe(true);
+    expect(useEditorStore.getState().model.deck.length).toBeGreaterThan(0);
+
+    // Same for a node that two painted members share.
+    painted = paint();
+    useEditorStore.getState().deleteNode(painted.nodes[2]!);
+    expect(contiguous(useEditorStore.getState().model.deck)).toBe(true);
   });
 });
 

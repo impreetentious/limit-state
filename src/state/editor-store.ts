@@ -325,16 +325,17 @@ export const useEditorStore = create<EditorStore>((set) => ({
             .filter((member) => member.a === id || member.b === id)
             .map((member) => member.id),
         );
+        const members = model.members.filter((member) => !removedMembers.has(member.id));
         return {
           ...model,
           nodes: model.nodes.filter((node) => node.id !== id),
-          members: model.members.filter((member) => !removedMembers.has(member.id)),
+          members,
           supports: model.supports.filter((support) => support.node !== id),
           loads: {
             ...model.loads,
             points: model.loads.points.filter((point) => point.node !== id),
           },
-          deck: model.deck.filter((memberId) => !removedMembers.has(memberId)),
+          deck: longestContiguousDeck(model.deck, members),
         };
       },
       () => ({ kind: 'none' }),
@@ -342,11 +343,10 @@ export const useEditorStore = create<EditorStore>((set) => ({
   deleteMember: (id) =>
     mutate(
       set,
-      (model) => ({
-        ...model,
-        members: model.members.filter((member) => member.id !== id),
-        deck: model.deck.filter((memberId) => memberId !== id),
-      }),
+      (model) => {
+        const members = model.members.filter((member) => member.id !== id);
+        return { ...model, members, deck: longestContiguousDeck(model.deck, members) };
+      },
       () => ({ kind: 'none' }),
     ),
   setStability: (stability) => set({ stability }),
@@ -416,6 +416,29 @@ function nextId(items: ReadonlyArray<{ id: number }>): number {
 
 function sharesNode(a: MemberSpec, b: MemberSpec): boolean {
   return a.a === b.a || a.a === b.b || a.b === b.a || a.b === b.b;
+}
+
+/**
+ * The deck is one contiguous path (§6.2) and `mesh.ts` rejects anything else.
+ * `toggleDeckMember` protects that invariant, but deleting a painted member —
+ * or a node that joins two of them — can leave two disjoint runs. Keep the
+ * longest surviving run rather than a model that stops analysing entirely.
+ */
+function longestContiguousDeck(deck: readonly number[], members: readonly MemberSpec[]): number[] {
+  const byId = new Map(members.map((member) => [member.id, member]));
+  let best: number[] = [];
+  let run: number[] = [];
+  for (const id of deck) {
+    const member = byId.get(id);
+    if (!member) continue;
+    const previous = run.at(-1);
+    if (previous !== undefined && !sharesNode(byId.get(previous)!, member)) {
+      if (run.length > best.length) best = run;
+      run = [];
+    }
+    run.push(id);
+  }
+  return run.length > best.length ? run : best;
 }
 
 /** Preserve the traffic path while replacing one drawn member with its two collinear segments. docs/FEM-SPEC.md §6.2–§6.3. */

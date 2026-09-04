@@ -1,7 +1,7 @@
 /**
  * Failure taxonomy evaluation (mechanism / yield / buckling / resonance),
  * exact load-ramp capacity (linearity ⇒ λ_yield = 1/max U), and the
- * quasi-static collapse cascade. docs/FEM-SPEC.md §4.7. M6.
+ * quasi-static collapse cascade. docs/FEM-SPEC.md §4.7.
  */
 import { assembleLoadCase, type LoadAssembly } from './assemble';
 import { modelHasCables, solveTensionOnly } from './cables';

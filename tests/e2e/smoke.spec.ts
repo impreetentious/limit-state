@@ -1,3 +1,4 @@
+// The smoke spec is the canary: if the export stops booting, every other check here is noise.
 import { expect, test } from 'playwright/test';
 
 test('static export renders the editor shell', async ({ page }) => {

@@ -23,7 +23,7 @@ function simpleBeamAnalysis() {
   return { analysis, members: preset.model.members };
 }
 
-describe('A/S/M diagram sampling', () => {
+describe('G37 — A/S/M diagram sampling', () => {
   it('samples interior stations rather than one value per member', () => {
     const { analysis, members } = simpleBeamAnalysis();
     const { byMember } = sampleDiagram(members, analysis, 'moment');
@@ -39,8 +39,8 @@ describe('A/S/M diagram sampling', () => {
     }
   });
 
-  // GAP-10 is ratified in docs/FEM-SPEC.md §6.8. Recovery publishes local
-  // end actions; sampleDiagram applies the display convention there.
+  // Recovery publishes local end actions; sampleDiagram applies the §6.8
+  // display convention on top of them.
   it('gives the gravity-loaded simple beam a sagging parabolic moment peaking at midspan', () => {
     const { analysis, members } = simpleBeamAnalysis();
     const samples = sampleDiagram(members, analysis, 'moment').byMember.get(members[0]!.id) ?? [];
@@ -63,9 +63,8 @@ describe('A/S/M diagram sampling', () => {
   });
 
   it('varies the moment ordinate along the span rather than drawing a block', () => {
-    // This is the part of GAP-10 that DID land: whatever the sign convention,
-    // the diagram is no longer one constant value per member. Guarding it stops
-    // a regression to the old per-member-extreme rendering.
+    // Whatever the sign convention, the diagram must not collapse to one
+    // constant value per member — that is the rendering this replaced.
     const { analysis, members } = simpleBeamAnalysis();
     const samples = sampleDiagram(members, analysis, 'moment').byMember.get(members[0]!.id) ?? [];
     const distinct = new Set(samples.map((sample) => sample.value.toFixed(6)));

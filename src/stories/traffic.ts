@@ -295,7 +295,7 @@ function maximumUtilization(analysis: Extract<StaticAnalysis, { kind: 'stable' }
 
 function maxNodalDisp(u: Float64Array): number {
   let maximum = 0;
-  for (let node = 0; u.length > node * 3; node++) {
+  for (let node = 0; node < u.length / 3; node++) {
     maximum = Math.max(maximum, Math.hypot(u[3 * node]!, u[3 * node + 1]!));
   }
   return maximum;

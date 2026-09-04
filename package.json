@@ -1,12 +1,12 @@
 {
   "name": "limit-state",
   "private": true,
-  "version": "0.12.0",
-  "description": "Limit State — a structural sandbox that tells the truth. True FEM core, playful surface.",
-  "license": "MIT",
+  "version": "0.12.1",
+  "description": "Limit State \u2014 a structural sandbox that tells the truth. True FEM core, playful surface.",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ItsMonarch04/limit-state.git"
+    "url": "git+https://github.com/impreetentious/limit-state.git"
   },
   "scripts": {
     "dev": "next dev",
@@ -31,30 +31,31 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@fontsource/ibm-plex-mono": "^5.2.7",
-    "@fontsource/ibm-plex-sans": "^5.2.8",
-    "next": "^16.1.6",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "next": "16.3.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "three": "^0.182.0",
-    "zustand": "^5.0.11"
+    "three": "^0.185.1",
+    "zustand": "^5.0.14"
   },
   "overrides": {
-    "postcss": "^8.5.6",
+    "postcss": "^8.5.18",
     "next": {
-      "sharp": "^0.34.5"
-    }
+      "sharp": "0.35.4"
+    },
+    "sharp": "0.35.4"
   },
   "devDependencies": {
-    "@types/node": "^24.10.11",
-    "@types/react": "^19.2.13",
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.182.0",
-    "oxlint": "^1.43.0",
-    "playwright": "^1.58.1",
-    "prettier": "^3.8.1",
+    "@types/three": "^0.185.1",
+    "oxlint": "^1.71.0",
+    "playwright": "^1.61.1",
+    "prettier": "^3.9.5",
     "typescript": "^5.9.0",
-    "vite-node": "5.3.0",
-    "vitest": "^4.0.18"
+    "vite-node": "6.0.0",
+    "vitest": "^4.1.10"
   }
 }

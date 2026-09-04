@@ -282,7 +282,7 @@ function toAxle(hit: { station: number; x: number; y: number; z: number }): Traf
 
 function maxNodalDisp3d(u: Float64Array): number {
   let maximum = 0;
-  for (let node = 0; u.length > node * 6; node++) {
+  for (let node = 0; node < u.length / 6; node++) {
     maximum = Math.max(maximum, Math.hypot(u[6 * node]!, u[6 * node + 1]!, u[6 * node + 2]!));
   }
   return maximum;
