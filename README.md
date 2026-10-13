@@ -36,7 +36,7 @@ The solver is verified against closed-form solutions on every test run — canti
 
 ## Run it
 
-Requires Node 22+; CI and `.nvmrc` pin Node 22.22.0.
+Requires Node 22+; CI and `.nvmrc` pin Node 22.23.3.
 
 ```bash
 npm ci
@@ -98,4 +98,4 @@ Apache-2.0 © 2025-2026 Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v0.12.1
+**Version:** v0.12.2
