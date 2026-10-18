@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { MATERIALS, sectionProps } from '../fem/materials';
 import type { SectionSpec } from '../fem/types';
 import type { MemberSpec3d, SupportKind3d } from '../fem/space';
@@ -160,7 +161,13 @@ function MemberInspector({ member }: { member: MemberSpec3d }): React.JSX.Elemen
   const b = model.nodes.find((node) => node.id === member.b);
   const material = MATERIALS[member.material];
   const length = a && b ? Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) : 0;
-  const tonnes = (material.rho * sectionProps(member.section).A * length) / 1000;
+  let tonnes: number | undefined;
+  let sectionError: string | undefined;
+  try {
+    tonnes = (material.rho * sectionProps(member.section).A * length) / 1000;
+  } catch (error) {
+    sectionError = error instanceof Error ? error.message : 'Invalid section.';
+  }
   const updateRelease = (end: 'releaseA' | 'releaseB', axis: 'tx' | 'ty' | 'tz', value: boolean) =>
     updateMember(member.id, { [end]: { ...member[end], [axis]: value } });
 
@@ -199,6 +206,7 @@ function MemberInspector({ member }: { member: MemberSpec3d }): React.JSX.Elemen
           <option value="tube">Tube</option>
         </select>
       </label>
+      {sectionError && <p role="alert">{sectionError}</p>}
       <SectionFields
         section={member.section}
         onChange={(section) => updateMember(member.id, { section })}
@@ -214,7 +222,7 @@ function MemberInspector({ member }: { member: MemberSpec3d }): React.JSX.Elemen
           Length <b>{length.toFixed(2)} m</b>
         </span>
         <span>
-          Mass <b>{tonnes.toFixed(3)} t</b>
+          Mass <b>{tonnes?.toFixed(3) ?? 'unavailable'} t</b>
         </span>
       </div>
       <div className="release-fields">
@@ -260,6 +268,7 @@ function SectionFields({
 }): React.JSX.Element {
   const field = (label: string, value: number, apply: (next: number) => SectionSpec) => (
     <NumberField
+      draft
       label={label}
       value={value * 1000}
       unit="mm"
@@ -306,23 +315,35 @@ function NumberField({
   value,
   unit,
   onChange,
+  draft = false,
 }: {
   label: string;
   value: number;
   unit: string;
   onChange: (value: number) => void;
+  draft?: boolean;
 }): React.JSX.Element {
+  const [text, setText] = useState({ source: value, value: String(value) });
+  const displayed = Object.is(text.source, value)
+    ? text.value
+    : Number.isFinite(value)
+      ? String(value)
+      : '';
   return (
     <label className="field">
       <span>{label}</span>
       <div className="number-input">
         <input
           type="number"
-          value={Number.isFinite(value) ? value : ''}
+          value={draft ? displayed : Number.isFinite(value) ? value : ''}
           step="any"
           onChange={(event) => {
-            const next = Number(event.target.value);
-            if (Number.isFinite(next)) onChange(next);
+            const raw = event.target.value;
+            const next = raw.trim() ? Number(raw) : Number.NaN;
+            if (draft) {
+              setText({ source: next, value: raw });
+              onChange(next);
+            } else if (Number.isFinite(next)) onChange(next);
           }}
         />
         <em>{unit}</em>

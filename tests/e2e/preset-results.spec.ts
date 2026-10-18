@@ -54,3 +54,179 @@ test('switching presets re-solves rather than leaving the previous result on scr
     })
     .not.toBe(beamFrequencies.join('|'));
 });
+
+test('analysis artifact restores options, raw cantilever results and invalid section drafts', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const model = {
+    v: 1,
+    name: 'cantilever',
+    seed: 1,
+    nodes: [
+      { id: 1, x: 0, y: 0 },
+      { id: 2, x: 1, y: 0 },
+    ],
+    members: [
+      {
+        id: 1,
+        a: 1,
+        b: 2,
+        material: 'steel-s355',
+        section: { kind: 'rect', b: 0.2, h: 0.3 },
+        releaseA: false,
+        releaseB: false,
+        cableOnly: false,
+      },
+    ],
+    supports: [{ node: 1, kind: 'fixed' }],
+    loads: { gravity: false, points: [{ node: 2, fx: 0, fy: -1000 }] },
+    deck: [],
+    story: { kind: 'pushover' },
+  };
+  const artifact = {
+    kind: 'analysis',
+    model,
+    dimension: '2d',
+    appVersion: '0.12.3',
+    analysisOptions: { shearFlexible: true, secondOrder: false },
+    view: {
+      simulationTime: 0.5,
+      loadStation: null,
+      exaggeration: 10,
+      units: { length: 'm', force: 'N', moment: 'Nm', displayLength: 'adaptive' },
+    },
+    results: { capacity: { status: 'unavailable', value: null, reason: 'archival' } },
+  };
+  await page.goto('/');
+  await page.getByLabel('Import analysis', { exact: true }).setInputFiles({
+    name: 'cantilever.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(artifact)),
+  });
+  await expect(page.getByLabel('Model name')).toHaveValue('cantilever');
+  await expect(page.getByLabel('Timoshenko', { exact: true })).toBeChecked();
+  const button = page.getByRole('button', { name: 'Export analysis', exact: true });
+  await expect(button).toBeEnabled({ timeout: 60000 });
+  const event = page.waitForEvent('download');
+  await button.click();
+  const download = await event;
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream!) chunks.push(chunk);
+  const exported = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  expect(exported.analysisOptions).toEqual(artifact.analysisOptions);
+  expect(exported.view.simulationTime).toBe(0.5);
+  expect(exported.view.exaggeration).toBe(10);
+  // PL³/(3EI) + PL/(G As), E=200GPa, I=0.00045m4, As=0.05m2.
+  const tip = -1000 / (3 * 200e9 * 0.00045) - 1000 / ((200e9 / 2.6) * 0.05);
+  expect(exported.results.statics.value.rawDisplacements[4]).toBeCloseTo(tip, 10);
+  expect(exported.results.statics.value.rawDisplacements[5]).toBeCloseTo(
+    -1000 / (2 * 200e9 * 0.00045),
+    10,
+  );
+  await page.getByLabel('Mode').getByRole('button', { name: 'Build', exact: true }).click();
+  const canvas = page.getByLabel('Structural editor canvas');
+  const bounds = await canvas.boundingBox();
+  await canvas.click({ position: { x: bounds!.width / 2 + 22, y: bounds!.height - 68 } });
+  const inspector = page.getByRole('complementary', { name: 'Member inspector' });
+  await expect(inspector).toBeVisible();
+  await inspector.getByRole('combobox', { name: 'Section', exact: true }).selectOption('tube');
+  await inspector.getByRole('spinbutton', { name: 'diameter mm', exact: true }).fill('200');
+  await inspector.getByRole('spinbutton', { name: 'wall mm', exact: true }).fill('150');
+  await expect(inspector.getByRole('alert')).toBeVisible();
+  await inspector.getByRole('spinbutton', { name: 'wall mm', exact: true }).fill('');
+  await expect(inspector.getByRole('spinbutton', { name: 'wall mm', exact: true })).toHaveValue('');
+  await page.getByLabel('Mode').getByRole('button', { name: 'Test', exact: true }).click();
+  await expect(button).toBeDisabled();
+  expect(errors).toEqual([]);
+});
+
+test('3D story artifacts restore the captured paused view and refuse unsupported options atomically', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/');
+  await page
+    .getByLabel('Dimension', { exact: true })
+    .getByRole('button', { name: '3D', exact: true })
+    .click();
+  await page.getByLabel('3D presets', { exact: true }).selectOption('portal');
+  await page
+    .getByLabel('Mode', { exact: true })
+    .getByRole('button', { name: 'Test', exact: true })
+    .click();
+  const button = page.getByRole('button', { name: 'Export analysis', exact: true });
+  async function capture() {
+    await expect(button).toBeEnabled({ timeout: 60_000 });
+    const event = page.waitForEvent('download');
+    await button.click();
+    const stream = await (await event).createReadStream();
+    const chunks = [];
+    for await (const chunk of stream!) chunks.push(chunk);
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  }
+  const artifact = await capture();
+  expect(artifact.dimension).toBe('3d');
+  expect(artifact.model.v).toBe(2);
+  artifact.view.simulationTime = 0.25;
+  artifact.view.exaggeration = 7;
+  artifact.analysisOptions = { shearFlexible: true, secondOrder: true };
+  async function install(value: unknown) {
+    await page.getByLabel('Import analysis', { exact: true }).setInputFiles({
+      name: 'portal.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(value)),
+    });
+  }
+  await install(artifact);
+  await expect(
+    page.getByText('Imported result values are archival evidence.', { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByLabel('Timoshenko', { exact: true })).toBeChecked();
+  await expect(page.getByLabel('P-Δ', { exact: true })).toBeChecked();
+  const restored = await capture();
+  expect(restored.model).toEqual(artifact.model);
+  expect(restored.analysisOptions).toEqual(artifact.analysisOptions);
+  expect(restored.view).toEqual(artifact.view);
+  const invalid = structuredClone(artifact);
+  invalid.analysisOptions.futureSolver = true;
+  invalid.model.name = 'must not install';
+  await install(invalid);
+  await expect(page.getByRole('status').filter({ hasText: /option/i })).toBeVisible();
+  const unchanged = await capture();
+  expect(unchanged.model).toEqual(restored.model);
+  expect(unchanged.view).toEqual(restored.view);
+  expect(errors).toEqual([]);
+});
+
+test('analysis export withholds dynamic history after solver options change', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Presets', { exact: true }).selectOption('slender-deck');
+  await page
+    .getByLabel('Mode', { exact: true })
+    .getByRole('button', { name: 'Test', exact: true })
+    .click();
+  const exportButton = page.getByRole('button', { name: 'Export analysis', exact: true });
+  await expect(exportButton).toBeEnabled({ timeout: 60_000 });
+  await page.getByRole('button', { name: /^Play/ }).click();
+  await page.waitForTimeout(250);
+  await page.getByRole('button', { name: /^Pause/ }).click();
+  async function capture() {
+    await expect(exportButton).toBeEnabled({ timeout: 60_000 });
+    const event = page.waitForEvent('download');
+    await exportButton.click();
+    const stream = await (await event).createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  }
+  expect((await capture()).results.story.status).toBe('available');
+  await page.getByLabel('Timoshenko', { exact: true }).check();
+  const changed = await capture();
+  expect(changed.analysisOptions.shearFlexible).toBe(true);
+  expect(changed.results.story.status).toBe('unavailable');
+  expect(changed.results.story.value).toBeNull();
+});

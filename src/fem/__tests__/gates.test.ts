@@ -17,7 +17,14 @@ import {
 import { solveTensionOnly } from '../cables';
 import { buckling, modal } from '../eigen';
 import { newmarkStep, rayleighDampingRatio, rayleighFit, type NewmarkState } from '../dynamics';
-import { decodeModel, encodeModel } from '../../share/serialize';
+import {
+  decodeModel,
+  encodeModel,
+  analysisGroup,
+  encodeAnalysisArtifact,
+  decodeAnalysisArtifact,
+  type AnalysisArtifact,
+} from '../../share/serialize';
 import { collapseCascade, evaluateFailure } from '../failure';
 import { computeInfluenceLine } from '../influence';
 import { MATERIALS, plasticMoment, sectionProps } from '../materials';
@@ -1105,3 +1112,70 @@ function relativeError(actual: number, expected: number): number {
   const scale = Math.max(Math.abs(actual), Math.abs(expected), 1);
   return Math.abs(actual - expected) / scale;
 }
+
+describe('section admissibility and analysis artifact', () => {
+  it('uses independent tube goldens and refuses impossible/overflowing sections', () => {
+    const valid = sectionProps({ kind: 'tube', d: 0.2, t: 0.05 });
+    expect(valid.A).toBeCloseTo(0.0075 * Math.PI, 14);
+    expect(valid.I).toBeCloseTo(0.0000234375 * Math.PI, 14);
+    expect(valid.J).toBeCloseTo(0.000046875 * Math.PI, 14);
+    const invalid: SectionSpec[] = [
+      { kind: 'tube', d: 0.2, t: 0.1 },
+      { kind: 'tube', d: 0.2, t: 0.15 },
+      { kind: 'box', b: 0.2, h: 0.4, t: 0.1 },
+      { kind: 'ibeam', b: 0.2, h: 0.4, tf: 0.2, tw: 0.01 },
+      { kind: 'ibeam', b: 0.2, h: 0.4, tf: 0.01, tw: 0.2 },
+      { kind: 'rect', b: 0, h: 1 },
+      { kind: 'rect', b: -1, h: 1 },
+      { kind: 'rect', b: Infinity, h: 1 },
+      { kind: 'rect', b: 1e200, h: 1e200 },
+      { kind: 'rect', b: 1e-200, h: 1e-200 },
+    ];
+    for (const section of invalid) {
+      expect(() => sectionProps(section)).toThrow();
+      expect(() => plasticMoment(section, 1)).toThrow();
+    }
+    const model = shareModel(1, mulberry32(42));
+    model.members[0]!.section = invalid[0]!;
+    expect(() => buildMesh(model)).toThrow();
+    expect(analyzeStaticModel(model).kind).toBe('invalid');
+    expect(encodeModel(model)).rejects.toThrow();
+  });
+  it('round-trips supported options and archival results without trusting them', () => {
+    const model = shareModel(1, mulberry32(42));
+    const artifact: AnalysisArtifact = {
+      kind: 'analysis',
+      model,
+      dimension: '2d',
+      appVersion: '0.12.3',
+      analysisOptions: { shearFlexible: true, secondOrder: true },
+      view: {
+        simulationTime: 0,
+        loadStation: model.story.kind === 'traffic' ? 0 : null,
+        exaggeration: 10,
+        units: { length: 'm', force: 'N', moment: 'Nm', displayLength: 'adaptive' },
+      },
+      results: {
+        statics: analysisGroup({ rawDisplacements: Float64Array.of(0, 1 / 3) }, 'missing'),
+        capacity: analysisGroup(Infinity, 'No finite capacity.'),
+      },
+    };
+    const decoded = decodeAnalysisArtifact(encodeAnalysisArtifact(artifact));
+    expect(decoded.analysisOptions).toEqual(artifact.analysisOptions);
+    expect(decoded.results.capacity).toEqual({
+      status: 'unavailable',
+      value: null,
+      reason: 'No finite capacity.',
+    });
+    expect(decoded.results.statics!.value).toEqual({ rawDisplacements: [0, 1 / 3] });
+    expect(() => encodeAnalysisArtifact({ ...artifact, dimension: '3d' })).toThrow();
+    expect(() =>
+      decodeAnalysisArtifact(
+        JSON.stringify({
+          ...artifact,
+          analysisOptions: { ...artifact.analysisOptions, future: true },
+        }),
+      ),
+    ).toThrow();
+  });
+});

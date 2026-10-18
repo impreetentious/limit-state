@@ -5,6 +5,7 @@
  * Property gate G11: decode(encode(m)) deep-equals m (v1).
  * Gate G28: golden v1 URLs decode identically; migrateV1toV2 is deterministic.
  */
+import { sectionProps } from '../fem/materials';
 import { buildMesh } from '../fem/mesh';
 import {
   buildMesh3d,
@@ -175,6 +176,12 @@ function parseMember(value: unknown): MemberSpec {
 }
 
 function parseSection(value: unknown): SectionSpec {
+  const section = parseSectionShape(value);
+  sectionProps(section);
+  return section;
+}
+
+function parseSectionShape(value: unknown): SectionSpec {
   if (!isRecord(value) || typeof value.kind !== 'string')
     throw new Error('Shared model has an invalid section.');
   switch (value.kind) {
@@ -617,4 +624,140 @@ function parseStory3d(value: unknown): NonNullable<EditorModel3d['story']> {
     return { kind: 'earthquake', record: value.record, scale: value.scale, zeta: value.zeta };
   }
   throw new Error('Shared model has invalid 3D story settings.');
+}
+
+export const ANALYSIS_FILE_LIMIT = 16 * 1024 * 1024;
+export type AnalysisResultGroup = {
+  status: 'available' | 'unavailable' | 'refused' | 'not-applicable';
+  value: unknown;
+  reason: string | null;
+};
+export interface AnalysisArtifact {
+  kind: 'analysis';
+  model: EditorModel | EditorModel3d;
+  dimension: '2d' | '3d';
+  appVersion: string;
+  analysisOptions: { shearFlexible: boolean; secondOrder: boolean };
+  view: {
+    simulationTime: number;
+    loadStation: number | null;
+    exaggeration: number;
+    units: { length: 'm'; force: 'N'; moment: 'Nm'; displayLength: 'adaptive' };
+  };
+  results: Record<string, AnalysisResultGroup>;
+}
+
+export function analysisGroup(
+  value: unknown,
+  reason: string,
+  status: AnalysisResultGroup['status'] = 'unavailable',
+): AnalysisResultGroup {
+  let finite = true;
+  const normalized = JSON.parse(
+    JSON.stringify(value ?? null, (_, item) => {
+      if (typeof item === 'number' && !Number.isFinite(item)) {
+        finite = false;
+        return null;
+      }
+      if (ArrayBuffer.isView(item)) return Array.from(item as unknown as ArrayLike<number>);
+      if (item instanceof Map) return [...item.entries()];
+      return item;
+    }),
+  );
+  return value !== undefined && value !== null && finite
+    ? { status: 'available', value: normalized, reason: null }
+    : { status, value: null, reason };
+}
+
+export function parseAnalysisArtifact(value: unknown): AnalysisArtifact {
+  if (
+    !isRecord(value) ||
+    value.kind !== 'analysis' ||
+    !['2d', '3d'].includes(String(value.dimension)) ||
+    typeof value.appVersion !== 'string'
+  )
+    throw new Error('Unsupported analysis artifact.');
+  for (const key of Object.keys(value))
+    if (
+      !['kind', 'model', 'dimension', 'appVersion', 'analysisOptions', 'view', 'results'].includes(
+        key,
+      )
+    )
+      throw new Error(`Unsupported analysis field: ${key}.`);
+  const model =
+    value.dimension === '2d' ? validateModel(value.model) : validateModel3d(value.model);
+  if ((value.dimension === '2d' ? 1 : 2) !== model.v)
+    throw new Error('Analysis dimension does not match its model.');
+  const options = value.analysisOptions;
+  if (
+    !isRecord(options) ||
+    Object.keys(options).some((key) => !['shearFlexible', 'secondOrder'].includes(key)) ||
+    typeof options.shearFlexible !== 'boolean' ||
+    typeof options.secondOrder !== 'boolean'
+  )
+    throw new Error('Unsupported analysis options.');
+  if (options.secondOrder && model.members.some((member) => member.cableOnly))
+    throw new Error('Second-order analysis with cables is unsupported.');
+  const view = value.view;
+  if (
+    !isRecord(view) ||
+    !finiteNonNegative(view.simulationTime) ||
+    !finiteNonNegative(view.exaggeration) ||
+    !(view.loadStation === null || finiteNonNegative(view.loadStation)) ||
+    Object.keys(view).some(
+      (key) => !['simulationTime', 'loadStation', 'exaggeration', 'units'].includes(key),
+    )
+  )
+    throw new Error('Invalid analysis view.');
+  if (
+    !isRecord(view.units) ||
+    view.units.length !== 'm' ||
+    view.units.force !== 'N' ||
+    view.units.moment !== 'Nm' ||
+    view.units.displayLength !== 'adaptive' ||
+    Object.keys(view.units).length !== 4
+  )
+    throw new Error('Unsupported analysis units.');
+  const speed = model.story?.kind === 'traffic' ? model.story.speed : null;
+  if (speed === null ? view.loadStation !== null : view.loadStation !== view.simulationTime * speed)
+    throw new Error('Analysis load station does not match its story/time.');
+  if (!isRecord(value.results)) throw new Error('Invalid archival result groups.');
+  const finiteTree = (item: unknown): boolean =>
+    typeof item === 'number'
+      ? Number.isFinite(item)
+      : item && typeof item === 'object'
+        ? Object.values(item).every(finiteTree)
+        : true;
+  for (const result of Object.values(value.results)) {
+    if (
+      !isRecord(result) ||
+      !['available', 'unavailable', 'refused', 'not-applicable'].includes(String(result.status)) ||
+      (result.status === 'available'
+        ? result.value === null ||
+          result.value === undefined ||
+          !finiteTree(result.value) ||
+          result.reason !== null
+        : result.value !== null || typeof result.reason !== 'string')
+    )
+      throw new Error('Invalid archival result status.');
+  }
+  return { ...value, model } as unknown as AnalysisArtifact;
+}
+
+export function encodeAnalysisArtifact(value: AnalysisArtifact): string {
+  const valid = parseAnalysisArtifact(value);
+  const text = JSON.stringify(valid, null, 2);
+  if (new TextEncoder().encode(text).byteLength > ANALYSIS_FILE_LIMIT)
+    throw new Error('Analysis artifact exceeds 16 MiB.');
+  return text;
+}
+
+export function decodeAnalysisArtifact(text: string): AnalysisArtifact {
+  if (new TextEncoder().encode(text).byteLength > ANALYSIS_FILE_LIMIT)
+    throw new Error('Analysis artifact exceeds 16 MiB.');
+  return parseAnalysisArtifact(JSON.parse(text));
+}
+
+function finiteNonNegative(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }

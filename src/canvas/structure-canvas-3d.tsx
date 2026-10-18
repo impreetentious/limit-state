@@ -33,6 +33,7 @@ export interface StructureCanvas3dProps {
   model: EditorModel3d;
   analysis: StaticAnalysis3d;
   showDeformed: boolean;
+  exaggeration?: number;
   modeGhost?: { result: EigenResult; mode: number; phase: number };
   /** Live Newmark / traffic displacement (6 DOF/node). docs/FEM-SPEC.md §14. */
   dynamicDisplacement?: Float64Array;
@@ -57,6 +58,7 @@ export function StructureCanvas3d({
   model,
   analysis,
   showDeformed,
+  exaggeration,
   modeGhost,
   dynamicDisplacement,
   trafficAxles,
@@ -72,6 +74,7 @@ export function StructureCanvas3d({
     model,
     analysis,
     showDeformed,
+    exaggeration,
     modeGhost,
     dynamicDisplacement,
     trafficAxles,
@@ -86,6 +89,7 @@ export function StructureCanvas3d({
     model,
     analysis,
     showDeformed,
+    exaggeration,
     modeGhost,
     dynamicDisplacement,
     trafficAxles,
@@ -338,7 +342,7 @@ function sceneSignature(props: StructureCanvas3dProps): string {
   const story = model.story?.kind ?? 'nostory';
   const deck = (model.deck ?? []).join(',');
   const axles = trafficAxles?.map((a) => `${a.x.toFixed(2)},${a.z.toFixed(2)}`).join(';') ?? '';
-  return `${model.name}|${model.members.length}|${model.nodes.length}|${model.supports.length}|${model.loads.points.length}|${kind}|${uMax}|${showDeformed}|${selectedNodeId}|${selectedMemberId}|${selectedMemberIds?.join(',') ?? ''}|${dyn}|${story}|${deck}|${axles}|${diagram ?? 'none'}`;
+  return `${model.name}|${model.members.length}|${model.nodes.length}|${model.supports.length}|${model.loads.points.length}|${kind}|${uMax}|${showDeformed}|${props.exaggeration}|${selectedNodeId}|${selectedMemberId}|${selectedMemberIds?.join(',') ?? ''}|${dyn}|${story}|${deck}|${axles}|${diagram ?? 'none'}`;
 }
 
 function rebuildStructure(
@@ -439,6 +443,7 @@ function rebuildStructure(
         ? props.dynamicDisplacement
         : analysis.result.u;
     const display = deformationDisplay3d(analysis.mesh, u, 44);
+    if (props.exaggeration !== undefined) display.scale = props.exaggeration;
     if (display.maxMeters > 0) {
       for (const element of analysis.mesh.elements) {
         const pa = deformedPoint(analysis.mesh.coords, u, element.na, display.scale);

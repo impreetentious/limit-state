@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CHALLENGES } from '../challenges/catalog';
 import { StructureCanvas } from '../canvas/structure-canvas';
 import { StructureCanvas3d } from '../canvas/structure-canvas-3d';
+import { evaluateFailure } from '../fem/failure';
+import { evaluateFailure3d } from '../fem/space/failure';
+import { version as appVersion } from '../../package.json';
 import { sectionDepth } from '../fem/materials';
 import { analyzeStaticModel, deformationDisplay } from '../fem/statics';
 import { analyzeStaticModel3d, deformationDisplay3d, solveSecondOrderStatic3d } from '../fem/space';
@@ -17,6 +20,11 @@ import {
   type EditorTool3d,
 } from '../state/editor-store-3d';
 import {
+  ANALYSIS_FILE_LIMIT,
+  analysisGroup,
+  encodeAnalysisArtifact,
+  decodeAnalysisArtifact,
+  type AnalysisArtifact,
   decodeModel,
   decodeModel3d,
   encodeModel,
@@ -40,6 +48,7 @@ import {
   stepMovingMassTraffic,
   trafficYieldWeightAt,
   type TrafficFrame,
+  type TrafficScenario,
 } from '../stories/traffic';
 import { memberMomentEnvelopeFromInfluence } from '../fem/influence';
 import { runPushover } from '../fem/pushover';
@@ -86,6 +95,7 @@ import {
   prepareTraffic3d,
   stepMovingMassTraffic3d,
   type TrafficFrame3d,
+  type TrafficScenario3d,
 } from '../stories/traffic3d';
 import { ChallengePanel } from './challenge-panel';
 import { Inspector } from './inspector';
@@ -167,11 +177,17 @@ export function EditorApp(): React.JSX.Element {
   const [influenceEnvelope, setInfluenceEnvelope] = useState(false);
   const [windFrame, setWindFrame] = useState<WindFrame>();
   const [windFrame3d, setWindFrame3d] = useState<WindFrame3d>();
-  const [trafficFrame3d, setTrafficFrame3d] = useState<TrafficFrame3d>();
-  const [movingMassFrame3d, setMovingMassFrame3d] = useState<TrafficFrame3d>();
+  const [trafficFrame3d, setTrafficFrame3d] = useState<
+    TrafficFrame3d & { source: TrafficScenario3d }
+  >();
+  const [movingMassFrame3d, setMovingMassFrame3d] = useState<
+    TrafficFrame3d & { source: TrafficScenario3d }
+  >();
   const [earthquakeFrame, setEarthquakeFrame] = useState<EarthquakeFrame>();
   const [earthquakeFrame3d, setEarthquakeFrame3d] = useState<EarthquakeFrame3d>();
-  const [movingMassFrame, setMovingMassFrame] = useState<TrafficFrame>();
+  const [movingMassFrame, setMovingMassFrame] = useState<
+    TrafficFrame & { source: TrafficScenario }
+  >();
   const [failureReplay, setFailureReplay] = useState(0);
   const [failurePhase, setFailurePhase] = useState<number>();
   const [failureReplay3d, setFailureReplay3d] = useState(0);
@@ -180,6 +196,16 @@ export function EditorApp(): React.JSX.Element {
   const [storyPlaying3d, setStoryPlaying3d] = useState(false);
   const [storyTime3d, setStoryTime3d] = useState(0);
   const reducedMotion = usePrefersReducedMotion();
+  const importedView = useRef<{ model: object; time: number } | null>(null);
+  const [archivalNotice, setArchivalNotice] = useState<string | null>(null);
+  const [importedScale, setImportedScale] = useState<{ model: object; value: number } | null>(null);
+  const importRequest = useRef(0);
+  useEffect(
+    () => () => {
+      importRequest.current += 1;
+    },
+    [],
+  );
 
   const model3d = useEditorStore3d((s) => s.model);
   const tool3d = useEditorStore3d((s) => s.tool);
@@ -239,25 +265,33 @@ export function EditorApp(): React.JSX.Element {
     (analysis3d.kind === 'mechanism' && 'freeDofIndex' in analysis3d)
       ? (analysis3d as StaticAnalysis3d)
       : { kind: 'invalid', message: analysis3d.message };
-  const eigen3d = eigen3dState.kind === 'ready' ? eigen3dState : undefined;
+  const eigen3d =
+    eigen3dState.kind === 'ready' && eigen3dState.source === analysis3d ? eigen3dState : undefined;
   useEffect(() => {
     if (analysis3d.kind !== 'stable') {
       setEigen3dState({ kind: 'idle' });
       return;
     }
     const id = ++requestId3d.current;
+    let active = true;
     const worker = new Worker(new URL('../workers/eigen.worker.ts', import.meta.url));
     setEigen3dState({ kind: 'loading' });
     worker.onmessage = (event: MessageEvent<EigenWorkerResponse>) => {
       const response = event.data;
-      if (response.id !== id) return;
+      if (!active || response.id !== id) return;
       if (response.ok) {
-        setEigen3dState({ kind: 'ready', modal: response.modal, buckling: response.buckling });
+        setEigen3dState({
+          kind: 'ready',
+          source: analysis3d,
+          modal: response.modal,
+          buckling: response.buckling,
+        });
         setSelectedMode(0);
       } else setEigen3dState({ kind: 'error', message: response.message });
     };
-    worker.onerror = () =>
-      setEigen3dState({ kind: 'error', message: '3D eigen worker could not start.' });
+    worker.onerror = () => {
+      if (active) setEigen3dState({ kind: 'error', message: '3D eigen worker could not start.' });
+    };
     const source = analysis3d.mesh;
     const mesh = {
       ...source,
@@ -282,15 +316,25 @@ export function EditorApp(): React.JSX.Element {
       elementN.buffer,
       ...mesh.elements.map((element) => element.R.buffer),
     ]);
-    return () => worker.terminate();
+    return () => {
+      active = false;
+      worker.terminate();
+    };
   }, [analysis3d]);
   const windScenario3d = useMemo(
     () =>
-      viewDimension === '3d' && model3d.story?.kind === 'wind' ? prepareWind3d(model3d) : undefined,
+      analysis3d.kind === 'stable' && viewDimension === '3d' && model3d.story?.kind === 'wind'
+        ? prepareWind3d(model3d)
+        : undefined,
     [model3d, viewDimension],
   );
   const trafficScenario3d = useMemo(() => {
-    if (viewDimension !== '3d' || model3d.story?.kind !== 'traffic' || !model3d.deck?.length)
+    if (
+      analysis3d.kind !== 'stable' ||
+      viewDimension !== '3d' ||
+      model3d.story?.kind !== 'traffic' ||
+      !model3d.deck?.length
+    )
       return undefined;
     try {
       return prepareTraffic3d(model3d);
@@ -300,13 +344,16 @@ export function EditorApp(): React.JSX.Element {
   }, [model3d, viewDimension]);
   const earthquakeScenario3d = useMemo(
     () =>
-      viewDimension === '3d' && model3d.story?.kind === 'earthquake'
+      analysis3d.kind === 'stable' && viewDimension === '3d' && model3d.story?.kind === 'earthquake'
         ? prepareEarthquake3d(model3d)
         : undefined,
     [model3d, viewDimension],
   );
   const capacity3d = useMemo(
-    () => (model3d.story?.kind === 'ramp' ? rampCapacity3d(model3d) : undefined),
+    () =>
+      analysis3d.kind === 'stable' && model3d.story?.kind === 'ramp'
+        ? rampCapacity3d(model3d)
+        : undefined,
     [model3d],
   );
   const rampFactor3d =
@@ -315,19 +362,21 @@ export function EditorApp(): React.JSX.Element {
       : 0.001;
   const rampFrame3d = useMemo(
     () =>
-      model3d.story?.kind === 'ramp' && viewDimension === '3d'
+      analysis3d.kind === 'stable' && model3d.story?.kind === 'ramp' && viewDimension === '3d'
         ? analyzeRamp3d(model3d, rampFactor3d, storyTime3d >= 8)
         : undefined,
     [model3d, rampFactor3d, storyTime3d, viewDimension],
   );
   const pushover3d = useMemo(
     () =>
-      model3d.story?.kind === 'pushover' && viewDimension === '3d'
+      analysis3d.kind === 'stable' && model3d.story?.kind === 'pushover' && viewDimension === '3d'
         ? runPushover3d(model3d)
         : undefined,
     [model3d, viewDimension],
   );
-  const trafficFrame3dActive = movingMassFrame3d ?? trafficFrame3d;
+  const trafficFrame3dActive =
+    (movingMassFrame3d?.source === trafficScenario3d ? movingMassFrame3d : undefined) ??
+    (trafficFrame3d?.source === trafficScenario3d ? trafficFrame3d : undefined);
 
   useEffect(() => {
     if (viewDimension !== '3d' || !storyPlaying3d || !windScenario3d || !eigen3d) return;
@@ -396,7 +445,10 @@ export function EditorApp(): React.JSX.Element {
       return;
     }
     if (storyPlaying3d) return;
-    setTrafficFrame3d(analyzeTrafficAt3d(trafficScenario3d, storyTime3d * model3d.story.speed));
+    setTrafficFrame3d({
+      ...analyzeTrafficAt3d(trafficScenario3d, storyTime3d * model3d.story.speed),
+      source: trafficScenario3d,
+    });
   }, [model3d.story, storyPlaying3d, storyTime3d, trafficScenario3d, viewDimension]);
 
   useEffect(() => {
@@ -421,7 +473,10 @@ export function EditorApp(): React.JSX.Element {
           setStoryPlaying3d(false);
           return 0;
         }
-        setTrafficFrame3d(analyzeTrafficAt3d(trafficScenario3d, next * speed));
+        setTrafficFrame3d({
+          ...analyzeTrafficAt3d(trafficScenario3d, next * speed),
+          source: trafficScenario3d,
+        });
         return next;
       });
       frame = window.requestAnimationFrame(tick);
@@ -450,7 +505,7 @@ export function EditorApp(): React.JSX.Element {
     const tick = () => {
       const stepped = stepMovingMassTraffic3d(trafficScenario3d, current);
       current = stepped.state;
-      setMovingMassFrame3d(stepped.frame);
+      setMovingMassFrame3d({ ...stepped.frame, source: trafficScenario3d });
       setStoryTime3d(current.t);
       if (current.t >= duration) {
         setStoryPlaying3d(false);
@@ -519,7 +574,7 @@ export function EditorApp(): React.JSX.Element {
       setTrafficFrame3d(undefined);
       setMovingMassFrame3d(undefined);
       setEarthquakeFrame3d(undefined);
-      setStoryTime3d(0);
+      setStoryTime3d(importedView.current?.model === model3d ? importedView.current.time : 0);
     }
   }, [viewDimension]);
 
@@ -529,7 +584,7 @@ export function EditorApp(): React.JSX.Element {
     setTrafficFrame3d(undefined);
     setMovingMassFrame3d(undefined);
     setEarthquakeFrame3d(undefined);
-    setStoryTime3d(0);
+    setStoryTime3d(importedView.current?.model === model3d ? importedView.current.time : 0);
   }, [model3d.story, model3d.nodes, model3d.members, model3d.deck]);
 
   const failureReport3d =
@@ -563,19 +618,27 @@ export function EditorApp(): React.JSX.Element {
       return;
     }
     const id = ++requestId.current;
+    let active = true;
     const worker = new Worker(new URL('../workers/eigen.worker.ts', import.meta.url));
     setEigen({ kind: 'loading' });
     worker.onmessage = (event: MessageEvent<EigenWorkerResponse>) => {
       const response = event.data;
-      if (response.id !== id) return;
+      if (!active || response.id !== id) return;
       if (response.ok) {
-        setEigen({ kind: 'ready', modal: response.modal, buckling: response.buckling });
+        setEigen({
+          kind: 'ready',
+          source: baseAnalysis,
+          modal: response.modal,
+          buckling: response.buckling,
+        });
         setSelectedMode(0);
       } else {
         setEigen({ kind: 'error', message: response.message });
       }
     };
-    worker.onerror = () => setEigen({ kind: 'error', message: 'Eigen worker could not start.' });
+    worker.onerror = () => {
+      if (active) setEigen({ kind: 'error', message: 'Eigen worker could not start.' });
+    };
     const axialForces = new Float64Array(baseAnalysis.mesh.elements.length);
     for (let index = 0; index < axialForces.length; index++)
       axialForces[index] = baseAnalysis.result.elementForces[index * 5]!;
@@ -593,7 +656,10 @@ export function EditorApp(): React.JSX.Element {
       mesh.freeDofs.buffer,
       axialForces.buffer,
     ]);
-    return () => worker.terminate();
+    return () => {
+      active = false;
+      worker.terminate();
+    };
   }, [baseAnalysis]);
 
   const activeEigen =
@@ -603,7 +669,7 @@ export function EditorApp(): React.JSX.Element {
           ? eigen3d.modal
           : eigen3d.buckling
         : undefined
-      : eigen.kind === 'ready'
+      : eigen.kind === 'ready' && eigen.source === baseAnalysis
         ? modeFamily === 'modal'
           ? eigen.modal
           : eigen.buckling
@@ -635,7 +701,8 @@ export function EditorApp(): React.JSX.Element {
       : undefined;
 
   const trafficScenario = useMemo(() => {
-    if (model.story.kind !== 'traffic' || mode !== 'test') return undefined;
+    if (baseAnalysis.kind !== 'stable' || model.story.kind !== 'traffic' || mode !== 'test')
+      return undefined;
     try {
       return prepareTraffic(model, analysisOptions);
     } catch {
@@ -647,9 +714,14 @@ export function EditorApp(): React.JSX.Element {
     if (model.story.movingMass && storyPlaying) return undefined;
     return analyzeTrafficAt(trafficScenario, storyTime * model.story.speed);
   }, [model.story, storyPlaying, storyTime, trafficScenario]);
-  const trafficFrame = movingMassFrame ?? quasiStaticTraffic;
+  const trafficFrame =
+    (movingMassFrame?.source === trafficScenario ? movingMassFrame : undefined) ??
+    quasiStaticTraffic;
   const capacity = useMemo(
-    () => (model.story.kind === 'ramp' ? rampCapacity(model, analysisOptions) : undefined),
+    () =>
+      baseAnalysis.kind === 'stable' && model.story.kind === 'ramp'
+        ? rampCapacity(model, analysisOptions)
+        : undefined,
     [analysisOptions, model],
   );
   const rampFactor =
@@ -658,19 +730,22 @@ export function EditorApp(): React.JSX.Element {
       : 0.001;
   const rampFrame = useMemo(
     () =>
-      model.story.kind === 'ramp' && mode === 'test'
+      baseAnalysis.kind === 'stable' && model.story.kind === 'ramp' && mode === 'test'
         ? analyzeRamp(model, rampFactor, storyTime >= 8, analysisOptions)
         : undefined,
     [analysisOptions, mode, model, rampFactor, storyTime],
   );
   const pushover = useMemo(
     () =>
-      model.story.kind === 'pushover' && mode === 'test'
+      baseAnalysis.kind === 'stable' && model.story.kind === 'pushover' && mode === 'test'
         ? runPushover(model, analysisOptions)
         : undefined,
     [analysisOptions, mode, model],
   );
-  const analysis = trafficFrame?.analysis ?? rampFrame?.analysis ?? baseAnalysis;
+  const analysis =
+    baseAnalysis.kind === 'invalid'
+      ? baseAnalysis
+      : (trafficFrame?.analysis ?? rampFrame?.analysis ?? baseAnalysis);
   const deformation =
     viewDimension === '3d'
       ? analysis3d.kind === 'stable'
@@ -679,20 +754,27 @@ export function EditorApp(): React.JSX.Element {
       : analysis.kind === 'stable'
         ? deformationDisplay(analysis.mesh, analysis.result.u, 44)
         : null;
+  if (deformation && importedScale?.model === (viewDimension === '3d' ? model3d : model))
+    deformation.scale = importedScale.value;
   const modeGhost3d =
     activeEigen && viewDimension === '3d' && activeEigen.values[selectedMode] !== undefined
       ? { result: activeEigen, mode: selectedMode, phase: modePhase }
       : undefined;
   const windScenario = useMemo(
-    () => (model.story.kind === 'wind' ? prepareWind(model, analysisOptions) : undefined),
+    () =>
+      baseAnalysis.kind === 'stable' && model.story.kind === 'wind'
+        ? prepareWind(model, analysisOptions)
+        : undefined,
     [analysisOptions, model],
   );
   const earthquakeScenario = useMemo(
     () =>
-      model.story.kind === 'earthquake' ? prepareEarthquake(model, analysisOptions) : undefined,
+      baseAnalysis.kind === 'stable' && model.story.kind === 'earthquake'
+        ? prepareEarthquake(model, analysisOptions)
+        : undefined,
     [analysisOptions, model],
   );
-  const modal = eigen.kind === 'ready' ? eigen.modal : undefined;
+  const modal = eigen.kind === 'ready' && eigen.source === baseAnalysis ? eigen.modal : undefined;
   const trafficDuration =
     trafficScenario && model.story.kind === 'traffic'
       ? (trafficScenario.length + 4) / Math.max(0.1, model.story.speed)
@@ -710,7 +792,7 @@ export function EditorApp(): React.JSX.Element {
 
   useEffect(() => {
     setStoryPlaying(false);
-    setStoryTime(0);
+    setStoryTime(importedView.current?.model === model ? importedView.current.time : 0);
     setMomentEnvelope(new Map());
     setInfluenceEnvelope(false);
     setWindFrame(undefined);
@@ -805,7 +887,7 @@ export function EditorApp(): React.JSX.Element {
     const tick = () => {
       const stepped = stepMovingMassTraffic(trafficScenario, current);
       current = stepped.state;
-      setMovingMassFrame(stepped.frame);
+      setMovingMassFrame({ ...stepped.frame, source: trafficScenario });
       setStoryTime(current.t);
       if (current.t >= duration) {
         setStoryPlaying(false);
@@ -959,6 +1041,207 @@ export function EditorApp(): React.JSX.Element {
     loadModel(challenge.starter, { challengeId: challenge.id });
     setNotice(challenge.brief);
   }, [loadModel, setNotice]);
+
+  const exportAnalysis = () => {
+    const spatial = viewDimension === '3d';
+    const activeModel = spatial ? model3d : model;
+    const solve = spatial
+      ? analysis3d.kind === 'invalid'
+        ? canvasAnalysis3d
+        : rampFrame3d?.analysis.kind === 'stable'
+          ? rampFrame3d.analysis
+          : trafficFrame3dActive?.analysis.kind === 'stable'
+            ? trafficFrame3dActive.analysis
+            : canvasAnalysis3d
+      : analysis;
+    const eig = spatial
+      ? eigen3d
+      : eigen.kind === 'ready' && eigen.source === baseAnalysis
+        ? eigen
+        : undefined;
+    if (
+      (spatial ? storyPlaying3d : storyPlaying) ||
+      solve.kind === 'invalid' ||
+      (solve.kind === 'stable' && !eig && (spatial ? eigen3dState.kind : eigen.kind) !== 'error')
+    )
+      return;
+    try {
+      const time = spatial ? storyTime3d : storyTime;
+      let failure: unknown;
+      try {
+        failure = spatial
+          ? evaluateFailure3d(model3d, 1)
+          : evaluateFailure(model, 1, analysisOptions);
+      } catch {
+        failure = undefined;
+      }
+      const dynamic =
+        activeModel.story?.kind === 'wind' ||
+        activeModel.story?.kind === 'earthquake' ||
+        (activeModel.story?.kind === 'traffic' && activeModel.story.movingMass);
+      const frame = spatial
+        ? ((windFrame3d?.scenario === windScenario3d ? windFrame3d?.u : undefined) ??
+          (earthquakeFrame3d?.scenario === earthquakeScenario3d
+            ? earthquakeFrame3d?.u
+            : undefined) ??
+          (movingMassFrame3d?.source === trafficScenario3d &&
+          movingMassFrame3d?.analysis.kind === 'stable'
+            ? movingMassFrame3d.analysis.result.u
+            : undefined))
+        : ((windFrame?.scenario === windScenario ? windFrame?.u : undefined) ??
+          (earthquakeFrame?.scenario === earthquakeScenario ? earthquakeFrame?.u : undefined) ??
+          (movingMassFrame?.source === trafficScenario &&
+          movingMassFrame?.analysis.kind === 'stable'
+            ? movingMassFrame.analysis.result.u
+            : undefined));
+      const results: AnalysisArtifact['results'] = {
+        statics:
+          solve.kind === 'stable'
+            ? analysisGroup(
+                {
+                  nodes: activeModel.nodes,
+                  members: activeModel.members.map((member) => ({
+                    id: member.id,
+                    a: member.a,
+                    b: member.b,
+                  })),
+                  rawCoordinates: solve.mesh.coords,
+                  rawDisplacements: solve.result.u,
+                  elementForces: solve.result.elementForces,
+                  reactions: solve.result.reactions,
+                  utilization: solve.result.utilization,
+                  diagnostics: 'secondOrder' in solve ? solve.secondOrder : null,
+                },
+                'Nonfinite static result.',
+                'refused',
+              )
+            : analysisGroup(null, solve.message, 'refused'),
+        modal: analysisGroup(
+          eig?.modal,
+          solve.kind === 'stable' ? 'Modal analysis unavailable.' : solve.message,
+        ),
+        buckling: analysisGroup(
+          eig?.buckling,
+          solve.kind === 'stable' ? 'Buckling analysis unavailable.' : solve.message,
+        ),
+        failure: analysisGroup(
+          failure,
+          'Failure/capacity analysis unavailable or no finite capacity exists.',
+        ),
+        capacity: analysisGroup(
+          spatial ? capacity3d : capacity,
+          'No finite proportional-load capacity exists.',
+          activeModel.story?.kind === 'ramp' ? 'unavailable' : 'not-applicable',
+        ),
+        story: analysisGroup(
+          dynamic
+            ? frame
+              ? {
+                  rawDisplacements: frame,
+                  simulationTime: time,
+                  replay: 'archival-only',
+                  reason:
+                    'Dynamic history cannot be reconstructed from model/time alone. Flutter and warping are unsupported.',
+                }
+              : null
+            : {
+                kind: activeModel.story?.kind,
+                simulationTime: time,
+                ramp: spatial ? rampFrame3d : rampFrame,
+                pushover: spatial ? pushover3d : pushover,
+                description: 'Quasi-static collapse; flutter and warping are unsupported.',
+              },
+          dynamic
+            ? 'Dynamic history is unavailable; exact replay requires its complete integration history.'
+            : 'Story analysis unavailable.',
+        ),
+      };
+      const artifact: AnalysisArtifact = {
+        kind: 'analysis',
+        dimension: viewDimension,
+        model: activeModel,
+        appVersion,
+        analysisOptions: spatial
+          ? { shearFlexible: shearFlexible3d, secondOrder: secondOrder3d }
+          : analysisOptions,
+        view: {
+          simulationTime: time,
+          loadStation:
+            activeModel.story?.kind === 'traffic' ? time * activeModel.story.speed : null,
+          exaggeration:
+            importedScale?.model === activeModel ? importedScale.value : (deformation?.scale ?? 1),
+          units: { length: 'm', force: 'N', moment: 'Nm', displayLength: 'adaptive' },
+        },
+        results,
+      };
+      const text = encodeAnalysisArtifact(artifact);
+      const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+      try {
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `${
+          Array.from(activeModel.name, (char) =>
+            char.charCodeAt(0) < 32 || /[<>:"/\\|?*]/.test(char) ? '_' : char,
+          )
+            .join('')
+            .replace(/[. ]+$/, '') || 'analysis'
+        }.json`;
+        anchor.click();
+      } finally {
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Analysis export failed.';
+      if (spatial) setNotice3d(message);
+      else setNotice(message);
+    }
+  };
+
+  const importAnalysis = async (file: File) => {
+    const request = ++importRequest.current;
+    const originalModel = model;
+    const originalModel3d = model3d;
+    try {
+      if (file.size > ANALYSIS_FILE_LIMIT) throw new Error('Analysis artifact exceeds 16 MiB.');
+      const candidate = decodeAnalysisArtifact(await file.text());
+      if (
+        request !== importRequest.current ||
+        useEditorStore.getState().model !== originalModel ||
+        useEditorStore3d.getState().model !== originalModel3d
+      )
+        return;
+      setStoryPlaying(false);
+      setStoryPlaying3d(false);
+      if (candidate.dimension === '2d') {
+        loadModel(candidate.model as EditorModel);
+        setShearFlexible(candidate.analysisOptions.shearFlexible);
+        setSecondOrder(candidate.analysisOptions.secondOrder);
+        setStoryTime(candidate.view.simulationTime);
+      } else {
+        loadModel3d(candidate.model as EditorModel3d);
+        setShearFlexible3d(candidate.analysisOptions.shearFlexible);
+        setSecondOrder3d(candidate.analysisOptions.secondOrder);
+        setStoryTime3d(candidate.view.simulationTime);
+      }
+      const installed =
+        candidate.dimension === '2d'
+          ? useEditorStore.getState().model
+          : useEditorStore3d.getState().model;
+      importedView.current = { model: installed, time: candidate.view.simulationTime };
+      setImportedScale({ model: installed, value: candidate.view.exaggeration });
+      setViewDimension(candidate.dimension);
+      setMode('test');
+      setArchivalNotice(
+        'Imported result values are archival evidence. Current static results are recomputed. Dynamic histories are unavailable for exact replay.',
+      );
+    } catch (error) {
+      if (request === importRequest.current) {
+        const message = error instanceof Error ? error.message : 'Analysis import failed.';
+        if (viewDimension === '3d') setNotice3d(message);
+        else setNotice(message);
+      }
+    }
+  };
 
   const shareModel = async () => {
     let hash: string;
@@ -1166,6 +1449,39 @@ export function EditorApp(): React.JSX.Element {
           <Link className="quiet-button" href="/gallery">
             Gallery
           </Link>
+          {mode === 'test' && (
+            <button
+              type="button"
+              className="quiet-button"
+              onClick={exportAnalysis}
+              disabled={
+                viewDimension === '3d'
+                  ? storyPlaying3d ||
+                    analysis3d.kind === 'invalid' ||
+                    (analysis3d.kind === 'stable' && !eigen3d && eigen3dState.kind !== 'error')
+                  : storyPlaying ||
+                    analysis.kind === 'invalid' ||
+                    (baseAnalysis.kind === 'stable' &&
+                      !(eigen.kind === 'ready' && eigen.source === baseAnalysis) &&
+                      eigen.kind !== 'error')
+              }
+            >
+              Export analysis
+            </button>
+          )}
+          <label className="quiet-button">
+            Import analysis
+            <input
+              type="file"
+              aria-label="Import analysis"
+              accept=".json,application/json"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void importAnalysis(file);
+                event.target.value = '';
+              }}
+            />
+          </label>
           <button type="button" className="quiet-button" onClick={() => void shareModel()}>
             Share
           </button>
@@ -1178,6 +1494,7 @@ export function EditorApp(): React.JSX.Element {
           </button>
         </div>
       </header>
+      {archivalNotice && <p role="status">{archivalNotice}</p>}
       <section className="editor-workspace">
         <nav className="tool-rail" aria-label="Build tools">
           {viewDimension === '3d' ? (
@@ -1325,11 +1642,13 @@ export function EditorApp(): React.JSX.Element {
             <StructureCanvas3d
               model={model3d}
               analysis={
-                rampFrame3d?.analysis.kind === 'stable'
-                  ? rampFrame3d.analysis
-                  : trafficFrame3dActive?.analysis.kind === 'stable'
-                    ? trafficFrame3dActive.analysis
-                    : canvasAnalysis3d
+                analysis3d.kind === 'invalid'
+                  ? canvasAnalysis3d
+                  : rampFrame3d?.analysis.kind === 'stable'
+                    ? rampFrame3d.analysis
+                    : trafficFrame3dActive?.analysis.kind === 'stable'
+                      ? trafficFrame3dActive.analysis
+                      : canvasAnalysis3d
               }
               showDeformed={
                 showDeformed ||
@@ -1338,6 +1657,7 @@ export function EditorApp(): React.JSX.Element {
                 Boolean(trafficFrame3dActive?.analysis.kind === 'stable') ||
                 Boolean(rampFrame3d?.analysis.kind === 'stable')
               }
+              exaggeration={importedScale?.model === model3d ? importedScale.value : undefined}
               modeGhost={modeGhost3d}
               dynamicDisplacement={
                 windFrame3d?.u ??
@@ -1428,6 +1748,7 @@ export function EditorApp(): React.JSX.Element {
               analysis={analysis}
               diagram={resultDiagram}
               showDeformed={showDeformed}
+              exaggeration={importedScale?.model === model ? importedScale.value : undefined}
               modeGhost={modeGhost}
               trafficAxles={trafficFrame?.axles}
               momentEnvelope={envelopeEnabled ? momentEnvelope : undefined}
@@ -1757,7 +2078,9 @@ export function EditorApp(): React.JSX.Element {
                 {viewDimension === '3d' && eigen3dState.kind === 'error' && (
                   <p className="eigen-error">{eigen3dState.message}</p>
                 )}
-                {((viewDimension === '2d' && eigen.kind === 'ready') ||
+                {((viewDimension === '2d' &&
+                  eigen.kind === 'ready' &&
+                  eigen.source === baseAnalysis) ||
                   (viewDimension === '3d' && eigen3d)) &&
                   activeEigen && (
                     <>
@@ -1815,7 +2138,7 @@ export function EditorApp(): React.JSX.Element {
                         {(
                           viewDimension === '3d'
                             ? eigen3d?.buckling.values[0]
-                            : eigen.kind === 'ready'
+                            : eigen.kind === 'ready' && eigen.source === baseAnalysis
                               ? eigen.buckling.values[0]
                               : undefined
                         )
@@ -1831,7 +2154,9 @@ export function EditorApp(): React.JSX.Element {
             <TestConsole
               model={model}
               modal={modal}
-              buckling={eigen.kind === 'ready' ? eigen.buckling : undefined}
+              buckling={
+                eigen.kind === 'ready' && eigen.source === baseAnalysis ? eigen.buckling : undefined
+              }
               analysisOptions={analysisOptions}
               playing={storyPlaying}
               storyTime={storyTime}
@@ -1897,7 +2222,7 @@ type EigenUiState =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; modal: EigenResult; buckling: EigenResult };
+  | { kind: 'ready'; source: object; modal: EigenResult; buckling: EigenResult };
 
 interface WindFrame {
   scenario: WindScenario;

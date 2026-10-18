@@ -70,7 +70,13 @@ export function TestConsole3d({
     zeta: 0.02,
     directionDeg: 0,
   };
-  const massKg = useMemo(() => modelMassKg(model), [model]);
+  const massKg = useMemo(() => {
+    try {
+      return modelMassKg(model);
+    } catch {
+      return undefined;
+    }
+  }, [model]);
   const referenceLoadN = useMemo(() => referenceLoadMagnitude(model), [model]);
   const failure = useMemo(() => {
     try {
@@ -81,7 +87,11 @@ export function TestConsole3d({
   }, [model]);
   const capacity = failure?.kind === 'stable' ? failure.capacityFactor : undefined;
   const capacityToWeight =
-    capacity && Number.isFinite(capacity) && massKg > 0 && referenceLoadN > 0
+    capacity &&
+    Number.isFinite(capacity) &&
+    massKg !== undefined &&
+    massKg > 0 &&
+    referenceLoadN > 0
       ? (capacity * referenceLoadN) / massKg
       : undefined;
 
@@ -403,7 +413,7 @@ export function TestConsole3d({
         <span>
           {modalFreqHz !== undefined ? `f₁ ${modalFreqHz.toFixed(2)} Hz` : 'f₁ needs a modal solve'}
         </span>
-        <span>Mass {(massKg / 1000).toFixed(2)} t</span>
+        <span>Mass {massKg === undefined ? 'unavailable' : (massKg / 1000).toFixed(2)} t</span>
         <span title="Resonance is excluded — it is frequency- not amplitude-governed. See wind story for the DAF meter.">
           {capacityToWeight
             ? `Capacity/weight ${capacityToWeight.toFixed(2)} kN/t`

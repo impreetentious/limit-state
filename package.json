@@ -1,7 +1,7 @@
 {
   "name": "limit-state",
   "private": true,
-  "version": "0.12.2",
+  "version": "0.12.3",
   "description": "Limit State \u2014 a structural sandbox that tells the truth. True FEM core, playful surface.",
   "license": "Apache-2.0",
   "repository": {

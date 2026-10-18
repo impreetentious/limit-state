@@ -8,7 +8,7 @@ Sketch a bridge or a tower. Watch stress flow through every member, live. Drive 
 
 Construction games fake physics with springs. Real finite-element analysis lives in five-figure desktop suites. Limit State is the unclaimed middle: a **true FEM core** — direct stiffness method, eigenvalue buckling, modal analysis, Newmark time integration — under a surface you can play with in a browser tab.
 
-## What you can do
+## What You Can DO
 
 - **Build (2D + 3D)** — nodes, members, pins, rollers, hinges; steel, aluminum, timber, or spaghetti; real sections (box, I-beam, tube). In 3D: workplanes (ground / elevation / custom), extrude & replicate, deck polylines and spatial presets from Pratt to twin-girder slender deck.
 - **Test** — load stories in both dimensions: **traffic** across a deck (2D moment envelope + influence lines; 3D quasi-static or moving-mass Newmark), **wind** (steady / sine / gusts — 3D gains a direction dial), **earthquake** base excitation, **ramp** to first limit and **pushover** with plastic hinges.
@@ -23,7 +23,7 @@ Construction games fake physics with springs. Real finite-element analysis lives
 
 ![3D Test — Newmark wind](docs/test-3d.png)
 
-## Honesty, stated plainly
+## Honesty
 
 Every number is computed by the real method; every flourish is labeled. Deformed shapes carry their exaggeration factor ("×120 — true max 3.2 mm"). The collapse animation is labeled quasi-static. The 2D slender-deck preset shows bending resonance only; its 3D twin-girder cousin exposes a real St. Venant torsional mode.
 
@@ -34,7 +34,7 @@ Two things this sandbox will not fake and says so in the product:
 
 The solver is verified against closed-form solutions on every test run — cantilever deflection to 1e−10, Euler buckling to 0.8%, beam frequencies to 0.5%. Those benchmarks are what `npm test` checks and they run in CI.
 
-## Run it
+## Run It Locally
 
 Requires Node 22+; CI and `.nvmrc` pin Node 22.23.3.
 
@@ -98,4 +98,4 @@ Apache-2.0 © 2025-2026 Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v0.12.2
+**Version:** v0.12.3

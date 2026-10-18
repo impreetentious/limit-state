@@ -54,7 +54,6 @@ function solidRectJ(b: number, h: number): number {
 function thinBoxJ(b: number, h: number, t: number): number {
   const bm = b - t;
   const hm = h - t;
-  if (!(bm > 0 && hm > 0 && t > 0)) return solidRectJ(b, h);
   const Am = bm * hm;
   const oint = (2 * (bm + hm)) / t;
   return (4 * Am * Am) / oint;
@@ -65,12 +64,36 @@ function thinBoxJ(b: number, h: number, t: number): number {
  * Warping torsion is out of scope. docs/FEM-SPEC.md §4.8 / §4.9.
  */
 function ibeamJ(b: number, h: number, tf: number, tw: number): number {
-  const web = Math.max(0, h - 2 * tf);
+  const web = h - 2 * tf;
   return (1 / 3) * (2 * b * tf ** 3 + web * tw ** 3);
 }
 
 /** A, I≡Iz, Iy, Iz, c, As, J from section dimensions. Unit-tested (gate G10). docs/FEM-SPEC.md §4.8 / §4.9 / §14 2A. */
+export function validateSection(s: SectionSpec): void {
+  const dimensions = Object.entries(s).filter(([key]) => key !== 'kind');
+  if (
+    !dimensions.every(
+      ([, value]) => typeof value === 'number' && Number.isFinite(value) && value > 0,
+    )
+  )
+    throw new Error('Section dimensions must be finite and positive.');
+  if (s.kind === 'tube' && !(2 * s.t < s.d))
+    throw new Error('Tube wall must satisfy 2t < diameter.');
+  if (s.kind === 'box' && !(2 * s.t < Math.min(s.b, s.h)))
+    throw new Error('Box wall must satisfy 2t < min(b, h).');
+  if (s.kind === 'ibeam' && !(2 * s.tf < s.h && s.tw < s.b))
+    throw new Error('I-section requires 2 × flange < height and web < width.');
+}
+
 export function sectionProps(s: SectionSpec): SectionProps {
+  validateSection(s);
+  const properties = uncheckedSectionProps(s);
+  if (!Object.values(properties).every((value) => Number.isFinite(value) && value > 0))
+    throw new Error('Section properties overflow, underflow, or are nonpositive.');
+  return properties;
+}
+
+function uncheckedSectionProps(s: SectionSpec): SectionProps {
   switch (s.kind) {
     case 'rect': {
       const A = s.b * s.h;
@@ -161,5 +184,11 @@ function plasticModulus(s: SectionSpec): number {
 
 /** Plastic moment capacity M_p = Z · f_y. docs/FEM-SPEC.md §14 2F. */
 export function plasticMoment(s: SectionSpec, fy: number): number {
-  return plasticModulus(s) * fy;
+  sectionProps(s);
+  if (!Number.isFinite(fy) || fy <= 0)
+    throw new Error('Yield strength must be finite and positive.');
+  const capacity = plasticModulus(s) * fy;
+  if (!Number.isFinite(capacity) || capacity <= 0)
+    throw new Error('Plastic capacity must be finite and positive.');
+  return capacity;
 }

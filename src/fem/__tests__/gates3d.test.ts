@@ -2,6 +2,8 @@
  * Phase 3 space-frame honesty gates — docs/FEM-SPEC.md §9 G22–G24 / §4.9.
  */
 import { describe, expect, it } from 'vitest';
+import { migrateV1toV2, encodeModel3d } from '../../share/serialize';
+import { PRESETS } from '../../presets/scenes';
 import { sectionProps } from '../materials';
 import { skylineToDense } from '../skyline';
 import { analyzeStaticModel } from '../statics';
@@ -573,3 +575,11 @@ function spatialPinnedColumn(subdivisions: number, Iy: number, Iz: number): Anal
     ndof: (subdivisions + 1) * 6,
   };
 }
+
+it('3D mesh/import refuse impossible hollow sections without throwing from analysis', async () => {
+  const model = migrateV1toV2(PRESETS[0]!.model);
+  model.members[0]!.section = { kind: 'tube', d: 0.2, t: 0.15 };
+  expect(() => buildMesh3d(model)).toThrow();
+  expect(analyzeStaticModel3d(model).kind).toBe('invalid');
+  await expect(encodeModel3d(model)).rejects.toThrow();
+});

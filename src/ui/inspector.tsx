@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { MATERIALS, sectionProps } from '../fem/materials';
 import type { MemberSpec, SectionSpec, SupportKind } from '../fem/types';
 import { defaultSection, useEditorStore } from '../state/editor-store';
@@ -131,8 +132,13 @@ function MemberInspector({ member }: { member: MemberSpec }): React.JSX.Element 
   const b = model.nodes.find((node) => node.id === member.b);
   const material = MATERIALS[member.material];
   const length = a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 0;
-  const props = sectionProps(member.section);
-  const tonnes = (material.rho * props.A * length) / 1000;
+  let tonnes: number | undefined;
+  let sectionError: string | undefined;
+  try {
+    tonnes = (material.rho * sectionProps(member.section).A * length) / 1000;
+  } catch (error) {
+    sectionError = error instanceof Error ? error.message : 'Invalid section.';
+  }
 
   return (
     <aside className="inspector" aria-label="Member inspector">
@@ -168,6 +174,7 @@ function MemberInspector({ member }: { member: MemberSpec }): React.JSX.Element 
           <option value="tube">Tube</option>
         </select>
       </label>
+      {sectionError && <p role="alert">{sectionError}</p>}
       <SectionFields
         section={member.section}
         onChange={(section) => updateMember(member.id, { section })}
@@ -177,7 +184,7 @@ function MemberInspector({ member }: { member: MemberSpec }): React.JSX.Element 
           Length <b>{length.toFixed(2)} m</b>
         </span>
         <span>
-          Mass <b>{tonnes.toFixed(3)} t</b>
+          Mass <b>{tonnes?.toFixed(3) ?? 'unavailable'} t</b>
         </span>
       </div>
       <div className="release-fields">
@@ -285,12 +292,14 @@ function SectionFields({
       return (
         <div className="field-grid">
           <NumberField
+            draft
             label="b"
             value={section.b * 1000}
             unit="mm"
             onChange={(b) => onChange({ ...section, b: b / 1000 })}
           />
           <NumberField
+            draft
             label="h"
             value={section.h * 1000}
             unit="mm"
@@ -302,18 +311,21 @@ function SectionFields({
       return (
         <div className="field-grid">
           <NumberField
+            draft
             label="b"
             value={section.b * 1000}
             unit="mm"
             onChange={(b) => onChange({ ...section, b: b / 1000 })}
           />
           <NumberField
+            draft
             label="h"
             value={section.h * 1000}
             unit="mm"
             onChange={(h) => onChange({ ...section, h: h / 1000 })}
           />
           <NumberField
+            draft
             label="t"
             value={section.t * 1000}
             unit="mm"
@@ -325,24 +337,28 @@ function SectionFields({
       return (
         <div className="field-grid">
           <NumberField
+            draft
             label="b"
             value={section.b * 1000}
             unit="mm"
             onChange={(b) => onChange({ ...section, b: b / 1000 })}
           />
           <NumberField
+            draft
             label="h"
             value={section.h * 1000}
             unit="mm"
             onChange={(h) => onChange({ ...section, h: h / 1000 })}
           />
           <NumberField
+            draft
             label="flange"
             value={section.tf * 1000}
             unit="mm"
             onChange={(tf) => onChange({ ...section, tf: tf / 1000 })}
           />
           <NumberField
+            draft
             label="web"
             value={section.tw * 1000}
             unit="mm"
@@ -354,12 +370,14 @@ function SectionFields({
       return (
         <div className="field-grid">
           <NumberField
+            draft
             label="diameter"
             value={section.d * 1000}
             unit="mm"
             onChange={(d) => onChange({ ...section, d: d / 1000 })}
           />
           <NumberField
+            draft
             label="wall"
             value={section.t * 1000}
             unit="mm"
@@ -375,23 +393,35 @@ function NumberField({
   value,
   unit,
   onChange,
+  draft = false,
 }: {
   label: string;
   value: number;
   unit: string;
   onChange: (value: number) => void;
+  draft?: boolean;
 }): React.JSX.Element {
+  const [text, setText] = useState({ source: value, value: String(value) });
+  const displayed = Object.is(text.source, value)
+    ? text.value
+    : Number.isFinite(value)
+      ? String(value)
+      : '';
   return (
     <label className="field number-field">
       <span>{label}</span>
       <span className="number-input">
         <input
           type="number"
-          value={Number.isFinite(value) ? value : 0}
+          value={draft ? displayed : Number.isFinite(value) ? value : ''}
           step="any"
           onChange={(event) => {
-            const next = Number(event.target.value);
-            if (Number.isFinite(next)) onChange(next);
+            const raw = event.target.value;
+            const next = raw.trim() ? Number(raw) : Number.NaN;
+            if (draft) {
+              setText({ source: next, value: raw });
+              onChange(next);
+            } else if (Number.isFinite(next)) onChange(next);
           }}
         />
         <em>{unit}</em>

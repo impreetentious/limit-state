@@ -44,6 +44,7 @@ export function StructureCanvas({
   momentEnvelope,
   dynamicDisplacement,
   failureCinematic,
+  exaggeration,
 }: {
   analysis: StaticAnalysis;
   diagram: ResultDiagram;
@@ -53,6 +54,7 @@ export function StructureCanvas({
   momentEnvelope?: ReadonlyMap<number, number>;
   dynamicDisplacement?: Float64Array;
   failureCinematic?: FailureCinematic;
+  exaggeration?: number;
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [resizeVersion, setResizeVersion] = useState(0);
@@ -122,12 +124,14 @@ export function StructureCanvas({
       momentEnvelope,
       dynamicDisplacement,
       failureCinematic,
+      exaggeration,
     );
   }, [
     analysis,
     diagram,
     dynamicDisplacement,
     failureCinematic,
+    exaggeration,
     modeGhost,
     model,
     momentEnvelope,
@@ -300,6 +304,7 @@ function drawScene(
   momentEnvelope: ReadonlyMap<number, number> | undefined,
   dynamicDisplacement: Float64Array | undefined,
   failureCinematic: FailureCinematic | undefined,
+  exaggeration: number | undefined,
 ): void {
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(context, size);
@@ -388,7 +393,8 @@ function drawScene(
     }
   }
 
-  if (analysis.kind === 'stable' && showDeformed) drawDeformedShape(context, size, analysis);
+  if (analysis.kind === 'stable' && showDeformed)
+    drawDeformedShape(context, size, analysis, exaggeration);
   if (analysis.kind === 'stable' && dynamicDisplacement)
     drawDynamicShape(context, size, analysis.mesh, dynamicDisplacement);
   if (analysis.kind === 'stable' && failureCinematic)
@@ -557,9 +563,11 @@ function drawDeformedShape(
   context: CanvasRenderingContext2D,
   size: CanvasSize,
   analysis: Extract<StaticAnalysis, { kind: 'stable' }>,
+  exaggeration?: number,
 ): void {
   const { mesh, result } = analysis;
   const display = deformationDisplay(mesh, result.u, SCALE);
+  if (exaggeration !== undefined) display.scale = exaggeration;
   if (display.maxMeters === 0) return;
   const toScreen = (x: number, y: number): Point => ({
     x: size.width / 2 + x * SCALE,
